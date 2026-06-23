@@ -1,0 +1,32 @@
+[workspace]
+members = [
+  "apps/api",
+  "crates/core",
+  "crates/rag",
+  "crates/storage",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+rust-version = "1.85"
+
+[workspace.dependencies]
+async-trait = "0.1"
+axum = "0.7"
+http = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio-rustls", "postgres", "uuid", "time"] }
+thiserror = "2"
+time = { version = "0.3", features = ["serde", "formatting", "parsing"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "signal", "net"] }
+tower = "0.5"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
+uuid = { version = "1", features = ["serde", "v7"] }
+
+rag-debugger-core = { path = "crates/core" }
+rag-debugger-rag = { path = "crates/rag" }
+rag-debugger-storage = { path = "crates/storage" }
