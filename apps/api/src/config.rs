@@ -14,7 +14,43 @@ pub struct ApiConfig {
     pub storage_backend: StorageBackend,
     pub database_url: String,
     pub web_origin: String,
+    pub auth: AuthConfig,
     pub product: ProductConfig,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AuthConfig {
+    pub provider: AuthProviderKind,
+    pub session_cookie_name: String,
+    pub session_ttl_hours: i64,
+    pub cookie_secure: bool,
+    pub bootstrap_email: String,
+    pub bootstrap_password: String,
+    pub bootstrap_user_name: String,
+    pub bootstrap_organization_name: String,
+    pub bootstrap_workspace_name: String,
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum AuthProviderKind {
+    Local,
+    External,
+}
+
+impl Default for AuthConfig {
+    fn default() -> Self {
+        Self {
+            provider: AuthProviderKind::Local,
+            session_cookie_name: "corpuslab_session".to_owned(),
+            session_ttl_hours: 168,
+            cookie_secure: false,
+            bootstrap_email: "demo@corpuslab.ai".to_owned(),
+            bootstrap_password: "CorpusLab#2026".to_owned(),
+            bootstrap_user_name: "Demo User".to_owned(),
+            bootstrap_organization_name: "CorpusLab Demo Organization".to_owned(),
+            bootstrap_workspace_name: "Corpus Demo Workspace".to_owned(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -134,6 +170,32 @@ impl ApiConfig {
             storage_backend,
             database_url,
             web_origin,
+            auth: AuthConfig {
+                provider: match std::env::var("RAG_DEBUGGER_AUTH_PROVIDER")
+                    .unwrap_or_else(|_| "local".to_owned())
+                    .as_str()
+                {
+                    "external" => AuthProviderKind::External,
+                    _ => AuthProviderKind::Local,
+                },
+                session_cookie_name: env_string(
+                    "RAG_DEBUGGER_SESSION_COOKIE_NAME",
+                    "corpuslab_session",
+                ),
+                session_ttl_hours: env_i64("RAG_DEBUGGER_SESSION_TTL_HOURS", 168)?,
+                cookie_secure: env_bool("RAG_DEBUGGER_SESSION_COOKIE_SECURE", false),
+                bootstrap_email: env_string("RAG_DEBUGGER_BOOTSTRAP_EMAIL", "demo@corpuslab.ai"),
+                bootstrap_password: env_string("RAG_DEBUGGER_BOOTSTRAP_PASSWORD", "CorpusLab#2026"),
+                bootstrap_user_name: env_string("RAG_DEBUGGER_BOOTSTRAP_USER_NAME", "Demo User"),
+                bootstrap_organization_name: env_string(
+                    "RAG_DEBUGGER_BOOTSTRAP_ORGANIZATION",
+                    "CorpusLab Demo Organization",
+                ),
+                bootstrap_workspace_name: env_string(
+                    "RAG_DEBUGGER_BOOTSTRAP_WORKSPACE",
+                    "Corpus Demo Workspace",
+                ),
+            },
             product,
         })
     }
@@ -207,6 +269,19 @@ fn env_u64(name: &'static str, default: u64) -> Result<u64, ConfigError> {
         .unwrap_or(Ok(default))
 }
 
+fn env_i64(name: &'static str, default: i64) -> Result<i64, ConfigError> {
+    std::env::var(name)
+        .map(|value| {
+            value
+                .parse::<i64>()
+                .map_err(|_| ConfigError::InvalidNumber {
+                    name,
+                    value: value.clone(),
+                })
+        })
+        .unwrap_or(Ok(default))
+}
+
 fn env_f32(name: &'static str, default: f32) -> Result<f32, ConfigError> {
     std::env::var(name)
         .map(|value| {
@@ -254,6 +329,17 @@ mod tests {
             storage_backend: StorageBackend::Postgres,
             database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger".to_owned(),
             web_origin: "http://127.0.0.1:5173".to_owned(),
+            auth: AuthConfig {
+                provider: AuthProviderKind::Local,
+                session_cookie_name: "corpuslab_session".to_owned(),
+                session_ttl_hours: 168,
+                cookie_secure: false,
+                bootstrap_email: "demo@corpuslab.ai".to_owned(),
+                bootstrap_password: "CorpusLab#2026".to_owned(),
+                bootstrap_user_name: "Demo User".to_owned(),
+                bootstrap_organization_name: "CorpusLab Demo Organization".to_owned(),
+                bootstrap_workspace_name: "Corpus Demo Workspace".to_owned(),
+            },
             product: ProductConfig::default(),
         };
 

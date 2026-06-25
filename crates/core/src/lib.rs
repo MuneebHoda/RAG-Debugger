@@ -1,4 +1,6 @@
+pub mod auth;
 pub mod chunk;
+pub mod ci_eval;
 pub mod config;
 pub mod embedding;
 pub mod eval;
@@ -13,7 +15,9 @@ pub mod retrieval;
 pub mod source;
 pub mod trace;
 
+pub use auth::*;
 pub use chunk::*;
+pub use ci_eval::*;
 pub use config::*;
 pub use embedding::*;
 pub use eval::*;

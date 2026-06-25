@@ -190,6 +190,44 @@ export interface RetrievalEvalFailure {
   top_hit_rank: number | null;
 }
 
+export type CiEvalRunStatus = "passed" | "failed";
+
+export interface CiEvalRegressionSummary {
+  baseline_run_id: string;
+  recall_delta: number;
+  precision_delta: number;
+  mrr_delta: number;
+  latency_delta_ms: number;
+  newly_failed_case_count: number;
+  summary: string;
+}
+
+export interface CiEvalReport {
+  title: string;
+  summary: string;
+  gate: RetrievalEvalGate;
+  experiment: RetrievalEvalExperiment;
+  failed_cases: RetrievalEvalFailure[];
+}
+
+export interface CiEvalRun {
+  id: string;
+  workspace_id: string;
+  dataset_id: string;
+  dataset_name: string;
+  experiment_id: string;
+  status: CiEvalRunStatus;
+  gate_status: RetrievalEvalGateStatus;
+  branch: string | null;
+  commit_sha: string | null;
+  base_ref: string | null;
+  head_ref: string | null;
+  config_label: string;
+  regression: CiEvalRegressionSummary | null;
+  report: CiEvalReport;
+  created_at: string;
+}
+
 export function listEvalLabDatasets(
   signal?: AbortSignal,
 ): Promise<RetrievalEvalDatasetSummary[]> {
@@ -278,5 +316,19 @@ export function compareEvalLabExperiment(
   return requestJson<RetrievalEvalComparison>(
     `/api/v1/eval-lab/experiments/${experimentId}/compare`,
     jsonRequest("POST", { modes }, signal),
+  );
+}
+
+export function listCiEvalRuns(signal?: AbortSignal): Promise<CiEvalRun[]> {
+  return requestJson<CiEvalRun[]>("/api/v1/eval-lab/ci/runs", { signal });
+}
+
+export function getCiEvalReport(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<{ run: CiEvalRun; report: CiEvalReport }> {
+  return requestJson<{ run: CiEvalRun; report: CiEvalReport }>(
+    `/api/v1/eval-lab/ci/runs/${runId}/report`,
+    { signal },
   );
 }

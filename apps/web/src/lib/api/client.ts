@@ -17,7 +17,10 @@ export async function requestJson<T>(
   init: RequestInit = {},
   okStatuses: number[] = [200],
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), init);
+  const response = await fetch(apiUrl(path), {
+    credentials: "include",
+    ...init,
+  });
   return readJsonResponse<T>(response, okStatuses);
 }
 

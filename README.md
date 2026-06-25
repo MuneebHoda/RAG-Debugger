@@ -2,7 +2,7 @@
 
 CorpusLab is a corpus workbench and observability platform for retrieval-augmented generation teams. It helps engineers diagnose why evidence was or was not retrieved across PDFs, policies, product docs, support knowledge bases, research papers, contracts, technical specs, code docs, wikis, resumes, and enterprise document sets.
 
-The current product slice includes file ingestion, structured document chunking, local embeddings, lexical/vector/hybrid retrieval, evidence summaries with citations, trace debugging, eval cases, corpus reports, safe runtime config, and a React workbench UI.
+The current product slice includes file ingestion, structured document chunking, local embeddings, lexical/vector/hybrid retrieval, evidence summaries with citations, trace debugging, Eval Lab gates, CI-triggered eval runs, API keys, local auth/workspaces, corpus reports, safe runtime config, and a React workbench UI.
 
 ## Repository Layout
 
@@ -45,6 +45,13 @@ Run the web app:
 cd apps/web && npm run dev
 ```
 
+The default local login is seeded from `.env.example`:
+
+```text
+demo@corpuslab.ai
+CorpusLab#2026
+```
+
 ## Quality Checks
 
 ```sh
@@ -63,6 +70,8 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Retrieval Playground](docs/retrieval-playground.md)
 - [Trace Debugger](docs/trace-debugger.md)
 - [Eval Lab](docs/eval-lab.md)
+- [Auth and Workspaces](docs/auth-and-workspaces.md)
+- [CI Eval Workflows](docs/ci-eval-workflows.md)
 - [Technical Handbook](docs/technical-handbook.md)
 - [Testing Guide](docs/testing.md)
 - [Privacy and Security](docs/privacy-security.md)
@@ -94,7 +103,7 @@ The platform is designed around:
 - Browser file ingestion with structured document chunking and persisted document/chunk metadata.
 - Local embedding indexing, hybrid retrieval, evidence summaries, reports, and retrieval evals.
 - Trace timelines, failure labels, and rerun comparisons for debugging RAG runs.
-- Shared team workflows for corpus debugging and RAG quality reviews.
+- Local auth, workspace membership, API keys, and CI gates for shared RAG quality reviews.
 - Versioned traces, evals, prompts, indexes, and model configs.
 - Future GPU/HPC workers for indexing, retrieval, embedding, reranking, and inference.
 

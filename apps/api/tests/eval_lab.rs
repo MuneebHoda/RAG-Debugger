@@ -17,12 +17,13 @@ use tower::ServiceExt;
 fn test_app() -> axum::Router {
     app(AppState::new(
         ApiConfig {
-            environment: RuntimeEnvironment::Local,
+            environment: RuntimeEnvironment::Test,
             bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
             storage_backend: StorageBackend::Memory,
             database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
                 .to_owned(),
             web_origin: "http://127.0.0.1:5173".to_owned(),
+            auth: Default::default(),
             product: ProductConfig::default(),
         },
         Arc::new(MemoryStore::default()),

@@ -6,12 +6,14 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+argon2.workspace = true
 axum.workspace = true
 hex.workspace = true
 mime_guess.workspace = true
 rag-debugger-core.workspace = true
 rag-debugger-rag.workspace = true
 rag-debugger-storage.workspace = true
+rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true

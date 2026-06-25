@@ -1,13 +1,15 @@
 use std::{path::PathBuf, sync::Arc};
 
 use rag_debugger_api::{
-    app,
+    app, auth,
     config::{ApiConfig, StorageBackend},
     state::AppState,
     telemetry,
 };
 use rag_debugger_storage::{
-    memory::MemoryStore, postgres::PostgresStore, repository::IngestionRepository,
+    memory::MemoryStore,
+    postgres::PostgresStore,
+    repository::{AppRepository, IngestionRepository},
 };
 use tracing::info;
 
@@ -16,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = ApiConfig::from_env()?;
     telemetry::init();
 
-    let repository: Arc<dyn IngestionRepository> = match config.storage_backend {
+    let repository: Arc<dyn AppRepository> = match config.storage_backend {
         StorageBackend::Postgres => {
             let store = PostgresStore::connect(&config.database_url).await?;
             let migrations_path =
@@ -31,6 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Arc::new(store)
         }
     };
+    auth::bootstrap_identity(repository.as_ref(), &config.auth).await?;
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let state = AppState::new(config.clone(), repository);

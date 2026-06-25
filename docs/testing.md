@@ -22,6 +22,8 @@ Expected coverage in the scaffold:
 - API retrieval tests for all-doc search, document filtering, top-k, no-match response, embedding status/indexing, missing embeddings, lexical fallback mode, eval creation, eval run persistence, and request validation.
 - Trace tests for trace construction, failure label assignment, rerun comparison, trace creation from retrieval runs, trace listing/detail, rerun API behavior, and missing-trace errors.
 - Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, gate evaluation, and failure diagnosis.
+- Auth and workspace tests for signup, login, logout, current-user, session cookies, duplicate email behavior, membership role, and protected workbench routes.
+- API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
 - Domain serialization tests as contracts become public.
 
 DB-backed integration checks require local Postgres:
@@ -50,6 +52,9 @@ Expected coverage in the scaffold:
 - Retrieval page render and mocked query tests, including mode controls, embedding status, evidence summary, score bars, citations, trace saving, and save-to-Eval-Lab.
 - Trace Debugger tests for navigation, trace list/detail, timeline spans, failure labels, rerun controls, comparison metrics, explainer cards, and save-to-Eval-Lab.
 - Eval Lab tests for dataset lists, case editing surface, run controls, experiment mode matrix, gate status, and failure diagnosis.
+- Auth tests for backend login/signup integration and session validation.
+- Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.
+- CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.
 - Overview, Reports, and Settings page tests should grow as those workflows deepen.
 - Playwright smoke tests for upload, chunk metadata preview, cited retrieval evidence, trace reruns, Eval Lab experiment, report view, and settings/config display.
 
@@ -67,6 +72,8 @@ When changing commands, paths, or architecture, update:
 - `README.md`
 - `docs/development.md`
 - `docs/eval-lab.md`
+- `docs/auth-and-workspaces.md`
+- `docs/ci-eval-workflows.md`
 - `docs/trace-debugger.md`
 - `docs/technical-handbook.md`
 - Relevant ADRs in `docs/adr`

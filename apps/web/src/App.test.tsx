@@ -32,8 +32,8 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: /pricing/i })).toBeInTheDocument();
   });
 
-  it("renders the workbench under the app route", () => {
-    createAuthSession(DEMO_CREDENTIALS.email);
+  it("renders the workbench under the app route", async () => {
+    createAuthSession(DEMO_CREDENTIALS.email, "Demo User");
     stubWorkbenchFetch();
 
     render(
@@ -43,7 +43,7 @@ describe("App", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: /mission control/i }),
+      await screen.findByRole("heading", { name: /mission control/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /sources/i })).toBeInTheDocument();
     expect(
@@ -76,6 +76,30 @@ function stubWorkbenchFetch() {
       const url = input.toString();
       if (url.endsWith("/healthz")) {
         return responseJson({ status: "ok" });
+      }
+      if (url.endsWith("/api/v1/auth/me")) {
+        return responseJson({
+          user: {
+            user: {
+              id: "018f7a2a-6e2e-7000-a000-000000000401",
+              email: DEMO_CREDENTIALS.email,
+              name: "Demo User",
+              created_at: "2026-06-25T00:00:00Z",
+            },
+            organization: {
+              id: "018f7a2a-6e2e-7000-a000-000000000402",
+              name: "CorpusLab Demo Organization",
+              created_at: "2026-06-25T00:00:00Z",
+            },
+            workspace: {
+              id: "018f7a2a-6e2e-7000-a000-000000000403",
+              organization_id: "018f7a2a-6e2e-7000-a000-000000000402",
+              name: "Corpus Demo Workspace",
+              created_at: "2026-06-25T00:00:00Z",
+            },
+            role: "owner",
+          },
+        });
       }
       if (url.endsWith("/api/v1/config")) {
         return responseJson({

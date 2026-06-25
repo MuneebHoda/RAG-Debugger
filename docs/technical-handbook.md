@@ -47,6 +47,14 @@ Generated `apps/web/dist` files should not be edited by hand. Run `cd apps/web &
 - `GET /healthz`: process liveness.
 - `GET /readyz`: readiness; checks database connectivity when storage is configured.
 - `GET /api/v1/config`: safe product/runtime config for the web app.
+- `POST /api/v1/auth/signup`: create a local user, organization, workspace, membership, and session.
+- `POST /api/v1/auth/login`: verify local credentials and issue an HttpOnly session cookie.
+- `POST /api/v1/auth/logout`: revoke the current session.
+- `GET /api/v1/auth/me`: return the authenticated user, organization, workspace, and role.
+- `GET /api/v1/workspaces/current`: return the active workspace context.
+- `GET /api/v1/api-keys`: list workspace API keys without secrets.
+- `POST /api/v1/api-keys`: create a workspace API key and return the one-time `clab_...` secret.
+- `DELETE /api/v1/api-keys/:api_key_id`: revoke an API key.
 - `POST /api/v1/sources/files`: multipart ingestion for text, Markdown, HTML, and PDF.
 - `GET /api/v1/sources`: sources with document and chunk counts.
 - `GET /api/v1/documents/:document_id/chunks`: persisted chunks ordered by ordinal.
@@ -70,12 +78,16 @@ Generated `apps/web/dist` files should not be edited by hand. Run `cd apps/web &
 - `GET /api/v1/eval-lab/experiments`: list recent experiments.
 - `GET /api/v1/eval-lab/experiments/:experiment_id`: load one experiment.
 - `POST /api/v1/eval-lab/experiments/:experiment_id/compare`: compare selected modes.
+- `POST /api/v1/eval-lab/ci/runs`: run an Eval Lab dataset from CI using an API key.
+- `GET /api/v1/eval-lab/ci/runs`: list CI eval runs.
+- `GET /api/v1/eval-lab/ci/runs/:run_id`: load one CI eval run.
+- `GET /api/v1/eval-lab/ci/runs/:run_id/report`: load the export-ready CI gate report.
 
 ## Database Schema And Migrations
 
 Migrations are in `migrations`.
 
-Core tables include `projects`, `sources`, `ingestion_runs`, `documents`, `chunks`, `chunk_embeddings`, `retrieval_playground_runs`, `retrieval_playground_hits`, `debug_traces`, `trace_rerun_experiments`, `retrieval_eval_datasets`, `retrieval_eval_cases`, `retrieval_eval_runs`, `retrieval_eval_results`, and `retrieval_eval_experiments`.
+Core tables include `organizations`, `workspaces`, `users`, `workspace_memberships`, `auth_sessions`, `api_keys`, `projects`, `sources`, `ingestion_runs`, `documents`, `chunks`, `chunk_embeddings`, `retrieval_playground_runs`, `retrieval_playground_hits`, `debug_traces`, `trace_rerun_experiments`, `retrieval_eval_datasets`, `retrieval_eval_cases`, `retrieval_eval_runs`, `retrieval_eval_results`, `retrieval_eval_experiments`, and `ci_eval_runs`.
 
 Recent metadata additions:
 
@@ -236,7 +248,9 @@ Default behavior is local and privacy-first.
 - No hosted LLM or hosted embedding API is called in the current retrieval path.
 - `/api/v1/config` exposes safe config only; database URLs and deployment secrets stay server-side.
 
-Hosted mode will need auth, tenant isolation, audit events, key management, upload scanning, and configurable data retention.
+Local auth now implements the first hosted boundary: signup/login/logout/current-user, organizations, workspaces, workspace memberships, opaque HttpOnly session cookies, and workspace-scoped API keys. API key secrets use a `clab_...` prefix, are shown once, and are stored only as SHA-256 hashes. Workbench APIs require a session; CI eval routes require a key with the `ci_eval_runs` scope.
+
+Hosted mode will still need tenant isolation hardening, invitations, SSO/SAML, SCIM, audit events, upload scanning, and configurable data retention.
 
 ## Configuration Model
 
@@ -249,6 +263,7 @@ Hosted mode will need auth, tenant isolation, audit events, key management, uplo
 - `RetrievalWeights`
 - `EmbeddingConfig`
 - `UiConfig`
+- `AuthConfig`
 
 `apps/api/src/config.rs` loads environment values, validates numeric fields, and exposes safe config through `GET /api/v1/config`.
 
@@ -291,9 +306,9 @@ just docs-pdf
 
 The architecture should grow toward:
 
-- Organizations and workspaces.
+- Hardened organizations and workspaces.
 - Users, roles, and invitations.
-- API keys and scoped service accounts.
+- API keys, scoped service accounts, and CI release gates.
 - Local collector for private networks.
 - Hosted control plane for dashboards, reports, and team collaboration.
 - Worker queue for ingestion, embedding, OCR, reranking, and reports.

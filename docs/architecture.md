@@ -5,7 +5,7 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 ## Components
 
 - **Web app:** React TypeScript workbench for Overview, Sources, Retrieval, Traces, Evals, Reports, and Settings.
-- **API service:** Axum backend for health checks, runtime config, ingestion, embedding status/indexing, retrieval, traces, evals, and future reports.
+- **API service:** Axum backend for health checks, runtime config, local auth, workspaces, API keys, ingestion, embedding status/indexing, retrieval, traces, evals, CI gates, and reports.
 - **Core crate:** Shared domain contracts for projects, sources, documents, chunks, traces, retrieval runs, evals, reports, config, models, and privacy mode.
 - **RAG crate:** File text extraction, structured and whitespace chunking, document intelligence, local embedding generation, hybrid retrieval, trace construction, eval scoring, ingestion, and retrieval interfaces. Implementations are intentionally replaceable.
 - **Storage crate:** Repository traits plus Postgres and in-memory adapters.
@@ -27,6 +27,14 @@ All product APIs are versioned under `/api/v1`. Public health probes remain at `
 Current ingestion APIs:
 
 - `GET /api/v1/config`
+- `POST /api/v1/auth/signup`
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/auth/me`
+- `GET /api/v1/workspaces/current`
+- `GET /api/v1/api-keys`
+- `POST /api/v1/api-keys`
+- `DELETE /api/v1/api-keys/:api_key_id`
 - `POST /api/v1/sources/files`
 - `GET /api/v1/sources`
 - `GET /api/v1/documents/:document_id/chunks`
@@ -46,6 +54,10 @@ Current ingestion APIs:
 - `GET /api/v1/eval-lab/experiments`
 - `GET /api/v1/eval-lab/experiments/:experiment_id`
 - `POST /api/v1/eval-lab/experiments/:experiment_id/compare`
+- `POST /api/v1/eval-lab/ci/runs`
+- `GET /api/v1/eval-lab/ci/runs`
+- `GET /api/v1/eval-lab/ci/runs/:run_id`
+- `GET /api/v1/eval-lab/ci/runs/:run_id/report`
 - `GET /api/v1/traces`
 - `GET /api/v1/traces/:trace_id`
 - `POST /api/v1/traces/from-retrieval-run`
@@ -61,13 +73,15 @@ Trace debugging wraps retrieval responses into inspectable timelines. A trace st
 
 Eval Lab is the release-readiness layer. It stores datasets, expected-evidence cases, cross-mode experiments, deterministic failure labels, and pass/fail gates. Retrieval and trace workflows can save observed evidence directly into a dataset so real debugging sessions become regression coverage.
 
+Local auth protects workbench APIs with opaque HttpOnly session cookies. Workspace-scoped API keys authorize CI automation and are stored only as hashes. The local auth provider owns signup/login/session validation today; an external provider can replace that boundary later.
+
 ## Storage Direction
 
-Postgres stores projects, sources, ingestion runs, documents, chunks, chunking metadata, document profile metadata, chunk quality metadata, local chunk embeddings, retrieval playground runs, retrieval hits, trace debugger records, trace rerun experiments, retrieval eval datasets, eval cases, legacy eval run results, Eval Lab experiments, and gate outcomes. Existing rows stay readable through migration defaults. The semantic retrieval migration stores vectors as local Postgres arrays for the first debugger loop; vector/index storage can evolve toward pgvector, LanceDB, or GPU-backed services as benchmarks justify it.
+Postgres stores organizations, workspaces, users, memberships, sessions, API keys, projects, sources, ingestion runs, documents, chunks, chunking metadata, document profile metadata, chunk quality metadata, local chunk embeddings, retrieval playground runs, retrieval hits, trace debugger records, trace rerun experiments, retrieval eval datasets, eval cases, legacy eval run results, Eval Lab experiments, CI eval runs, reports, and gate outcomes. Existing rows stay readable through migration defaults. The semantic retrieval migration stores vectors as local Postgres arrays for the first debugger loop; vector/index storage can evolve toward pgvector, LanceDB, or GPU-backed services as benchmarks justify it.
 
 ## Hosted Product Direction
 
-The codebase is prepared for hosted/team concepts without implementing billing or auth yet:
+The codebase now has the first hosted/team foundation without billing, invitations, SSO, or SCIM:
 
 - Organizations contain workspaces/projects.
 - Users and roles govern access to sources, retrieval runs, evals, and reports.

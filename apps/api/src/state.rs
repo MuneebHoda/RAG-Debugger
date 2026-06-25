@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use rag_debugger_storage::repository::IngestionRepository;
+use rag_debugger_storage::repository::AppRepository;
 
 use crate::config::{ApiConfig, RuntimeEnvironment};
 
@@ -11,11 +11,11 @@ pub struct AppState {
 
 struct AppStateInner {
     config: ApiConfig,
-    repository: Option<Arc<dyn IngestionRepository>>,
+    repository: Option<Arc<dyn AppRepository>>,
 }
 
 impl AppState {
-    pub fn new(config: ApiConfig, repository: Arc<dyn IngestionRepository>) -> Self {
+    pub fn new(config: ApiConfig, repository: Arc<dyn AppRepository>) -> Self {
         Self {
             inner: Arc::new(AppStateInner {
                 config,
@@ -37,7 +37,7 @@ impl AppState {
         &self.inner.config
     }
 
-    pub fn repository(&self) -> Option<Arc<dyn IngestionRepository>> {
+    pub fn repository(&self) -> Option<Arc<dyn AppRepository>> {
         self.inner.repository.clone()
     }
 
