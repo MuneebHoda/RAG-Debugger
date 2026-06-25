@@ -1,0 +1,17 @@
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+.page-shell {
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+}

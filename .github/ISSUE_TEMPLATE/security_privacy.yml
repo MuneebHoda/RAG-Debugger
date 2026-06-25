@@ -1,0 +1,37 @@
+name: Security / Privacy
+description: Track privacy posture, sensitive data handling, auth, retention, or audit concerns.
+title: "security: "
+labels: ["type/security"]
+body:
+  - type: textarea
+    id: concern
+    attributes:
+      label: Concern
+      description: What sensitive data, tenant boundary, retention rule, or security control is affected?
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: Who is affected and how severe is the risk?
+    validations:
+      required: true
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Proposed Mitigation
+      description: Controls, tests, docs, or operational steps required.
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority/p0
+        - priority/p1
+        - priority/p2
+        - priority/p3
+    validations:
+      required: true

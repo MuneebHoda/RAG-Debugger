@@ -1,6 +1,13 @@
 pub mod chunking;
+pub mod embedding;
+pub mod evals;
+pub mod extraction;
 pub mod ingestion;
+pub mod intelligence;
 pub mod retrieval;
+pub mod tracing;
+
+pub use extraction::{ExtractedText, ExtractionError, SupportedFileKind, TextExtractor};
 
 use thiserror::Error;
 

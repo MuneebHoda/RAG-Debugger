@@ -1,0 +1,38 @@
+name: Tech Debt / Refactor
+description: Improve code quality, structure, performance, or maintainability.
+title: "refactor: "
+labels: ["type/refactor"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Current Problem
+      description: Which code path is becoming hard to maintain, slow, duplicated, or risky?
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: Target Shape
+      description: What should the code look like after the refactor?
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety Plan
+      description: Tests, compatibility constraints, and rollback notes.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area/api
+        - area/web
+        - area/rag
+        - area/storage
+        - area/docs
+    validations:
+      required: true

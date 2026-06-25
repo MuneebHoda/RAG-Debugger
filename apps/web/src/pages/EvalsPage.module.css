@@ -1,0 +1,488 @@
+.page {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.header,
+.panelTitle {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header p,
+.header h1,
+.header span,
+.panelTitle p,
+.panelTitle h2 {
+  margin: 0;
+}
+
+.header p,
+.panelTitle p {
+  color: var(--color-teal-900);
+  font-size: 0.74rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--color-ink-950);
+  font-size: clamp(1.75rem, 3vw, 2.35rem);
+  line-height: 1.05;
+}
+
+.header span {
+  display: block;
+  max-width: 54rem;
+  color: var(--color-ink-600);
+  font-weight: 650;
+  line-height: 1.5;
+}
+
+.headerMetrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.metric {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 6.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+
+.metric small {
+  color: var(--color-ink-600);
+  font-size: 0.72rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid
+    color-mix(in srgb, var(--color-coral-500) 45%, var(--color-ink-200));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-coral-500) 10%, white);
+  color: #8f2626;
+  font-weight: 800;
+}
+
+.loading {
+  padding: 1rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-600);
+  font-weight: 800;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(18rem, 0.78fr) minmax(0, 1.22fr);
+  gap: 1rem;
+}
+
+.panel {
+  display: grid;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+
+.panelTitle h2 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.panelTitle span {
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  background: var(--color-ink-100);
+  color: var(--color-ink-600);
+  font-size: 0.75rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.datasetList,
+.caseList,
+.formStack,
+.pickerList {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.datasetButton,
+.selectedDataset {
+  display: grid;
+  gap: 0.18rem;
+  width: 100%;
+  padding: 0.7rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-950);
+  text-align: left;
+  cursor: pointer;
+}
+
+.selectedDataset {
+  border-color: color-mix(
+    in srgb,
+    var(--color-teal-500) 50%,
+    var(--color-ink-200)
+  );
+  background: color-mix(in srgb, var(--color-teal-500) 8%, white);
+}
+
+.datasetButton span,
+.selectedDataset span,
+.datasetButton small,
+.selectedDataset small {
+  color: var(--color-ink-600);
+  font-weight: 700;
+}
+
+.formStack label,
+.inlineFields label,
+.runGrid label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-ink-700);
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.formStack input,
+.formStack textarea,
+.inlineFields input,
+.runGrid input {
+  width: 100%;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-950);
+  font: inherit;
+  padding: 0.62rem 0.7rem;
+}
+
+.formStack textarea {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.primaryButton,
+.secondaryButton,
+.iconButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.25rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: var(--color-ink-950);
+  color: white;
+  padding: 0 0.8rem;
+}
+
+.secondaryButton,
+.iconButton {
+  background: white;
+  color: var(--color-ink-700);
+  padding: 0 0.7rem;
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.caseRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-ink-100) 58%, white);
+}
+
+.caseRow button:first-child {
+  display: grid;
+  gap: 0.15rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.caseRow strong {
+  color: var(--color-ink-950);
+}
+
+.caseRow span,
+.caseRow small {
+  color: var(--color-ink-600);
+  font-weight: 700;
+}
+
+.emptyState {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--color-ink-100);
+  color: var(--color-ink-600);
+}
+
+.emptyState strong {
+  color: var(--color-ink-950);
+}
+
+.caseEditor {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 1rem;
+}
+
+.inlineFields {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+.evidencePicker {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.evidencePicker strong {
+  display: block;
+  margin-bottom: 0.45rem;
+  color: var(--color-ink-950);
+}
+
+.pickerList {
+  max-height: 16rem;
+  overflow: auto;
+  padding: 0.55rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-ink-100) 48%, white);
+}
+
+.pickerList label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--color-ink-700);
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.pickerList button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-teal-900);
+  font: inherit;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.buttonRow,
+.modeChecks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.runGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.modeChecks label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: 0 0.65rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: 999px;
+  background: white;
+  color: var(--color-ink-700);
+  font-weight: 850;
+}
+
+.gateBand {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid
+    color-mix(in srgb, var(--color-teal-500) 28%, var(--color-ink-200));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-teal-500) 8%, white);
+}
+
+.gateBand strong,
+.gateBand span {
+  display: block;
+}
+
+.gateBand strong {
+  color: var(--color-ink-950);
+}
+
+.gateBand span,
+.gateBand small {
+  color: var(--color-ink-600);
+  font-weight: 750;
+}
+
+.matrix {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.modeCard {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-ink-100) 42%, white);
+}
+
+.modeCard header,
+.modeStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+
+.modeCard strong {
+  color: var(--color-ink-950);
+  text-transform: capitalize;
+}
+
+.modeCard span,
+.modeStats span {
+  color: var(--color-ink-600);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.failurePanel {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.failurePanel h3,
+.failurePanel p {
+  margin: 0;
+}
+
+.failureRow {
+  display: grid;
+  grid-template-columns: minmax(10rem, 0.5fr) minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  padding: 0.65rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+
+.failureRow strong {
+  color: var(--color-ink-950);
+  text-transform: capitalize;
+}
+
+.failureRow span,
+.failureRow small {
+  color: var(--color-ink-600);
+  font-weight: 700;
+}
+
+.critical {
+  border-color: color-mix(
+    in srgb,
+    var(--color-coral-500) 45%,
+    var(--color-ink-200)
+  );
+}
+
+.warning {
+  border-color: color-mix(
+    in srgb,
+    var(--color-citron-500) 55%,
+    var(--color-ink-200)
+  );
+}
+
+@media (max-width: 1080px) {
+  .layout,
+  .caseEditor,
+  .evidencePicker,
+  .matrix,
+  .runGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 0.75rem;
+  }
+
+  .inlineFields,
+  .failureRow,
+  .gateBand {
+    grid-template-columns: 1fr;
+  }
+}

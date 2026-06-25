@@ -1,0 +1,31 @@
+name: UI Polish
+description: Improve visual quality, usability, interaction, or responsive behavior.
+title: "ui: "
+labels: ["area/web"]
+body:
+  - type: textarea
+    id: surface
+    attributes:
+      label: Surface
+      description: Page, component, route, or workflow to improve.
+    validations:
+      required: true
+  - type: textarea
+    id: issue
+    attributes:
+      label: UX Issue
+      description: What feels confusing, bulky, slow, inconsistent, or unpolished?
+    validations:
+      required: true
+  - type: textarea
+    id: target
+    attributes:
+      label: Target Experience
+      description: What should the user see or feel after the change?
+    validations:
+      required: true
+  - type: textarea
+    id: proof
+    attributes:
+      label: Proof
+      description: Screenshots, responsive checks, accessibility checks, or tests required.
