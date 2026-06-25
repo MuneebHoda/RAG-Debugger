@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { OverviewPipelineStep } from "../../lib/apiClient";
+import type { OverviewPipelineStep } from "../../lib/api/overview";
 import styles from "./PipelineStep.module.css";
 
 const statusIcon = {

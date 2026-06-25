@@ -1,7 +1,7 @@
 import { AlertCircle, Database, ServerCog, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { getProductConfig, type ProductConfig } from "../lib/apiClient";
+import { getProductConfig, type ProductConfig } from "../lib/api/config";
 
 export function SettingsPage() {
   const [config, setConfig] = useState<ProductConfig | null>(null);

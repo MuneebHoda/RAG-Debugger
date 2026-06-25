@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { OverviewHealth } from "../../lib/apiClient";
+import type { OverviewHealth } from "../../lib/api/overview";
 import { ProgressBar } from "./ProgressBar";
 import styles from "./HealthScore.module.css";
 

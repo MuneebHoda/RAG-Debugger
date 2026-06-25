@@ -1,7 +1,7 @@
 import { ArrowRight, CircleAlert, Info, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { OverviewIssue } from "../../lib/apiClient";
+import type { OverviewIssue } from "../../lib/api/overview";
 import styles from "./RiskList.module.css";
 
 const severityIcon = {
