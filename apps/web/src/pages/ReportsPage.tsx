@@ -9,12 +9,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
   getEmbeddingStatus,
-  listSources,
-  listTraces,
   type EmbeddingStatus,
-  type SourceSummary,
-  type TraceSummary,
-} from "../lib/apiClient";
+} from "../lib/api/embeddings";
+import { listSources, type SourceSummary } from "../lib/api/sources";
+import { listTraces, type TraceSummary } from "../lib/api/traces";
 
 export function ReportsPage() {
   const [sources, setSources] = useState<SourceSummary[]>([]);

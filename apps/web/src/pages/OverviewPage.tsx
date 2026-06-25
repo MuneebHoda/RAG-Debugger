@@ -21,10 +21,10 @@ import { ProgressBar } from "../components/dashboard/ProgressBar";
 import { RiskList } from "../components/dashboard/RiskList";
 import {
   getOverview,
-  type DocumentProfile,
   type OverviewMetric,
   type OverviewResponse,
-} from "../lib/apiClient";
+} from "../lib/api/overview";
+import type { DocumentProfile } from "../lib/api/sources";
 import styles from "./OverviewPage.module.css";
 
 const metricIcons: Record<string, typeof FileText> = {

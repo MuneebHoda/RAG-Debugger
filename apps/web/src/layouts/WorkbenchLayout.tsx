@@ -21,13 +21,9 @@ import {
   readAuthSession,
   type AuthSession,
 } from "../features/auth/authSession";
-import {
-  getOverview,
-  getHealth,
-  getProductConfig,
-  type OverviewResponse,
-  type ProductConfig,
-} from "../lib/apiClient";
+import { getProductConfig, type ProductConfig } from "../lib/api/config";
+import { getHealth } from "../lib/api/health";
+import { getOverview, type OverviewResponse } from "../lib/api/overview";
 import styles from "./WorkbenchLayout.module.css";
 
 const navItems = [

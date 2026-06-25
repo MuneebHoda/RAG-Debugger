@@ -1,7 +1,7 @@
 import { Database, FileText, FlaskConical, GitBranch } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { OverviewActivity } from "../../lib/apiClient";
+import type { OverviewActivity } from "../../lib/api/overview";
 import styles from "./ActivityList.module.css";
 
 const activityIcon = {

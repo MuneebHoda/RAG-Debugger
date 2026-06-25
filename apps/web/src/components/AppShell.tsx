@@ -12,11 +12,8 @@ import type { PropsWithChildren } from "react";
 import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 
-import {
-  getHealth,
-  getProductConfig,
-  type ProductConfig,
-} from "../lib/apiClient";
+import { getProductConfig, type ProductConfig } from "../lib/api/config";
+import { getHealth } from "../lib/api/health";
 
 const navItems = [
   { to: "/", label: "Overview", icon: LayoutDashboard },

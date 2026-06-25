@@ -1,6 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 
-import type { OverviewMetric } from "../../lib/apiClient";
+import type { OverviewMetric } from "../../lib/api/overview";
 import styles from "./MetricTile.module.css";
 
 export function MetricTile({

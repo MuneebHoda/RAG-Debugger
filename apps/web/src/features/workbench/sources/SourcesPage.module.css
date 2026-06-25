@@ -1,0 +1,143 @@
+:global(.sources-layout) {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
+:global(.sources-layout.wide) {
+  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+}
+
+:global(.upload-zone) {
+  display: grid;
+  min-height: 164px;
+  place-items: center;
+  gap: 8px;
+  border: 1px dashed #94aaba;
+  border-radius: 8px;
+  background: #f8fbfd;
+  color: #324656;
+  cursor: pointer;
+  padding: 22px;
+  text-align: center;
+}
+
+:global(.upload-zone input) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:global(.upload-zone span),
+:global(.selected-files span),
+:global(.result-row small),
+:global(.document-row small),
+:global(.chunk-card small) {
+  color: #617080;
+  font-size: 13px;
+}
+
+:global(.selected-files),
+:global(.result-list),
+:global(.document-list),
+:global(.chunk-list) {
+  display: grid;
+  gap: 8px;
+}
+
+:global(.selected-files) {
+  margin: 14px 0;
+}
+
+:global(.result-row),
+:global(.document-row) {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 11px;
+}
+
+:global(.document-row) {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  width: 100%;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+:global(.document-row.selected),
+:global(.document-row:hover) {
+  border-color: #8bb8c5;
+  background: #eef8fa;
+}
+
+:global(.result-row span),
+:global(.document-row span) {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+:global(.result-row strong),
+:global(.document-row strong) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:global(.chunk-list) {
+  max-height: 640px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+:global(.chunk-card) {
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 14px;
+}
+
+:global(.chunk-card header) {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+:global(.chunk-meta) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+:global(.chunk-meta span) {
+  border: 1px solid #c9d6df;
+  border-radius: 999px;
+  color: #335466;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 8px;
+}
+
+:global(.chunk-card p) {
+  margin-bottom: 10px;
+  color: #273541;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 860px) {
+  :global(.sources-layout),
+  :global(.sources-layout.wide) {
+    grid-template-columns: 1fr;
+  }
+}

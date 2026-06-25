@@ -1,7 +1,7 @@
 import { ArrowRight, Database } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { OverviewAction } from "../../lib/apiClient";
+import type { OverviewAction } from "../../lib/api/overview";
 import styles from "./EmptyState.module.css";
 
 export function EmptyState({ action }: { action: OverviewAction | null }) {

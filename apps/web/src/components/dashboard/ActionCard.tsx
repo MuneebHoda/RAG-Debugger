@@ -1,7 +1,7 @@
 import { ArrowRight, PlayCircle } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import type { OverviewAction } from "../../lib/apiClient";
+import type { OverviewAction } from "../../lib/api/overview";
 import styles from "./ActionCard.module.css";
 
 export function ActionCard({ action }: { action: OverviewAction }) {
