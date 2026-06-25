@@ -1,0 +1,57 @@
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-ink-950);
+  text-decoration: none;
+}
+
+.logo strong {
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.mark {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 0.32);
+  border-radius: 12px;
+  background: linear-gradient(
+    145deg,
+    var(--color-citron-500),
+    var(--color-teal-500) 45%,
+    var(--color-teal-900)
+  );
+  box-shadow: 0 12px 28px rgb(7 54 58 / 0.22);
+}
+
+.mark svg {
+  width: 26px;
+  height: 26px;
+}
+
+.mark path:first-child {
+  fill: rgb(255 255 255 / 0.18);
+}
+
+.mark path:nth-child(2) {
+  fill: none;
+  stroke: var(--color-citron-500);
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.mark path:last-child {
+  fill: none;
+  stroke: var(--color-white);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.light {
+  color: var(--color-white);
+}

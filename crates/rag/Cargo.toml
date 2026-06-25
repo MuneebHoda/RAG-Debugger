@@ -7,6 +7,12 @@ rust-version.workspace = true
 
 [dependencies]
 async-trait.workspace = true
+hex.workspace = true
+html2text.workspace = true
+mime_guess.workspace = true
+pdf-extract.workspace = true
 rag-debugger-core.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
+time.workspace = true
 uuid.workspace = true

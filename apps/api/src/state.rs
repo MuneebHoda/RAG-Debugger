@@ -1,21 +1,35 @@
 use std::sync::Arc;
 
+use rag_debugger_storage::repository::IngestionRepository;
+
 use crate::config::{ApiConfig, RuntimeEnvironment};
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppState {
     inner: Arc<AppStateInner>,
 }
 
-#[derive(Debug)]
 struct AppStateInner {
     config: ApiConfig,
+    repository: Option<Arc<dyn IngestionRepository>>,
 }
 
 impl AppState {
-    pub fn new(config: ApiConfig) -> Self {
+    pub fn new(config: ApiConfig, repository: Arc<dyn IngestionRepository>) -> Self {
         Self {
-            inner: Arc::new(AppStateInner { config }),
+            inner: Arc::new(AppStateInner {
+                config,
+                repository: Some(repository),
+            }),
+        }
+    }
+
+    pub fn without_repository(config: ApiConfig) -> Self {
+        Self {
+            inner: Arc::new(AppStateInner {
+                config,
+                repository: None,
+            }),
         }
     }
 
@@ -23,9 +37,18 @@ impl AppState {
         &self.inner.config
     }
 
-    pub fn is_ready(&self) -> bool {
-        // The scaffold has no required external dependencies yet.
-        // Production readiness will include database and worker checks.
-        !matches!(self.config().environment, RuntimeEnvironment::Test)
+    pub fn repository(&self) -> Option<Arc<dyn IngestionRepository>> {
+        self.inner.repository.clone()
+    }
+
+    pub async fn is_ready(&self) -> bool {
+        if matches!(self.config().environment, RuntimeEnvironment::Test) {
+            return false;
+        }
+
+        match self.repository() {
+            Some(repository) => repository.ping().await.is_ok(),
+            None => false,
+        }
     }
 }

@@ -10,7 +10,7 @@ pub async fn healthz() -> Json<HealthResponse> {
 pub async fn readyz(
     axum::extract::State(state): axum::extract::State<AppState>,
 ) -> Result<Json<ReadinessResponse>, ApiError> {
-    if state.is_ready() {
+    if state.is_ready().await {
         Ok(Json(ReadinessResponse::ready()))
     } else {
         Err(ApiError::NotReady)

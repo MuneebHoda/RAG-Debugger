@@ -1,0 +1,30 @@
+.track {
+  position: relative;
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink-950) 10%, white);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  transition: width 180ms ease;
+}
+
+.neutral {
+  background: color-mix(in srgb, var(--color-ink-950) 40%, white);
+}
+
+.good {
+  background: linear-gradient(90deg, var(--color-teal-500), #22c7a5);
+}
+
+.warning {
+  background: linear-gradient(90deg, #d99021, var(--color-citron-500));
+}
+
+.critical {
+  background: linear-gradient(90deg, #d84b4b, #f59f80);
+}

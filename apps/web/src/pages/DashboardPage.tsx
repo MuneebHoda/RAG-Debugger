@@ -12,8 +12,8 @@ export function DashboardPage() {
     <section className="dashboard" aria-labelledby="dashboard-title">
       <header className="page-header">
         <div>
-          <p className="eyebrow">Hybrid local/cloud scaffold</p>
-          <h1 id="dashboard-title">RAG Debugger</h1>
+          <p className="eyebrow">Corpus intelligence</p>
+          <h1 id="dashboard-title">CorpusLab</h1>
           <p>
             Diagnose retrieval failures across sources, chunks, traces, evals,
             and model configs.

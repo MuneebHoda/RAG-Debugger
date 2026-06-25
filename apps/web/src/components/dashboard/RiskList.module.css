@@ -1,0 +1,117 @@
+.panel {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+
+.heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.heading p,
+.heading h2 {
+  margin: 0;
+}
+
+.heading p {
+  color: var(--color-ink-600);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.heading h2 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.heading span {
+  padding: 0.28rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-ink-950) 8%, white);
+  color: var(--color-ink-600);
+  font-size: 0.75rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.issue {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.7rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-ink-100) 68%, white);
+}
+
+.issue strong,
+.issue p {
+  margin: 0;
+}
+
+.issue strong {
+  color: var(--color-ink-950);
+}
+
+.issue p {
+  color: var(--color-ink-600);
+  font-size: 0.86rem;
+}
+
+.issue a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-teal-900);
+  font-size: 0.8rem;
+  font-weight: 850;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.critical {
+  border-color: color-mix(in srgb, #d84b4b 35%, var(--color-ink-200));
+}
+
+.warning {
+  border-color: color-mix(
+    in srgb,
+    var(--color-citron-500) 46%,
+    var(--color-ink-200)
+  );
+}
+
+.info {
+  border-color: var(--color-ink-200);
+}
+
+.empty {
+  padding: 0.85rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-teal-500) 8%, white);
+  color: var(--color-teal-900);
+  font-weight: 800;
+}
+
+@media (max-width: 720px) {
+  .issue {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .issue a {
+    grid-column: 2;
+  }
+}

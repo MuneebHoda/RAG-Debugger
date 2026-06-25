@@ -1,0 +1,45 @@
+- name: area/api
+  color: "0e8a16"
+  description: Axum API, config, routing, errors, or integration tests.
+- name: area/web
+  color: "1d76db"
+  description: React app, UI, styling, Playwright, or frontend tests.
+- name: area/rag
+  color: "5319e7"
+  description: Extraction, chunking, embeddings, retrieval, traces, or eval logic.
+- name: area/storage
+  color: "fbca04"
+  description: Repository traits, memory store, Postgres, or migrations.
+- name: area/docs
+  color: "006b75"
+  description: Documentation, ADRs, handbook, or changelog.
+- name: type/bug
+  color: "d73a4a"
+  description: Incorrect behavior or regression.
+- name: type/feature
+  color: "a2eeef"
+  description: New product capability.
+- name: type/refactor
+  color: "cfd3d7"
+  description: Internal structure improvement without intended behavior change.
+- name: type/test
+  color: "bfdadc"
+  description: Test coverage or test infrastructure.
+- name: type/security
+  color: "b60205"
+  description: Security, privacy, auth, retention, or audit work.
+- name: type/performance
+  color: "fef2c0"
+  description: Latency, throughput, memory, indexing, or GPU/HPC work.
+- name: priority/p0
+  color: "b60205"
+  description: Immediate blocker or severe data/security issue.
+- name: priority/p1
+  color: "d93f0b"
+  description: High-priority product or reliability issue.
+- name: priority/p2
+  color: "fbca04"
+  description: Important planned work.
+- name: priority/p3
+  color: "c2e0c6"
+  description: Nice-to-have or low urgency.

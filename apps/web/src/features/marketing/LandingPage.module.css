@@ -1,0 +1,347 @@
+.hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-height: 610px;
+  margin: 0 auto;
+  border-top: 1px solid rgb(216 222 232 / 0.72);
+  border-bottom: 1px solid rgb(216 222 232 / 0.72);
+  background: #f7fbfa;
+}
+
+.hero::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background:
+    linear-gradient(
+      90deg,
+      rgb(251 252 248 / 0.98) 0%,
+      rgb(251 252 248 / 0.93) 34%,
+      rgb(251 252 248 / 0.34) 68%,
+      rgb(251 252 248 / 0.08) 100%
+    ),
+    linear-gradient(0deg, var(--color-paper), transparent 28%);
+}
+
+.heroImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 58% 50%;
+}
+
+.heroCopy {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  gap: 18px;
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+  color: var(--color-ink-950);
+  padding: 80px 0 92px;
+}
+
+.kicker,
+.trustRow span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  border: 1px solid rgb(12 135 146 / 0.18);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 0.72);
+  color: var(--color-teal-700);
+  font-size: 13px;
+  font-weight: 850;
+  padding: 7px 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.hero h1 {
+  max-width: 660px;
+  margin: 0;
+  font-size: 68px;
+  line-height: 0.96;
+}
+
+.hero p {
+  max-width: 590px;
+  margin: 0;
+  color: var(--color-ink-700);
+  font-size: 17px;
+}
+
+.ctas,
+.trustRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 18px auto 0;
+}
+
+.stats article {
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 0.74);
+  padding: 14px 16px;
+}
+
+.stats strong {
+  display: block;
+  color: var(--color-ink-950);
+  font-size: 25px;
+}
+
+.stats span {
+  color: var(--color-ink-600);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.story,
+.workflow,
+.showcase,
+.productProof,
+.finalCta {
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+}
+
+.story {
+  display: grid;
+  grid-template-columns: minmax(0, 0.74fr) minmax(420px, 1fr);
+  gap: 28px;
+  align-items: center;
+  padding: 72px 0 34px;
+}
+
+.eyebrow {
+  margin-bottom: 10px;
+  color: var(--color-teal-700);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.story h2,
+.workflow h2,
+.showcase h2,
+.productProof h2,
+.finalCta h2 {
+  margin: 0;
+  color: var(--color-ink-950);
+  font-size: 44px;
+  line-height: 1.04;
+}
+
+.story p {
+  max-width: 560px;
+}
+
+.themePanel,
+.qualityImage {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgb(216 222 232 / 0.92);
+  border-radius: var(--radius-sm);
+  background: var(--color-white);
+  box-shadow: var(--shadow-sm);
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+  padding: 18px 0 58px;
+}
+
+.workflow {
+  display: grid;
+  grid-template-columns: minmax(0, 0.5fr) minmax(0, 1fr);
+  gap: 26px;
+  border-top: 1px solid var(--color-ink-200);
+  border-bottom: 1px solid var(--color-ink-200);
+  color: var(--color-ink-950);
+  padding: 34px 0;
+}
+
+.workflow ol {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  counter-reset: workflow;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow li {
+  counter-increment: workflow;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 0.72);
+  color: var(--color-ink-700);
+  font-weight: 850;
+  padding: 11px;
+}
+
+.workflow li::before {
+  display: block;
+  color: var(--color-teal-700);
+  content: "0" counter(workflow);
+  font-size: 11px;
+  font-weight: 950;
+  margin-bottom: 5px;
+}
+
+.showcase {
+  display: grid;
+  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.8fr);
+  gap: 30px;
+  align-items: center;
+  padding: 64px 0 28px;
+}
+
+.showcase ul {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.showcase li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 10px;
+  color: var(--color-ink-700);
+  font-weight: 750;
+}
+
+.showcase li svg {
+  color: var(--color-teal-500);
+}
+
+.productProof {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.55fr) minmax(0, 1fr);
+  gap: 28px;
+  align-items: center;
+  padding: 34px 0 72px;
+}
+
+.productProof p {
+  max-width: 520px;
+}
+
+.proofGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.finalCta {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: rgb(255 255 255 / 0.78);
+  color: var(--color-ink-950);
+  margin-bottom: 64px;
+  padding: 34px 24px;
+  text-align: center;
+}
+
+.finalCta h2 {
+  color: var(--color-ink-950);
+}
+
+.finalCta p {
+  max-width: 680px;
+  color: var(--color-ink-600);
+}
+
+@media (max-width: 960px) {
+  .story,
+  .workflow,
+  .showcase,
+  .productProof {
+    grid-template-columns: 1fr;
+  }
+
+  .hero {
+    min-height: 590px;
+  }
+
+  .hero h1 {
+    font-size: 54px;
+  }
+
+  .story h2,
+  .workflow h2,
+  .showcase h2,
+  .productProof h2,
+  .finalCta h2 {
+    font-size: 38px;
+  }
+
+  .featureGrid,
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    min-height: 640px;
+  }
+
+  .hero::after {
+    background: linear-gradient(
+      180deg,
+      rgb(251 252 248 / 0.98),
+      rgb(251 252 248 / 0.76)
+    );
+  }
+
+  .heroImage {
+    opacity: 0.58;
+    object-position: 58% center;
+  }
+
+  .heroCopy {
+    gap: 16px;
+    padding: 54px 0 62px;
+  }
+
+  .hero h1 {
+    font-size: 42px;
+    line-height: 1;
+  }
+
+  .hero p {
+    font-size: 16px;
+  }
+
+  .featureGrid,
+  .stats,
+  .workflow ol,
+  .proofGrid {
+    grid-template-columns: 1fr;
+  }
+}

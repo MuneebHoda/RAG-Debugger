@@ -1,0 +1,25 @@
+.mockup {
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid rgb(255 255 255 / 0.2);
+  border-radius: var(--radius-lg);
+  background: var(--color-ink-950);
+  box-shadow: var(--shadow-md);
+}
+
+.elevated {
+  box-shadow: var(--shadow-lg);
+}
+
+.mockup img {
+  width: 100%;
+  background: var(--color-ink-950);
+}
+
+.mockup figcaption {
+  border-top: 1px solid rgb(255 255 255 / 0.12);
+  color: rgb(255 255 255 / 0.76);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 10px 14px;
+}

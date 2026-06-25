@@ -1,0 +1,37 @@
+name: Performance
+description: Track latency, throughput, memory, database, indexing, or GPU/HPC work.
+title: "perf: "
+labels: ["type/performance"]
+body:
+  - type: textarea
+    id: target
+    attributes:
+      label: Performance Target
+      description: Latency, throughput, memory, indexing speed, or scale goal.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Current Baseline
+      description: Current measurement, command, dataset, or benchmark.
+    validations:
+      required: true
+  - type: textarea
+    id: plan
+    attributes:
+      label: Measurement Plan
+      description: How will the change be measured and compared?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area/api
+        - area/web
+        - area/rag
+        - area/storage
+    validations:
+      required: true

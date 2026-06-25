@@ -1,0 +1,43 @@
+name: Feature
+description: Define a user-facing product capability.
+title: "feat: "
+labels: ["type/feature"]
+body:
+  - type: textarea
+    id: user_outcome
+    attributes:
+      label: User Outcome
+      description: What can the user do after this ships?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: In-scope behavior, out-of-scope behavior, and important constraints.
+    validations:
+      required: true
+  - type: textarea
+    id: interfaces
+    attributes:
+      label: Interfaces
+      description: API routes, schemas, UI routes, storage changes, or CLI commands.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: Concrete checks that prove the feature is complete.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Primary Area
+      options:
+        - area/api
+        - area/web
+        - area/rag
+        - area/storage
+        - area/docs
+    validations:
+      required: true

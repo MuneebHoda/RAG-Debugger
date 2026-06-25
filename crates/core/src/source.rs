@@ -33,6 +33,56 @@ pub struct Document {
     pub path: String,
     pub mime_type: Option<String>,
     pub checksum: String,
+    pub byte_size: u64,
+    #[serde(default)]
+    pub profile: DocumentProfile,
+    #[serde(default)]
+    pub extraction_quality: ExtractionQuality,
+    #[serde(default)]
+    pub warnings: Vec<DocumentWarning>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct SourceSummary {
+    pub source: Source,
+    pub document_count: u32,
+    pub chunk_count: u32,
+    pub documents: Vec<DocumentSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct DocumentSummary {
+    pub document: Document,
+    pub chunk_count: u32,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum DocumentProfile {
+    #[default]
+    General,
+    TechnicalDocs,
+    PolicyOrLegal,
+    SupportKb,
+    ResearchPaper,
+    CodeDocs,
+    Resume,
+}
+
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ExtractionQuality {
+    High,
+    Medium,
+    Low,
+    #[default]
+    Unknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct DocumentWarning {
+    pub code: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
