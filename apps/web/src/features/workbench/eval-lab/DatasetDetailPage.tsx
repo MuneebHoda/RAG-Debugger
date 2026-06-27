@@ -251,9 +251,9 @@ export function DatasetDetailPage() {
       ) : null}
 
       <div className={styles.grid}>
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <div>
+        <section className={`${styles.panel} ${styles.experimentPanel}`}>
+          <div className={`${styles.panelHeading} ${styles.experimentHeading}`}>
+            <div className={styles.panelHeadingCopy}>
               <h2>Cases</h2>
               <p>The retrieval behavior this dataset protects.</p>
             </div>
@@ -322,7 +322,7 @@ export function DatasetDetailPage() {
               />
             </label>
             <button
-              className={styles.primaryButton}
+              className={`${styles.primaryButton} ${styles.experimentAction}`}
               disabled={
                 dataset.cases.length === 0 ||
                 modes.length === 0 ||

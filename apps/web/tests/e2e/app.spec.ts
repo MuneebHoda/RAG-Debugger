@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const authSession = {
   email: "demo@corpuslab.ai",
@@ -814,7 +814,7 @@ test("completes the real guided workflow against the memory API", async ({
   await page.goto("/app/retrieval");
   await page.getByText("Advanced", { exact: true }).click();
   await page.getByRole("button", { name: "Index" }).click();
-  await expect(page.getByText(/1\/1 indexed/i)).toBeVisible();
+  await expect(page.getByText(/indexed · local-hash-v1/i)).toBeVisible();
   await page
     .getByLabel("What should the corpus answer?")
     .fill("How do GPU workers help indexing?");
@@ -839,4 +839,45 @@ test("completes the real guided workflow against the memory API", async ({
   await page.getByRole("checkbox").first().check();
   await page.getByRole("button", { name: "Save quality case" }).click();
   await expect(page.getByText("Quality case saved.")).toBeVisible();
+
+  await page.goto("/app/evals");
+  await page.getByRole("link", { name: /Default retrieval dataset/i }).click();
+  await expect(
+    page.getByRole("heading", { name: "Run an experiment" }),
+  ).toBeVisible();
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1024, height: 900 },
+    { width: 768, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const heading = page.getByRole("heading", { name: "Run an experiment" });
+    const action = page.getByRole("button", { name: "Run experiment" });
+    await expect(heading).toBeVisible();
+    await expect(action).toBeVisible();
+    await expectElementsNotToOverlap(heading, action);
+    expect(
+      await action.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBeTruthy();
+  }
 });
+
+async function expectElementsNotToOverlap(first: Locator, second: Locator) {
+  const firstBox = await first.boundingBox();
+  const secondBox = await second.boundingBox();
+  expect(firstBox).not.toBeNull();
+  expect(secondBox).not.toBeNull();
+  if (!firstBox || !secondBox) return;
+
+  const overlaps = !(
+    firstBox.x + firstBox.width <= secondBox.x ||
+    secondBox.x + secondBox.width <= firstBox.x ||
+    firstBox.y + firstBox.height <= secondBox.y ||
+    secondBox.y + secondBox.height <= firstBox.y
+  );
+  expect(overlaps).toBeFalsy();
+}

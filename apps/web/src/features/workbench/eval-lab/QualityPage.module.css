@@ -117,6 +117,11 @@
   gap: 1rem;
 }
 
+.panelHeadingCopy {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .panelHeading h2,
 .panelHeading p {
   margin: 0;
@@ -205,7 +210,32 @@
 .formGrid,
 .checkboxGrid {
   display: grid;
+  min-width: 0;
   gap: 0.7rem;
+}
+
+.experimentPanel {
+  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.experimentHeading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.experimentHeading > svg,
+.experimentAction > svg {
+  flex: 0 0 auto;
+}
+
+.experimentAction {
+  width: fit-content;
+  max-width: 100%;
+  justify-self: start;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
 }
 
 .formGrid {
@@ -413,6 +443,7 @@
 .message,
 .empty {
   margin: 0;
+  overflow-wrap: anywhere;
   color: #8f2626;
   font-size: 0.8rem;
   font-weight: 800;
@@ -448,5 +479,9 @@
   .formGrid,
   .checkboxGrid {
     grid-template-columns: 1fr;
+  }
+
+  .experimentAction {
+    width: 100%;
   }
 }
