@@ -1,183 +1,338 @@
 .shell {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: 252px minmax(0, 1fr);
-  background: linear-gradient(180deg, #f4f7f6 0%, #eef5f4 100%);
+  grid-template-columns: 228px minmax(0, 1fr);
+  background: #f4f7f6;
 }
 
-.sidebar {
+.sidebar,
+.sidebarOpen {
   display: grid;
+  position: sticky;
+  top: 0;
+  height: 100vh;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 26px;
-  border-right: 1px solid rgb(216 222 232 / 0.8);
-  background: rgb(255 255 255 / 0.9);
-  padding: 24px 18px;
+  gap: 1.35rem;
+  border-right: 1px solid var(--color-ink-200);
+  background: rgb(255 255 255 / 0.96);
+  padding: 1.15rem 0.85rem;
+  z-index: 20;
+}
+
+.brandRow {
+  display: flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.35rem;
+}
+
+.closeNav,
+.menuButton {
+  display: none;
 }
 
 .nav {
   display: grid;
   align-content: start;
-  gap: 6px;
+  gap: 0.85rem;
+  overflow-y: auto;
+}
+
+.navGroup {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.navGroupLabel {
+  color: var(--color-ink-500);
+  font-size: 0.66rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  padding: 0 0.7rem 0.2rem;
+  text-transform: uppercase;
 }
 
 .navItem,
 .activeNavItem {
   display: flex;
-  min-height: 42px;
+  min-height: 2.45rem;
   align-items: center;
-  gap: 10px;
+  gap: 0.65rem;
   border-radius: var(--radius-sm);
   color: var(--color-ink-700);
-  font-weight: 800;
-  padding: 0 12px;
+  font-size: 0.88rem;
+  font-weight: 780;
+  padding: 0 0.7rem;
   text-decoration: none;
 }
 
-.navItem:hover,
+.navItem:hover {
+  background: var(--color-ink-100);
+  color: var(--color-ink-950);
+}
+
 .activeNavItem {
-  background: rgb(12 135 146 / 0.1);
+  background: color-mix(in srgb, var(--color-teal-500) 12%, white);
   color: var(--color-teal-900);
 }
 
 .privacyNote {
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  gap: 8px;
-  border: 1px solid rgb(12 135 146 / 0.18);
-  border-radius: var(--radius-md);
-  background: rgb(236 255 173 / 0.28);
-  color: var(--color-teal-900);
-  font-size: 13px;
-  font-weight: 800;
-  padding: 12px;
-}
-
-.main {
-  padding: 1rem;
-}
-
-.topbar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.25rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--color-ink-200);
-  border-radius: var(--radius-sm);
-  background: rgb(255 255 255 / 0.86);
-  backdrop-filter: blur(16px);
-}
-
-.statusCluster,
-.quickActions {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
+  border-top: 1px solid var(--color-ink-200);
+  color: var(--color-ink-600);
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 0.85rem 0.55rem 0;
+}
+
+.workspace {
   min-width: 0;
 }
 
-.quickActions {
-  justify-content: flex-end;
+.topbar {
+  display: flex;
+  position: sticky;
+  top: 0;
+  min-height: 3.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-ink-200);
+  background: rgb(255 255 255 / 0.92);
+  backdrop-filter: blur(14px);
+  padding: 0.55rem 1.25rem;
+  z-index: 15;
 }
 
-.statusPill,
-.quickActions a,
-.logoutButton {
-  display: inline-flex;
+.topbarStart,
+.topbarEnd {
+  display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 0.42rem;
-  min-height: 2rem;
+  gap: 0.65rem;
+}
+
+.workspacePicker,
+.healthStatus,
+.iconButton,
+.userButton,
+.menuButton,
+.closeNav {
+  display: inline-flex;
+  min-height: 2.35rem;
+  align-items: center;
+  gap: 0.45rem;
   border: 1px solid var(--color-ink-200);
-  border-radius: 999px;
-  background: var(--color-white);
+  border-radius: var(--radius-sm);
+  background: white;
   color: var(--color-ink-700);
+  cursor: pointer;
+  font: inherit;
   font-size: 0.78rem;
   font-weight: 800;
-  padding: 0 0.65rem;
+  padding: 0 0.7rem;
   text-decoration: none;
+}
+
+.workspacePicker {
+  max-width: 16rem;
+  list-style: none;
+}
+
+.workspacePicker::-webkit-details-marker,
+.iconButton::-webkit-details-marker,
+.userButton::-webkit-details-marker {
+  display: none;
+}
+
+.workspacePicker span,
+.userEmail {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.quickActions a {
+.breadcrumb {
+  color: var(--color-ink-600);
+  font-size: 0.82rem;
+  font-weight: 780;
+}
+
+.healthStatus {
   border-color: color-mix(
     in srgb,
-    var(--color-teal-500) 20%,
+    var(--color-teal-500) 28%,
     var(--color-ink-200)
   );
   color: var(--color-teal-900);
 }
 
-.quickActions a:first-child {
+.iconButton {
+  width: 2.35rem;
+  justify-content: center;
+  padding: 0;
+  list-style: none;
+}
+
+.userButton {
+  max-width: 14rem;
+  list-style: none;
+}
+
+.closeNav,
+.menuButton {
+  display: none;
+}
+
+.avatar {
+  display: grid;
+  width: 1.6rem;
+  height: 1.6rem;
+  place-items: center;
+  border-radius: 50%;
   background: var(--color-ink-950);
   color: white;
 }
 
-.sparklineIcon {
-  display: inline-block;
-  width: 0.72rem;
-  height: 0.72rem;
-  border-radius: 0.2rem;
-  background:
-    linear-gradient(
-      90deg,
-      transparent 0 20%,
-      var(--color-teal-500) 20% 35%,
-      transparent 35%
-    ),
-    linear-gradient(
-      90deg,
-      transparent 0 45%,
-      var(--color-citron-500) 45% 62%,
-      transparent 62%
-    ),
-    linear-gradient(
-      90deg,
-      transparent 0 72%,
-      var(--color-teal-900) 72% 88%,
-      transparent 88%
-    );
+.menu {
+  position: relative;
 }
 
-.logoutButton {
-  font-family: inherit;
+.menuPanel {
+  display: grid;
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 14rem;
+  gap: 0.45rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  box-shadow: var(--shadow-lg);
+  padding: 0.75rem;
+  z-index: 30;
+}
+
+.topbarStart .menuPanel {
+  right: auto;
+  left: 0;
+}
+
+.menuPanel strong,
+.menuPanel span {
+  color: var(--color-ink-700);
+  font-size: 0.78rem;
+}
+
+.menuPanel a,
+.menuPanel button {
+  display: flex;
+  min-height: 2.15rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink-800);
   cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 0 0.55rem;
+  text-decoration: none;
 }
 
-.logoutButton:hover {
-  border-color: rgb(12 135 146 / 0.34);
-  color: var(--color-teal-900);
+.menuPanel a:hover,
+.menuPanel button:hover {
+  background: var(--color-ink-100);
 }
 
-@media (max-width: 860px) {
+.helpPanel {
+  min-width: 18rem;
+}
+
+.main {
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 1.25rem;
+}
+
+.scrim,
+.scrimVisible {
+  display: none;
+}
+
+@media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
   }
 
-  .sidebar {
-    grid-template-rows: auto auto;
-    border-right: 0;
-    border-bottom: 1px solid var(--color-ink-200);
+  .sidebar,
+  .sidebarOpen {
+    position: fixed;
+    right: auto;
+    left: 0;
+    width: min(19rem, 86vw);
+    transform: translateX(-105%);
+    transition: transform 180ms ease;
   }
 
-  .nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .sidebarOpen {
+    transform: translateX(0);
   }
 
-  .privacyNote {
-    display: none;
+  .closeNav,
+  .menuButton {
+    display: inline-flex;
+    width: 2.35rem;
+    justify-content: center;
+    padding: 0;
   }
 
-  .main {
-    padding: 22px;
+  .scrimVisible {
+    display: block;
+    position: fixed;
+    inset: 0;
+    border: 0;
+    background: rgb(10 25 30 / 0.42);
+    z-index: 19;
   }
 
   .topbar {
-    grid-template-columns: 1fr;
+    padding: 0.55rem 0.75rem;
   }
 
-  .quickActions {
-    justify-content: flex-start;
+  .breadcrumb,
+  .healthStatus span,
+  .userEmail {
+    display: none;
+  }
+
+  .userButton {
+    width: 2.35rem;
+    padding: 0;
+  }
+
+  .userButton > svg:last-child {
+    display: none;
+  }
+
+  .workspacePicker {
+    max-width: 11rem;
+  }
+
+  .main {
+    padding: 0.85rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar,
+  .sidebarOpen {
+    transition: none;
   }
 }

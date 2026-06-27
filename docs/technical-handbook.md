@@ -40,6 +40,8 @@ The web app lives in `apps/web/src`.
 - `pages/EvalsPage.tsx` handles Eval Lab datasets, cases, experiment runs, mode comparison, failure diagnosis, and gates under `/app/evals`.
 - `pages/ReportsPage.tsx` and `pages/SettingsPage.tsx` complete the workbench pages.
 
+The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`, navigation groups destinations by user intent, and route errors remain inside a recoverable workbench boundary.
+
 Generated `apps/web/dist` files should not be edited by hand. Run `cd apps/web && npm run build`.
 
 ## API Route Reference

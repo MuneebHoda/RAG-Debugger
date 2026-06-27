@@ -1,0 +1,66 @@
+.state {
+  display: grid;
+  max-width: 42rem;
+  gap: 1rem;
+  margin: 4rem auto;
+  padding: 2rem;
+  border: 1px solid color-mix(in srgb, #d84b4b 30%, var(--color-ink-200));
+  border-radius: var(--radius-md);
+  background: var(--color-white);
+  box-shadow: var(--shadow-sm);
+}
+
+.icon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, #d84b4b 10%, white);
+  color: #9f2f2f;
+}
+
+.state h1,
+.state p {
+  margin: 0;
+}
+
+.state h1 {
+  color: var(--color-ink-950);
+  font-size: 1.35rem;
+}
+
+.state p {
+  color: var(--color-ink-600);
+  line-height: 1.55;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.actions button,
+.actions a {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-800);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  padding: 0 0.85rem;
+  text-decoration: none;
+}
+
+.actions button:first-child {
+  border-color: var(--color-ink-950);
+  background: var(--color-ink-950);
+  color: white;
+}

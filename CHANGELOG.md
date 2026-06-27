@@ -13,10 +13,13 @@ This project uses semantic pre-release versioning while the product is pre-launc
 ### Added
 
 - Engineering quality baseline for GitHub-first execution, CI gates, PR templates, issue templates, and release discipline.
+- Guided workbench navigation, recoverable route errors, live setup progress, and shared query-state foundations.
 
 ### Changed
 
 - CI now covers frontend formatting, Playwright smoke tests, technical handbook PDF generation, and SQLx migration checks.
+- API timestamps now use RFC3339 strings while remaining compatible with legacy persisted timestamp arrays.
+- The workbench shell now organizes CorpusLab around Build, Improve, Share, and Workspace workflows.
 
 ## [0.1.0] - Baseline Product Checkpoint
 

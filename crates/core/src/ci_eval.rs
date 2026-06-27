@@ -46,7 +46,7 @@ pub struct CiEvalRun {
     pub config_label: String,
     pub regression: Option<CiEvalRegressionSummary>,
     pub report: CiEvalReport,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 

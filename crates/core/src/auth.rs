@@ -21,7 +21,7 @@ pub struct ApiKeyId(pub Uuid);
 pub struct Organization {
     pub id: OrganizationId,
     pub name: String,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -30,7 +30,7 @@ pub struct Workspace {
     pub id: WorkspaceId,
     pub organization_id: OrganizationId,
     pub name: String,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -39,7 +39,7 @@ pub struct User {
     pub id: UserId,
     pub email: String,
     pub name: String,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -72,10 +72,11 @@ pub struct AuthSessionRecord {
     pub user_id: UserId,
     pub workspace_id: WorkspaceId,
     pub token_hash: String,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub expires_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::wire_time::option")]
     pub revoked_at: Option<OffsetDateTime>,
 }
 
@@ -125,9 +126,11 @@ pub struct ApiKey {
     pub name: String,
     pub prefix: String,
     pub scopes: Vec<ApiKeyScope>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::wire_time::option")]
     pub last_used_at: Option<OffsetDateTime>,
+    #[serde(with = "crate::wire_time::option")]
     pub revoked_at: Option<OffsetDateTime>,
 }
 

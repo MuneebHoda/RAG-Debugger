@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
+import { queryClient } from "./app/queryClient";
 import {
   clearAuthSession,
   createAuthSession,
@@ -11,6 +12,7 @@ import {
 
 describe("App", () => {
   afterEach(() => {
+    queryClient.clear();
     clearAuthSession();
     vi.unstubAllGlobals();
   });
@@ -43,13 +45,10 @@ describe("App", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: /mission control/i }),
+      await screen.findByRole("heading", { name: /^home$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /sources/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: /ingest documents/i }),
-    ).toHaveAttribute("href", "/app/sources");
-    expect(screen.getByRole("link", { name: /open traces/i })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: /corpus/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^runs$/i })).toHaveAttribute(
       "href",
       "/app/traces",
     );

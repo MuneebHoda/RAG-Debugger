@@ -14,6 +14,7 @@ pub mod report;
 pub mod retrieval;
 pub mod source;
 pub mod trace;
+pub mod wire_time;
 
 pub use auth::*;
 pub use chunk::*;

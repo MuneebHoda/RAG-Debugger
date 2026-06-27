@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -16,24 +17,19 @@ describe("OverviewPage", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders Mission Control health, metrics, pipeline, risks, and activity", async () => {
-    render(
-      <MemoryRouter>
-        <OverviewPage />
-      </MemoryRouter>,
-    );
+  it("renders guided setup, core metrics, risks, and activity", async () => {
+    renderOverview();
 
     expect(
-      await screen.findByRole("heading", { name: /mission control/i }),
+      await screen.findByRole("heading", { name: /^home$/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/corpus health score/i)).toBeInTheDocument();
+    expect(await screen.findByText(/workflow ready/i)).toBeInTheDocument();
     expect(screen.getByText("Documents")).toBeInTheDocument();
-    expect(screen.getByText("Ingest to report flow")).toBeInTheDocument();
     expect(screen.getByText("What needs attention")).toBeInTheDocument();
     expect(screen.getByText("Recent system events")).toBeInTheDocument();
-    expect(
-      screen.getByText("Profiles and quality signals"),
-    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("System details"));
+    expect(screen.getByText("Profiles")).toBeInTheDocument();
   });
 
   it("guides an empty workspace toward Sources", async () => {
@@ -53,6 +49,11 @@ describe("OverviewPage", () => {
           },
         },
         metrics: metricSet({ documents: "0", chunks: "0" }),
+        pipeline: baseOverview().pipeline.map((pipelineStep) => ({
+          ...pipelineStep,
+          count: 0,
+          status: "pending",
+        })),
         issues: [
           {
             id: "no_documents",
@@ -64,19 +65,23 @@ describe("OverviewPage", () => {
           },
         ],
         document_mix: [],
+        embedding_status: {
+          ...baseOverview().embedding_status,
+          total_chunks: 0,
+          indexed_chunks: 0,
+        },
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <OverviewPage />
-      </MemoryRouter>,
-    );
+    renderOverview();
 
-    expect(await screen.findByText(/no corpus data yet/i)).toBeInTheDocument();
     expect(
-      screen.getAllByRole("link", { name: /ingest documents/i })[0],
-    ).toHaveAttribute("href", "/app/sources");
+      await screen.findByText(/get to a trusted retrieval result/i),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /open corpus/i })).toHaveAttribute(
+      "href",
+      "/app/sources",
+    );
   });
 
   it("recommends indexing when embeddings are missing", async () => {
@@ -113,16 +118,12 @@ describe("OverviewPage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <OverviewPage />
-      </MemoryRouter>,
-    );
+    renderOverview();
 
-    expect(await screen.findByText(/needs indexing/i)).toBeInTheDocument();
+    expect(await screen.findByText(/indexing needed/i)).toBeInTheDocument();
     expect(screen.getByText("Missing embeddings")).toBeInTheDocument();
     expect(
-      screen.getAllByRole("link", { name: /index embeddings/i })[0],
+      screen.getByRole("link", { name: /index evidence/i }),
     ).toHaveAttribute("href", "/app/retrieval");
   });
 
@@ -152,11 +153,7 @@ describe("OverviewPage", () => {
       }),
     );
 
-    render(
-      <MemoryRouter>
-        <OverviewPage />
-      </MemoryRouter>,
-    );
+    renderOverview();
 
     expect(await screen.findByText("Weak trace evidence")).toBeInTheDocument();
     await waitFor(() => {
@@ -166,6 +163,20 @@ describe("OverviewPage", () => {
     });
   });
 });
+
+function renderOverview() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter>
+        <OverviewPage />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
 function baseOverview() {
   return {

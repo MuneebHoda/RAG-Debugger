@@ -14,7 +14,7 @@ use crate::{
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct OverviewResponse {
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub generated_at: OffsetDateTime,
     pub health: OverviewHealth,
     pub metrics: Vec<OverviewMetric>,
@@ -91,7 +91,7 @@ pub struct OverviewActivity {
     pub label: String,
     pub detail: String,
     pub route: String,
-    #[serde(with = "time::serde::rfc3339::option")]
+    #[serde(with = "crate::wire_time::option")]
     pub created_at: Option<OffsetDateTime>,
 }
 
@@ -111,7 +111,7 @@ pub struct OverviewEvalRunSummary {
     pub pass_rate: f32,
     pub average_recall_at_k: f32,
     pub average_precision_at_k: f32,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -124,7 +124,7 @@ pub struct OverviewEvalExperimentSummary {
     pub average_recall_at_k: f32,
     pub average_precision_at_k: f32,
     pub failure_count: u32,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 

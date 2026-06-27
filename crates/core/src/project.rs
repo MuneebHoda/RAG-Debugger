@@ -9,7 +9,9 @@ pub struct Project {
     pub id: ProjectId,
     pub name: String,
     pub privacy_mode: PrivacyMode,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
+    #[serde(with = "crate::wire_time")]
     pub updated_at: OffsetDateTime,
 }
 
