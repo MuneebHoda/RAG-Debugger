@@ -4,8 +4,13 @@ use async_trait::async_trait;
 use rag_debugger_core::*;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
-use crate::{repository::IngestionRepository, StorageError};
+use crate::{
+    repository::{AuthRepository, CiEvalRepository, IngestionRepository},
+    StorageError,
+};
 
+mod auth;
+mod ci_eval;
 mod codec;
 mod embeddings;
 mod eval_lab;
@@ -243,5 +248,115 @@ impl IngestionRepository for PostgresStore {
         &self,
     ) -> Result<Option<RetrievalEvalExperiment>, StorageError> {
         PostgresStore::latest_retrieval_eval_experiment(self).await
+    }
+}
+
+#[async_trait]
+impl AuthRepository for PostgresStore {
+    async fn bootstrap_identity(
+        &self,
+        organization: Organization,
+        workspace: Workspace,
+        user: User,
+        role: WorkspaceRole,
+        password_hash: String,
+    ) -> Result<AuthenticatedUser, StorageError> {
+        PostgresStore::bootstrap_identity(self, organization, workspace, user, role, password_hash)
+            .await
+    }
+
+    async fn create_user_workspace(
+        &self,
+        organization: Organization,
+        workspace: Workspace,
+        user: User,
+        role: WorkspaceRole,
+        password_hash: String,
+    ) -> Result<AuthenticatedUser, StorageError> {
+        PostgresStore::create_user_workspace(
+            self,
+            organization,
+            workspace,
+            user,
+            role,
+            password_hash,
+        )
+        .await
+    }
+
+    async fn find_user_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<UserWithPassword>, StorageError> {
+        PostgresStore::find_user_by_email(self, email).await
+    }
+
+    async fn get_authenticated_user(
+        &self,
+        user_id: UserId,
+        workspace_id: WorkspaceId,
+    ) -> Result<AuthenticatedUser, StorageError> {
+        PostgresStore::get_authenticated_user(self, user_id, workspace_id).await
+    }
+
+    async fn create_auth_session(
+        &self,
+        session: AuthSessionRecord,
+    ) -> Result<AuthSessionRecord, StorageError> {
+        PostgresStore::create_auth_session(self, session).await
+    }
+
+    async fn find_auth_session(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<AuthSessionRecord>, StorageError> {
+        PostgresStore::find_auth_session(self, token_hash).await
+    }
+
+    async fn revoke_auth_session(&self, token_hash: &str) -> Result<(), StorageError> {
+        PostgresStore::revoke_auth_session(self, token_hash).await
+    }
+
+    async fn create_api_key(&self, record: ApiKeyRecord) -> Result<ApiKeyRecord, StorageError> {
+        PostgresStore::create_api_key(self, record).await
+    }
+
+    async fn list_api_keys(&self, workspace_id: WorkspaceId) -> Result<Vec<ApiKey>, StorageError> {
+        PostgresStore::list_api_keys(self, workspace_id).await
+    }
+
+    async fn find_api_key(&self, secret_hash: &str) -> Result<Option<ApiKeyRecord>, StorageError> {
+        PostgresStore::find_api_key(self, secret_hash).await
+    }
+
+    async fn touch_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
+        PostgresStore::touch_api_key(self, api_key_id).await
+    }
+
+    async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
+        PostgresStore::revoke_api_key(self, api_key_id).await
+    }
+}
+
+#[async_trait]
+impl CiEvalRepository for PostgresStore {
+    async fn save_ci_eval_run(&self, run: CiEvalRun) -> Result<CiEvalRun, StorageError> {
+        PostgresStore::save_ci_eval_run(self, run).await
+    }
+
+    async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError> {
+        PostgresStore::list_ci_eval_runs(self).await
+    }
+
+    async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError> {
+        PostgresStore::get_ci_eval_run(self, id).await
+    }
+
+    async fn latest_ci_eval_run_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+        config_label: &str,
+    ) -> Result<Option<CiEvalRun>, StorageError> {
+        PostgresStore::latest_ci_eval_run_for_dataset(self, dataset_id, config_label).await
     }
 }

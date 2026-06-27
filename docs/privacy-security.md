@@ -29,6 +29,8 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 - Logs must avoid raw document text and full prompts.
 - Logs must avoid embedding vectors and chunk checksums except short prefixes used for debugging.
 - Upload handlers must enforce file count, per-file size, total request size, and supported type limits.
-- Future hosted APIs should include authentication, authorization, audit logging, and per-project retention settings.
+- Workbench APIs require local authenticated sessions in development.
+- CI automation uses workspace-scoped API keys. Full secrets are shown once, stored only as hashes, and can be revoked.
+- Future hosted APIs should add invitations, SSO/SAML, SCIM, deeper RBAC, audit logging, and per-workspace retention settings.
 - Any export path must preserve project ownership and deletion semantics.
 - Report sharing must support redaction before it becomes a hosted/team feature.

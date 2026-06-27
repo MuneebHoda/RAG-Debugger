@@ -696,6 +696,57 @@ pub(super) fn eval_gate_status_to_str(status: RetrievalEvalGateStatus) -> &'stat
     }
 }
 
+pub(super) fn workspace_role_to_str(role: WorkspaceRole) -> &'static str {
+    match role {
+        WorkspaceRole::Owner => "owner",
+        WorkspaceRole::Admin => "admin",
+        WorkspaceRole::Member => "member",
+        WorkspaceRole::Viewer => "viewer",
+    }
+}
+
+pub(super) fn workspace_role_from_str(role: &str) -> Result<WorkspaceRole, StorageError> {
+    match role {
+        "owner" => Ok(WorkspaceRole::Owner),
+        "admin" => Ok(WorkspaceRole::Admin),
+        "member" => Ok(WorkspaceRole::Member),
+        "viewer" => Ok(WorkspaceRole::Viewer),
+        other => Err(StorageError::InvalidData(format!(
+            "unknown workspace role: {other}"
+        ))),
+    }
+}
+
+pub(super) fn api_key_scopes_to_text(scopes: &[ApiKeyScope]) -> Vec<String> {
+    scopes
+        .iter()
+        .map(|scope| match scope {
+            ApiKeyScope::CiEvalRuns => "ci_eval_runs".to_owned(),
+        })
+        .collect()
+}
+
+pub(super) fn api_key_scopes_from_text(
+    scopes: Vec<String>,
+) -> Result<Vec<ApiKeyScope>, StorageError> {
+    scopes
+        .into_iter()
+        .map(|scope| match scope.as_str() {
+            "ci_eval_runs" => Ok(ApiKeyScope::CiEvalRuns),
+            other => Err(StorageError::InvalidData(format!(
+                "unknown api key scope: {other}"
+            ))),
+        })
+        .collect()
+}
+
+pub(super) fn ci_eval_run_status_to_str(status: CiEvalRunStatus) -> &'static str {
+    match status {
+        CiEvalRunStatus::Passed => "passed",
+        CiEvalRunStatus::Failed => "failed",
+    }
+}
+
 pub(super) fn trace_status_to_str(status: TraceStatus) -> &'static str {
     match status {
         TraceStatus::Completed => "completed",

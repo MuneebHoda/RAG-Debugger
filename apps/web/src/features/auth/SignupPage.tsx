@@ -4,7 +4,8 @@ import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "../../components/ui/Button";
-import { createAuthSession } from "./authSession";
+import { signup } from "../../lib/api/auth";
+import { createAuthSessionFromResponse } from "./authSession";
 import styles from "./AuthPages.module.css";
 
 const benefits = [
@@ -18,11 +19,27 @@ export function SignupPage() {
   const [email, setEmail] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
   const [password, setPassword] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    createAuthSession(email, workspaceName);
-    navigate("/app", { replace: true });
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await signup({
+        email,
+        password,
+        workspace_name: workspaceName,
+      });
+      createAuthSessionFromResponse(response);
+      navigate("/app", { replace: true });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Signup failed");
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -35,6 +52,12 @@ export function SignupPage() {
           RAG quality.
         </p>
       </div>
+
+      {error ? (
+        <div className={styles.error} role="alert">
+          {error}
+        </div>
+      ) : null}
 
       <form className={styles.form} onSubmit={handleSubmit}>
         <label>
@@ -74,8 +97,9 @@ export function SignupPage() {
           />
         </label>
         <div className={styles.submit}>
-          <Button type="submit">
-            Create workspace <ArrowRight aria-hidden="true" size={17} />
+          <Button disabled={isSubmitting} type="submit">
+            {isSubmitting ? "Creating..." : "Create workspace"}{" "}
+            <ArrowRight aria-hidden="true" size={17} />
           </Button>
         </div>
       </form>

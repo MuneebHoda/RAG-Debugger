@@ -19,8 +19,10 @@ import {
   createEvalLabDataset,
   deleteEvalLabCase,
   getEvalLabDataset,
+  listCiEvalRuns,
   listEvalLabDatasets,
   listEvalLabExperiments,
+  type CiEvalRun,
   runEvalLabExperiment,
   updateEvalLabCase,
   type RetrievalEvalCase,
@@ -47,6 +49,7 @@ export function EvalsPage() {
   const [selectedDataset, setSelectedDataset] =
     useState<RetrievalEvalDataset | null>(null);
   const [experiments, setExperiments] = useState<RetrievalEvalExperiment[]>([]);
+  const [ciRuns, setCiRuns] = useState<CiEvalRun[]>([]);
   const [sources, setSources] = useState<SourceSummary[]>([]);
   const [chunks, setChunks] = useState<ChunkPreview[]>([]);
   const [datasetName, setDatasetName] = useState("");
@@ -76,11 +79,13 @@ export function EvalsPage() {
     Promise.all([
       listEvalLabDatasets(controller.signal),
       listEvalLabExperiments(controller.signal),
+      listCiEvalRuns(controller.signal),
       listSources(controller.signal),
     ])
-      .then(([nextDatasets, nextExperiments, nextSources]) => {
+      .then(([nextDatasets, nextExperiments, nextCiRuns, nextSources]) => {
         setDatasets(nextDatasets);
         setExperiments(nextExperiments);
+        setCiRuns(nextCiRuns);
         setSources(nextSources);
         const firstDatasetId = nextDatasets[0]?.id;
         if (firstDatasetId) {
@@ -551,6 +556,56 @@ export function EvalsPage() {
         </div>
       </section>
 
+      <section className={styles.panel} aria-labelledby="ci-gates-title">
+        <PanelTitle
+          eyebrow="CI Gates"
+          title="Release workflow checks"
+          badge={`${ciRuns.length} runs`}
+        />
+        <div className={styles.runGrid}>
+          <div>
+            <strong>GitHub Actions setup</strong>
+            <p>
+              Create a CI API key in Settings, save it as
+              <code> CORPUSLAB_API_KEY </code>, then call the CI eval endpoint
+              from your workflow.
+            </p>
+          </div>
+          <pre className={styles.codeBlock}>
+            {githubActionsSnippet(selectedDataset?.id)}
+          </pre>
+        </div>
+        <div className={styles.caseList}>
+          {ciRuns.length === 0 ? (
+            <div className={styles.emptyState}>
+              <GitCompare aria-hidden="true" size={22} />
+              <strong>No CI gates have run yet</strong>
+              <span>Use an API key to run this dataset from CI.</span>
+            </div>
+          ) : (
+            ciRuns.slice(0, 5).map((run) => (
+              <article className={styles.caseRow} key={run.id}>
+                <button type="button">
+                  <strong>
+                    {run.dataset_name} · {run.gate_status} gate
+                  </strong>
+                  <span>
+                    {run.branch ?? "unknown branch"} ·{" "}
+                    {run.commit_sha?.slice(0, 8) ?? "no commit"} ·{" "}
+                    {run.config_label}
+                  </span>
+                  <small>
+                    {run.regression
+                      ? run.regression.summary
+                      : "first run for this dataset/config"}
+                  </small>
+                </button>
+              </article>
+            ))
+          )}
+        </div>
+      </section>
+
       {latestExperiment ? (
         <ExperimentView experiment={latestExperiment} />
       ) : (
@@ -566,6 +621,19 @@ export function EvalsPage() {
       )}
     </section>
   );
+}
+
+function githubActionsSnippet(datasetId?: string) {
+  return `curl -fsS -X POST "$CORPUSLAB_API_URL/api/v1/eval-lab/ci/runs" \\
+  -H "Authorization: Bearer $CORPUSLAB_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "dataset_id": "${datasetId ?? "DATASET_ID"}",
+    "branch": "'$GITHUB_REF_NAME'",
+    "commit_sha": "'$GITHUB_SHA'",
+    "config_label": "default",
+    "fail_on_gate": true
+  }'`;
 }
 
 function EvidencePicker({

@@ -21,6 +21,7 @@ fn test_state(environment: RuntimeEnvironment) -> AppState {
             database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
                 .to_owned(),
             web_origin: "http://127.0.0.1:5173".to_owned(),
+            auth: Default::default(),
             product: ProductConfig::default(),
         },
         Arc::new(MemoryStore::default()),
@@ -34,6 +35,7 @@ fn not_ready_state() -> AppState {
         storage_backend: StorageBackend::Memory,
         database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test".to_owned(),
         web_origin: "http://127.0.0.1:5173".to_owned(),
+        auth: Default::default(),
         product: ProductConfig::default(),
     })
 }

@@ -27,6 +27,15 @@ cargo run -p rag-debugger-api
 
 The API connects to `DATABASE_URL`, runs migrations from `migrations/`, and creates a default local project on startup.
 
+On startup the API also bootstraps the local demo identity from `.env`:
+
+```text
+RAG_DEBUGGER_BOOTSTRAP_EMAIL=demo@corpuslab.ai
+RAG_DEBUGGER_BOOTSTRAP_PASSWORD=CorpusLab#2026
+```
+
+Use those credentials on `/login`, or create another local workspace through `/signup`.
+
 Web:
 
 ```sh
@@ -102,6 +111,22 @@ Legacy retrieval evals are still stored through `/api/v1/retrieval/evals` and ru
 5. Inspect recall@k, precision@k, MRR, citation coverage, latency p50/p95, deterministic failure labels, and the release gate result.
 
 Eval Lab APIs live under `/api/v1/eval-lab`. Existing retrieval eval cases are backfilled into `Default retrieval dataset` by migration so older local data remains usable.
+
+## CI Gate Flow
+
+1. Sign in to `/app/settings`.
+2. Create a `CI API Keys` key and copy the one-time `clab_...` secret.
+3. Store the key in GitHub Actions as `CORPUSLAB_API_KEY`.
+4. Use `docs/examples/github-actions-corpuslab-evals.yml` as the starting workflow.
+5. POST to `/api/v1/eval-lab/ci/runs` with `fail_on_gate=true` to fail the CI job when the Eval Lab gate fails.
+
+CI runs are saved as Eval Lab experiments and appear in `/app/evals`, Mission Control, and Reports. API key secrets are stored only as hashes.
+
+## Auth And Workspace Flow
+
+Local development uses the `local` auth provider. Login and signup create opaque HttpOnly session cookies, and workbench APIs require a valid session. CI endpoints require workspace-scoped API keys with the `ci_eval_runs` scope.
+
+The auth boundary is intentionally provider-shaped: local Postgres-backed sessions are implemented now, while external identity/session validation can replace the provider later without rewriting workbench routes.
 
 ## Trace Debugger Flow
 

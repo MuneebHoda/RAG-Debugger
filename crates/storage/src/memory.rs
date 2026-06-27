@@ -6,18 +6,23 @@ use std::{
 
 use async_trait::async_trait;
 use rag_debugger_core::{
-    Chunk, ChunkEmbedding, ChunkId, Document, DocumentId, DocumentSummary, EmbeddingIndexCandidate,
-    EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus, IngestionRun, IngestionRunId,
-    IngestionRunStatus, IngestionTotals, PrivacyMode, Project, ProjectId, RetrievalEvalCase,
-    RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
-    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
-    RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
-    TraceId, TraceSummary,
+    ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
+    ChunkId, CiEvalRun, CiEvalRunId, Document, DocumentId, DocumentSummary,
+    EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus,
+    IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals, Organization, PrivacyMode,
+    Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset,
+    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
+    RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse,
+    RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary,
+    User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{repository::IngestionRepository, StorageError};
+use crate::{
+    repository::{AuthRepository, CiEvalRepository, IngestionRepository},
+    StorageError,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStore {
@@ -39,6 +44,14 @@ struct MemoryStoreInner {
     retrieval_eval_experiments: HashMap<RetrievalEvalExperimentId, RetrievalEvalExperiment>,
     retrieval_eval_runs: HashMap<rag_debugger_core::RetrievalEvalRunId, RetrievalEvalRun>,
     traces: HashMap<TraceId, Trace>,
+    organizations: HashMap<rag_debugger_core::OrganizationId, Organization>,
+    workspaces: HashMap<WorkspaceId, Workspace>,
+    users: HashMap<UserId, User>,
+    user_password_hashes: HashMap<UserId, String>,
+    memberships: HashMap<(UserId, WorkspaceId), WorkspaceRole>,
+    auth_sessions: HashMap<String, AuthSessionRecord>,
+    api_keys: HashMap<ApiKeyId, ApiKeyRecord>,
+    ci_eval_runs: HashMap<CiEvalRunId, CiEvalRun>,
 }
 
 #[async_trait]
@@ -522,6 +535,197 @@ impl IngestionRepository for MemoryStore {
     }
 }
 
+#[async_trait]
+impl AuthRepository for MemoryStore {
+    async fn bootstrap_identity(
+        &self,
+        organization: Organization,
+        workspace: Workspace,
+        user: User,
+        role: WorkspaceRole,
+        password_hash: String,
+    ) -> Result<AuthenticatedUser, StorageError> {
+        let mut inner = self.lock()?;
+        if let Some(existing) = find_user_with_auth(&inner, &user.email)? {
+            return Ok(existing.auth);
+        }
+
+        inner
+            .organizations
+            .insert(organization.id, organization.clone());
+        inner.workspaces.insert(workspace.id, workspace.clone());
+        inner.users.insert(user.id, user.clone());
+        inner.user_password_hashes.insert(user.id, password_hash);
+        inner.memberships.insert((user.id, workspace.id), role);
+
+        Ok(AuthenticatedUser {
+            user,
+            organization,
+            workspace,
+            role,
+        })
+    }
+
+    async fn create_user_workspace(
+        &self,
+        organization: Organization,
+        workspace: Workspace,
+        user: User,
+        role: WorkspaceRole,
+        password_hash: String,
+    ) -> Result<AuthenticatedUser, StorageError> {
+        let mut inner = self.lock()?;
+        if find_user_with_auth(&inner, &user.email)?.is_some() {
+            return Err(StorageError::Conflict(
+                "user email already exists".to_owned(),
+            ));
+        }
+
+        inner
+            .organizations
+            .insert(organization.id, organization.clone());
+        inner.workspaces.insert(workspace.id, workspace.clone());
+        inner.users.insert(user.id, user.clone());
+        inner.user_password_hashes.insert(user.id, password_hash);
+        inner.memberships.insert((user.id, workspace.id), role);
+
+        Ok(AuthenticatedUser {
+            user,
+            organization,
+            workspace,
+            role,
+        })
+    }
+
+    async fn find_user_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<UserWithPassword>, StorageError> {
+        let inner = self.lock()?;
+        find_user_with_auth(&inner, email)
+    }
+
+    async fn get_authenticated_user(
+        &self,
+        user_id: UserId,
+        workspace_id: WorkspaceId,
+    ) -> Result<AuthenticatedUser, StorageError> {
+        let inner = self.lock()?;
+        authenticated_user(&inner, user_id, workspace_id)
+    }
+
+    async fn create_auth_session(
+        &self,
+        session: AuthSessionRecord,
+    ) -> Result<AuthSessionRecord, StorageError> {
+        let mut inner = self.lock()?;
+        inner
+            .auth_sessions
+            .insert(session.token_hash.clone(), session.clone());
+        Ok(session)
+    }
+
+    async fn find_auth_session(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<AuthSessionRecord>, StorageError> {
+        let inner = self.lock()?;
+        Ok(inner.auth_sessions.get(token_hash).cloned())
+    }
+
+    async fn revoke_auth_session(&self, token_hash: &str) -> Result<(), StorageError> {
+        let mut inner = self.lock()?;
+        if let Some(session) = inner.auth_sessions.get_mut(token_hash) {
+            session.revoked_at = Some(OffsetDateTime::now_utc());
+        }
+        Ok(())
+    }
+
+    async fn create_api_key(&self, record: ApiKeyRecord) -> Result<ApiKeyRecord, StorageError> {
+        let mut inner = self.lock()?;
+        inner.api_keys.insert(record.api_key.id, record.clone());
+        Ok(record)
+    }
+
+    async fn list_api_keys(&self, workspace_id: WorkspaceId) -> Result<Vec<ApiKey>, StorageError> {
+        let inner = self.lock()?;
+        let mut keys = inner
+            .api_keys
+            .values()
+            .filter(|record| record.api_key.workspace_id == workspace_id)
+            .map(|record| record.api_key.clone())
+            .collect::<Vec<_>>();
+        keys.sort_by_key(|key| Reverse(key.created_at));
+        Ok(keys)
+    }
+
+    async fn find_api_key(&self, secret_hash: &str) -> Result<Option<ApiKeyRecord>, StorageError> {
+        let inner = self.lock()?;
+        Ok(inner
+            .api_keys
+            .values()
+            .find(|record| record.secret_hash == secret_hash)
+            .cloned())
+    }
+
+    async fn touch_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
+        let mut inner = self.lock()?;
+        if let Some(record) = inner.api_keys.get_mut(&api_key_id) {
+            record.api_key.last_used_at = Some(OffsetDateTime::now_utc());
+        }
+        Ok(())
+    }
+
+    async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
+        let mut inner = self.lock()?;
+        let record = inner
+            .api_keys
+            .get_mut(&api_key_id)
+            .ok_or(StorageError::NotFound)?;
+        record.api_key.revoked_at = Some(OffsetDateTime::now_utc());
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl CiEvalRepository for MemoryStore {
+    async fn save_ci_eval_run(&self, run: CiEvalRun) -> Result<CiEvalRun, StorageError> {
+        let mut inner = self.lock()?;
+        inner.ci_eval_runs.insert(run.id, run.clone());
+        Ok(run)
+    }
+
+    async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError> {
+        let inner = self.lock()?;
+        let mut runs = inner.ci_eval_runs.values().cloned().collect::<Vec<_>>();
+        runs.sort_by_key(|run| Reverse(run.created_at));
+        Ok(runs)
+    }
+
+    async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError> {
+        let inner = self.lock()?;
+        inner
+            .ci_eval_runs
+            .get(&id)
+            .cloned()
+            .ok_or(StorageError::NotFound)
+    }
+
+    async fn latest_ci_eval_run_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+        config_label: &str,
+    ) -> Result<Option<CiEvalRun>, StorageError> {
+        let inner = self.lock()?;
+        Ok(inner
+            .ci_eval_runs
+            .values()
+            .filter(|run| run.dataset_id == dataset_id && run.config_label == config_label)
+            .max_by_key(|run| run.created_at)
+            .cloned())
+    }
+}
+
 impl MemoryStore {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, MemoryStoreInner>, StorageError> {
         self.inner
@@ -651,6 +855,73 @@ fn eval_dataset_summary(
         latest_average_precision_at_k: best_mode.map(|mode| mode.average_precision_at_k),
         updated_at: dataset.updated_at,
     }
+}
+
+fn find_user_with_auth(
+    inner: &MemoryStoreInner,
+    email: &str,
+) -> Result<Option<UserWithPassword>, StorageError> {
+    let normalized_email = email.trim().to_ascii_lowercase();
+    let Some(user) = inner
+        .users
+        .values()
+        .find(|user| user.email == normalized_email)
+        .cloned()
+    else {
+        return Ok(None);
+    };
+    let Some((&(_, workspace_id), &role)) = inner
+        .memberships
+        .iter()
+        .find(|((user_id, _), _)| *user_id == user.id)
+    else {
+        return Err(StorageError::InvalidData(
+            "user has no workspace membership".to_owned(),
+        ));
+    };
+    let auth = authenticated_user(inner, user.id, workspace_id)?;
+    Ok(Some(UserWithPassword {
+        auth: AuthenticatedUser { role, ..auth },
+        password_hash: inner
+            .user_password_hashes
+            .get(&user.id)
+            .cloned()
+            .ok_or_else(|| StorageError::InvalidData("user has no password hash".to_owned()))?,
+    }))
+}
+
+fn authenticated_user(
+    inner: &MemoryStoreInner,
+    user_id: UserId,
+    workspace_id: WorkspaceId,
+) -> Result<AuthenticatedUser, StorageError> {
+    let user = inner
+        .users
+        .get(&user_id)
+        .cloned()
+        .ok_or(StorageError::NotFound)?;
+    let workspace = inner
+        .workspaces
+        .get(&workspace_id)
+        .cloned()
+        .ok_or(StorageError::NotFound)?;
+    let organization = inner
+        .organizations
+        .get(&workspace.organization_id)
+        .cloned()
+        .ok_or(StorageError::NotFound)?;
+    let role = inner
+        .memberships
+        .get(&(user_id, workspace_id))
+        .copied()
+        .ok_or(StorageError::NotFound)?;
+
+    Ok(AuthenticatedUser {
+        user,
+        organization,
+        workspace,
+        role,
+    })
 }
 
 fn trace_summary_from_trace(trace: &Trace) -> TraceSummary {

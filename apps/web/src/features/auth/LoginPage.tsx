@@ -4,11 +4,8 @@ import { Link } from "react-router-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "../../components/ui/Button";
-import {
-  authenticateDemoUser,
-  createAuthSession,
-  DEMO_CREDENTIALS,
-} from "./authSession";
+import { login } from "../../lib/api/auth";
+import { createAuthSessionFromResponse, DEMO_CREDENTIALS } from "./authSession";
 import styles from "./AuthPages.module.css";
 
 export function LoginPage() {
@@ -16,22 +13,26 @@ export function LoginPage() {
   const location = useLocation();
   const [email, setEmail] = useState(DEMO_CREDENTIALS.email);
   const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setIsSubmitting(true);
 
-    if (!authenticateDemoUser(email, password)) {
-      setError("Use the demo credentials shown below to open the workbench.");
-      return;
+    try {
+      const response = await login({ email, password });
+      createAuthSessionFromResponse(response);
+      const from =
+        (location.state as { from?: { pathname?: string } } | null)?.from
+          ?.pathname ?? "/app";
+      navigate(from, { replace: true });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Login failed");
+    } finally {
+      setIsSubmitting(false);
     }
-
-    createAuthSession(email);
-    const from =
-      (location.state as { from?: { pathname?: string } } | null)?.from
-        ?.pathname ?? "/app";
-    navigate(from, { replace: true });
   }
 
   return (
@@ -92,8 +93,9 @@ export function LoginPage() {
           </Link>
         </div>
         <div className={styles.submit}>
-          <Button type="submit">
-            Open workbench <ArrowRight aria-hidden="true" size={17} />
+          <Button disabled={isSubmitting} type="submit">
+            {isSubmitting ? "Signing in..." : "Open workbench"}{" "}
+            <ArrowRight aria-hidden="true" size={17} />
           </Button>
         </div>
       </form>

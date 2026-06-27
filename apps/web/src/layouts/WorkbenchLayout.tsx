@@ -21,6 +21,7 @@ import {
   readAuthSession,
   type AuthSession,
 } from "../features/auth/authSession";
+import { logout } from "../lib/api/auth";
 import { getProductConfig, type ProductConfig } from "../lib/api/config";
 import { getHealth } from "../lib/api/health";
 import { getOverview, type OverviewResponse } from "../lib/api/overview";
@@ -79,6 +80,7 @@ export function WorkbenchLayout() {
   }, []);
 
   function handleLogout() {
+    void logout().catch(() => undefined);
     clearAuthSession();
     navigate("/login", { replace: true });
   }
@@ -136,7 +138,7 @@ export function WorkbenchLayout() {
             ) : null}
             <span className={styles.statusPill}>
               <ShieldCheck aria-hidden="true" size={16} />{" "}
-              {session?.email ?? "demo session"}
+              {session?.email ?? "session"}
             </span>
           </div>
           <div className={styles.quickActions} aria-label="Quick actions">

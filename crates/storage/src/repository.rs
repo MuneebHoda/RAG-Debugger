@@ -1,12 +1,14 @@
 use async_trait::async_trait;
 use rag_debugger_core::{
-    Chunk, ChunkEmbedding, Document, DocumentId, EmbeddingIndexCandidate, EmbeddingIndexRequest,
+    ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
+    CiEvalRun, CiEvalRunId, Document, DocumentId, EmbeddingIndexCandidate, EmbeddingIndexRequest,
     EmbeddingModelInfo, EmbeddingStatus, IngestionRun, IngestionRunId, IngestionRunStatus,
-    IngestionTotals, Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId,
+    IngestionTotals, Organization, Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId,
     RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
     RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
     RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceId, SourceSummary,
-    Trace, TraceId, TraceSummary,
+    Trace, TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId,
+    WorkspaceRole,
 };
 
 use crate::StorageError;
@@ -31,6 +33,65 @@ pub trait TraceRepository: Send + Sync {
     async fn get_trace(&self, id: TraceId) -> Result<Trace, StorageError>;
     async fn append_trace(&self, trace: Trace) -> Result<(), StorageError>;
 }
+
+#[async_trait]
+pub trait AuthRepository: Send + Sync {
+    async fn bootstrap_identity(
+        &self,
+        organization: Organization,
+        workspace: Workspace,
+        user: User,
+        role: WorkspaceRole,
+        password_hash: String,
+    ) -> Result<AuthenticatedUser, StorageError>;
+    async fn create_user_workspace(
+        &self,
+        organization: Organization,
+        workspace: Workspace,
+        user: User,
+        role: WorkspaceRole,
+        password_hash: String,
+    ) -> Result<AuthenticatedUser, StorageError>;
+    async fn find_user_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<UserWithPassword>, StorageError>;
+    async fn get_authenticated_user(
+        &self,
+        user_id: UserId,
+        workspace_id: WorkspaceId,
+    ) -> Result<AuthenticatedUser, StorageError>;
+    async fn create_auth_session(
+        &self,
+        session: AuthSessionRecord,
+    ) -> Result<AuthSessionRecord, StorageError>;
+    async fn find_auth_session(
+        &self,
+        token_hash: &str,
+    ) -> Result<Option<AuthSessionRecord>, StorageError>;
+    async fn revoke_auth_session(&self, token_hash: &str) -> Result<(), StorageError>;
+    async fn create_api_key(&self, record: ApiKeyRecord) -> Result<ApiKeyRecord, StorageError>;
+    async fn list_api_keys(&self, workspace_id: WorkspaceId) -> Result<Vec<ApiKey>, StorageError>;
+    async fn find_api_key(&self, secret_hash: &str) -> Result<Option<ApiKeyRecord>, StorageError>;
+    async fn touch_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError>;
+    async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError>;
+}
+
+#[async_trait]
+pub trait CiEvalRepository: Send + Sync {
+    async fn save_ci_eval_run(&self, run: CiEvalRun) -> Result<CiEvalRun, StorageError>;
+    async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError>;
+    async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError>;
+    async fn latest_ci_eval_run_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+        config_label: &str,
+    ) -> Result<Option<CiEvalRun>, StorageError>;
+}
+
+pub trait AppRepository: IngestionRepository + AuthRepository + CiEvalRepository {}
+
+impl<T> AppRepository for T where T: IngestionRepository + AuthRepository + CiEvalRepository {}
 
 #[async_trait]
 pub trait IngestionRepository: Send + Sync {

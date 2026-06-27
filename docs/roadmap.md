@@ -40,6 +40,8 @@
 - Report export from failed gates.
 - Team comments on failed cases and traces.
 
+Status: local auth, workspaces, hashed API keys, and CI Eval Lab runs are implemented as the first hosted foundation. Next work should harden permissions, report exports, and CI ergonomics before adding hosted billing.
+
 ## Phase 6: Hybrid Team Product
 
 - Organizations, workspaces, users, roles, and API keys.

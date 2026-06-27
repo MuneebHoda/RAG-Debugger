@@ -1,0 +1,55 @@
+name: CorpusLab Eval Gate
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  corpuslab-evals:
+    runs-on: ubuntu-latest
+    env:
+      CORPUSLAB_API_URL: ${{ vars.CORPUSLAB_API_URL || 'http://127.0.0.1:8080' }}
+      CORPUSLAB_DATASET_ID: ${{ vars.CORPUSLAB_DATASET_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run CorpusLab Eval Gate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          response_file="$(mktemp)"
+          status="$(
+            curl --silent --show-error \
+              --output "$response_file" \
+              --write-out "%{http_code}" \
+              --request POST "$CORPUSLAB_API_URL/api/v1/eval-lab/ci/runs" \
+              --header "Authorization: Bearer ${{ secrets.CORPUSLAB_API_KEY }}" \
+              --header "Content-Type: application/json" \
+              --data "$(jq -n \
+                --arg dataset_id "$CORPUSLAB_DATASET_ID" \
+                --arg branch "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                --arg commit_sha "$GITHUB_SHA" \
+                --arg base_ref "${GITHUB_BASE_REF:-main}" \
+                --arg head_ref "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                '{
+                  dataset_id: $dataset_id,
+                  name: "GitHub Actions retrieval gate",
+                  branch: $branch,
+                  commit_sha: $commit_sha,
+                  base_ref: $base_ref,
+                  head_ref: $head_ref,
+                  top_k: 5,
+                  modes: ["hybrid", "vector", "lexical"],
+                  config_label: "default",
+                  fail_on_gate: true
+                }')"
+          )"
+
+          cat "$response_file"
+
+          if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
+            echo "CorpusLab gate failed with HTTP $status"
+            exit 1
+          fi

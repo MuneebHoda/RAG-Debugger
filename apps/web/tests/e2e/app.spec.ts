@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const authSession = {
   email: "demo@corpuslab.ai",
@@ -6,7 +6,40 @@ const authSession = {
   issuedAt: "2026-06-24T00:00:00.000Z",
 };
 
-async function seedDemoSession(page) {
+const authResponse = {
+  user: {
+    user: {
+      id: "018f7a2a-6e2e-7000-a000-000000000901",
+      email: authSession.email,
+      name: "Demo User",
+      created_at: "2026-06-24T00:00:00Z",
+    },
+    organization: {
+      id: "018f7a2a-6e2e-7000-a000-000000000902",
+      name: "CorpusLab Demo Organization",
+      created_at: "2026-06-24T00:00:00Z",
+    },
+    workspace: {
+      id: "018f7a2a-6e2e-7000-a000-000000000903",
+      organization_id: "018f7a2a-6e2e-7000-a000-000000000902",
+      name: authSession.workspaceName,
+      created_at: "2026-06-24T00:00:00Z",
+    },
+    role: "owner",
+  },
+};
+
+async function mockCurrentUser(page: Page) {
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: authResponse,
+    });
+  });
+}
+
+async function seedDemoSession(page: Page) {
+  await mockCurrentUser(page);
   await page.addInitScript((session) => {
     window.localStorage.setItem(
       "corpuslab.auth.session",
@@ -36,6 +69,13 @@ test("renders pricing and auth pages", async ({ page }) => {
   await expect(page.getByText(/platform units/i).first()).toBeVisible();
 
   await page.goto("/login");
+  await mockCurrentUser(page);
+  await page.route("**/api/v1/auth/login", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: authResponse,
+    });
+  });
   await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
   await expect(page.getByText("demo@corpuslab.ai")).toBeVisible();
   await page.getByLabel("Email").fill("demo@corpuslab.ai");
