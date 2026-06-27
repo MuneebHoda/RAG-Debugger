@@ -12,12 +12,16 @@ import { AuthLayout } from "./layouts/AuthLayout";
 import { MarketingLayout } from "./layouts/MarketingLayout";
 import { WorkbenchLayout } from "./layouts/WorkbenchLayout";
 import { EvalsPage } from "./pages/EvalsPage";
+import { DocumentDetailPage } from "./pages/DocumentDetailPage";
+import { DatasetDetailPage } from "./pages/DatasetDetailPage";
+import { ExperimentDetailPage } from "./pages/ExperimentDetailPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { RetrievalPage } from "./pages/RetrievalPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { TracesPage } from "./pages/TracesPage";
+import { TraceDetailPage } from "./pages/TraceDetailPage";
 
 export function App() {
   return (
@@ -38,9 +42,22 @@ export function App() {
           <Route element={<WorkbenchLayout />}>
             <Route index element={<OverviewPage />} />
             <Route path="sources" element={<SourcesPage />} />
+            <Route
+              path="sources/:documentId"
+              element={<DocumentDetailPage />}
+            />
             <Route path="retrieval" element={<RetrievalPage />} />
             <Route path="traces" element={<TracesPage />} />
+            <Route path="traces/:traceId" element={<TraceDetailPage />} />
             <Route path="evals" element={<EvalsPage />} />
+            <Route
+              path="evals/datasets/:datasetId"
+              element={<DatasetDetailPage />}
+            />
+            <Route
+              path="evals/experiments/:experimentId"
+              element={<ExperimentDetailPage />}
+            />
             <Route path="reports" element={<ReportsPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>

@@ -7,6 +7,7 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   getEmbeddingStatus,
@@ -14,16 +15,7 @@ import {
   type EmbeddingStatus,
 } from "../../../lib/api/embeddings";
 import {
-  createEvalLabCase,
-  listEvalLabDatasets,
-  type RetrievalEvalCase,
-  type RetrievalEvalDatasetSummary,
-  type RetrievalEvalRun,
-} from "../../../lib/api/evalLab";
-import {
-  listRetrievalEvalCases,
   queryRetrieval,
-  runRetrievalEvals,
   type RetrievalMode,
   type RetrievalQueryResponse,
 } from "../../../lib/api/retrieval";
@@ -33,12 +25,13 @@ import {
   type SourceSummary,
 } from "../../../lib/api/sources";
 import { createTraceFromRetrievalRun } from "../../../lib/api/traces";
-import { AnswerPanel, EvalPanel, HitsPanel } from "./RetrievalResults";
-import "./RetrievalPage.module.css";
+import { AnswerPanel, HitsPanel } from "./RetrievalResults";
+import styles from "./RetrievalPage.module.css";
 
 const DEFAULT_TOP_K = 5;
 
 export function RetrievalPage() {
+  const navigate = useNavigate();
   const [sources, setSources] = useState<SourceSummary[]>([]);
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(DEFAULT_TOP_K);
@@ -48,19 +41,10 @@ export function RetrievalPage() {
   const [response, setResponse] = useState<RetrievalQueryResponse | null>(null);
   const [embeddingStatus, setEmbeddingStatus] =
     useState<EmbeddingStatus | null>(null);
-  const [evalCases, setEvalCases] = useState<RetrievalEvalCase[]>([]);
-  const [evalDatasets, setEvalDatasets] = useState<
-    RetrievalEvalDatasetSummary[]
-  >([]);
-  const [evalRun, setEvalRun] = useState<RetrievalEvalRun | null>(null);
   const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isQuerying, setIsQuerying] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
-  const [isSavingEval, setIsSavingEval] = useState(false);
   const [isSavingTrace, setIsSavingTrace] = useState(false);
-  const [isRunningEvals, setIsRunningEvals] = useState(false);
-  const [traceMessage, setTraceMessage] = useState<string | null>(null);
-  const [evalMessage, setEvalMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -68,22 +52,11 @@ export function RetrievalPage() {
     Promise.all([
       listSources(controller.signal),
       getEmbeddingStatus(controller.signal),
-      listRetrievalEvalCases(controller.signal),
-      listEvalLabDatasets(controller.signal),
     ])
-      .then(
-        ([
-          nextSources,
-          nextEmbeddingStatus,
-          nextEvalCases,
-          nextEvalDatasets,
-        ]) => {
-          setSources(nextSources);
-          setEmbeddingStatus(nextEmbeddingStatus);
-          setEvalCases(nextEvalCases);
-          setEvalDatasets(nextEvalDatasets);
-        },
-      )
+      .then(([nextSources, nextEmbeddingStatus]) => {
+        setSources(nextSources);
+        setEmbeddingStatus(nextEmbeddingStatus);
+      })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) {
           setError(errorMessage(cause));
@@ -138,8 +111,6 @@ export function RetrievalPage() {
         document_ids: activeSelectedDocumentIds,
       });
       setResponse(nextResponse);
-      setTraceMessage(null);
-      setEvalMessage(null);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -165,39 +136,6 @@ export function RetrievalPage() {
     }
   }
 
-  async function handleSaveEval() {
-    if (!response || response.hits.length === 0 || isSavingEval) {
-      return;
-    }
-
-    setIsSavingEval(true);
-    setError(null);
-
-    try {
-      const dataset = evalDatasets[0];
-      if (!dataset) {
-        throw new Error("Create an Eval Lab dataset before saving cases.");
-      }
-
-      const topHits = response.hits.slice(0, 3);
-      const evalCase = await createEvalLabCase(dataset.id, {
-        name: response.run.query,
-        query: response.run.query,
-        top_k: response.run.top_k,
-        expected_chunk_ids: topHits.map((hit) => hit.chunk.id),
-        expected_document_ids: uniqueStrings(
-          topHits.map((hit) => hit.document.id),
-        ),
-      });
-      setEvalCases((currentCases) => [evalCase, ...currentCases]);
-      setEvalMessage(`Saved to ${dataset.name}.`);
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setIsSavingEval(false);
-    }
-  }
-
   async function handleSaveTrace() {
     if (!response || isSavingTrace) {
       return;
@@ -210,9 +148,7 @@ export function RetrievalPage() {
       const trace = await createTraceFromRetrievalRun({
         run_id: response.run.id,
       });
-      setTraceMessage(
-        `Saved trace ${trace.id.slice(0, 8)} for debugger review.`,
-      );
+      navigate(`/app/traces/${trace.id}`);
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -220,36 +156,13 @@ export function RetrievalPage() {
     }
   }
 
-  async function handleRunEvals() {
-    if (evalCases.length === 0 || isRunningEvals) {
-      return;
-    }
-
-    setIsRunningEvals(true);
-    setError(null);
-
-    try {
-      const result = await runRetrievalEvals({
-        retrieval_mode: retrievalMode,
-      });
-      setEvalRun(result);
-    } catch (cause) {
-      setError(errorMessage(cause));
-    } finally {
-      setIsRunningEvals(false);
-    }
-  }
-
   return (
-    <section className="retrieval-page" aria-labelledby="retrieval-title">
-      <header className="page-header">
+    <section className={styles.page} aria-labelledby="retrieval-title">
+      <header className={styles.pageHeader}>
         <div>
-          <p className="eyebrow">Evidence diagnosis</p>
-          <h1 id="retrieval-title">Retrieval Playground</h1>
-          <p>
-            Ask questions across corpora, compare lexical/vector/hybrid modes,
-            inspect ranking signals, and explain cited evidence.
-          </p>
+          <p className={styles.eyebrow}>Build</p>
+          <h1 id="retrieval-title">Test retrieval</h1>
+          <p>Ask one question and inspect the evidence CorpusLab would use.</p>
         </div>
       </header>
 
@@ -260,10 +173,10 @@ export function RetrievalPage() {
         </div>
       ) : null}
 
-      <section className="retrieval-layout">
-        <div className="panel retrieval-controls">
+      <section className={styles.layout}>
+        <div className={`panel ${styles.controls}`}>
           <div className="panel-heading">
-            <h2>Query</h2>
+            <h2>Question</h2>
             <span className="status-pill">
               {isLoadingSources
                 ? "Loading"
@@ -271,8 +184,8 @@ export function RetrievalPage() {
             </span>
           </div>
 
-          <label className="query-field">
-            Question
+          <label className={styles.queryField}>
+            What should the corpus answer?
             <textarea
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
@@ -280,15 +193,18 @@ export function RetrievalPage() {
             />
           </label>
 
-          <div className="mode-tabs" aria-label="Ranking comparison">
+          <div className={styles.modeTabs} aria-label="Retrieval mode">
             {(["hybrid", "vector", "lexical"] as RetrievalMode[]).map(
               (mode) => (
                 <button
                   className={
-                    mode === retrievalMode ? "mode-tab active" : "mode-tab"
+                    mode === retrievalMode
+                      ? styles.activeModeTab
+                      : styles.modeTab
                   }
                   key={mode}
                   type="button"
+                  aria-pressed={mode === retrievalMode}
                   onClick={() => setRetrievalMode(mode)}
                 >
                   {mode}
@@ -297,57 +213,8 @@ export function RetrievalPage() {
             )}
           </div>
 
-          <div className="config-grid">
-            <label>
-              Top K
-              <input
-                min={1}
-                max={25}
-                type="number"
-                value={topK}
-                onChange={(event) => setTopK(Number(event.currentTarget.value))}
-              />
-            </label>
-            <label>
-              Mode
-              <select
-                value={retrievalMode}
-                onChange={(event) =>
-                  setRetrievalMode(event.currentTarget.value as RetrievalMode)
-                }
-              >
-                <option value="hybrid">Hybrid</option>
-                <option value="vector">Vector</option>
-                <option value="lexical">Lexical</option>
-              </select>
-            </label>
-          </div>
-
-          <EmbeddingPanel
-            status={embeddingStatus}
-            isIndexing={isIndexing}
-            onIndex={() => void handleIndexEmbeddings()}
-          />
-
-          <FilterSection
-            documents={visibleDocuments}
-            selectedDocumentIds={activeSelectedDocumentIds}
-            selectedSourceIds={selectedSourceIds}
-            sources={sources}
-            onToggleDocument={(documentId) =>
-              setSelectedDocumentIds((currentIds) =>
-                toggleId(currentIds, documentId),
-              )
-            }
-            onToggleSource={(sourceId) =>
-              setSelectedSourceIds((currentIds) =>
-                toggleId(currentIds, sourceId),
-              )
-            }
-          />
-
           <button
-            className="primary-button"
+            className={`primary-button ${styles.primaryAction}`}
             disabled={query.trim().length === 0 || isQuerying || topK <= 0}
             type="button"
             onClick={() => void handleSubmit()}
@@ -359,26 +226,57 @@ export function RetrievalPage() {
             )}
             Run retrieval
           </button>
+
+          <details className={styles.advanced}>
+            <summary>
+              <SlidersHorizontal aria-hidden="true" size={16} /> Advanced
+            </summary>
+            <div className={styles.advancedContent}>
+              <label className={styles.topKField}>
+                Results to return
+                <input
+                  min={1}
+                  max={25}
+                  type="number"
+                  value={topK}
+                  onChange={(event) =>
+                    setTopK(Number(event.currentTarget.value))
+                  }
+                />
+              </label>
+              <EmbeddingPanel
+                status={embeddingStatus}
+                isIndexing={isIndexing}
+                onIndex={() => void handleIndexEmbeddings()}
+              />
+              <FilterSection
+                documents={visibleDocuments}
+                selectedDocumentIds={activeSelectedDocumentIds}
+                selectedSourceIds={selectedSourceIds}
+                sources={sources}
+                onToggleDocument={(documentId) =>
+                  setSelectedDocumentIds((currentIds) =>
+                    toggleId(currentIds, documentId),
+                  )
+                }
+                onToggleSource={(sourceId) =>
+                  setSelectedSourceIds((currentIds) =>
+                    toggleId(currentIds, sourceId),
+                  )
+                }
+              />
+            </div>
+          </details>
         </div>
 
-        <div className="retrieval-results">
+        <div className={styles.results}>
           <AnswerPanel
             response={response}
             isQuerying={isQuerying}
-            onSaveEval={() => void handleSaveEval()}
             onSaveTrace={() => void handleSaveTrace()}
-            isSavingEval={isSavingEval}
             isSavingTrace={isSavingTrace}
-            traceMessage={traceMessage}
-            evalMessage={evalMessage}
           />
           <HitsPanel response={response} isQuerying={isQuerying} />
-          <EvalPanel
-            cases={evalCases}
-            evalRun={evalRun}
-            isRunning={isRunningEvals}
-            onRun={() => void handleRunEvals()}
-          />
         </div>
       </section>
     </section>
@@ -401,13 +299,13 @@ function FilterSection({
   onToggleSource: (sourceId: string) => void;
 }) {
   return (
-    <div className="filter-stack">
-      <div className="filter-heading">
+    <div className={styles.filterStack}>
+      <div className={styles.filterHeading}>
         <SlidersHorizontal aria-hidden="true" size={16} />
         <strong>Filters</strong>
       </div>
 
-      <div className="checkbox-list" aria-label="Source filters">
+      <div className={styles.checkboxList} aria-label="Source filters">
         {sources.length === 0 ? (
           <span>No sources indexed yet.</span>
         ) : (
@@ -424,7 +322,7 @@ function FilterSection({
         )}
       </div>
 
-      <div className="checkbox-list" aria-label="Document filters">
+      <div className={styles.checkboxList} aria-label="Document filters">
         {documents.length === 0 ? (
           <span>No documents available for the selected source filter.</span>
         ) : (
@@ -465,9 +363,9 @@ function EmbeddingPanel({
           : "Needs index";
 
   return (
-    <div className="embedding-status">
+    <div className={styles.embeddingStatus}>
       <div>
-        <div className="filter-heading">
+        <div className={styles.filterHeading}>
           <Database aria-hidden="true" size={16} />
           <strong>Embeddings</strong>
         </div>
@@ -499,10 +397,6 @@ function toggleId(currentIds: string[], id: string) {
   return currentIds.includes(id)
     ? currentIds.filter((currentId) => currentId !== id)
     : [...currentIds, id];
-}
-
-function uniqueStrings(values: string[]) {
-  return Array.from(new Set(values));
 }
 
 function errorMessage(cause: unknown) {

@@ -14,9 +14,9 @@ The implementation is deterministic and local in this pass. It does not call a h
 1. Upload documents on `/app/sources`.
 2. Index local embeddings from `/app/retrieval`.
 3. Ask a question in the Retrieval page.
-4. Click `Save trace`.
-5. Open `/app/traces`.
-6. Inspect the trace timeline, ranked evidence, citations, failure labels, and explainer cards.
+4. Click `Debug this run`. CorpusLab saves the trace and opens `/app/traces/:traceId`.
+5. Read the Summary diagnosis and recommended next action.
+6. Inspect ranked evidence and ordered spans in the Evidence and Timeline tabs.
 7. Rerun the trace with `lexical`, `vector`, or `hybrid` mode and compare score delta, latency delta, ranking movement, and overlap.
 
 ## API Routes
@@ -62,10 +62,12 @@ The response includes the updated trace and the latest rerun comparison.
 - `crates/rag/src/tracing.rs`: deterministic trace construction, failure-label assignment, timeline spans, and rerun comparison metrics.
 - `crates/storage/src/repository.rs`: repository methods for retrieval lookup and trace persistence.
 - `crates/storage/src/memory.rs`: in-memory trace storage for tests and no-Docker development.
-- `crates/storage/src/postgres.rs`: Postgres trace storage with summary columns plus full JSON timeline.
+- `crates/storage/src/postgres/traces.rs`: Postgres trace storage with summary columns plus full JSON timeline.
 - `apps/api/src/http/traces.rs`: Axum handlers for trace list, detail, create-from-retrieval, and rerun.
-- `apps/web/src/pages/TracesPage.tsx`: Trace Debugger UI.
-- `apps/web/src/pages/RetrievalPage.tsx`: `Save trace` action after a retrieval query.
+- `apps/web/src/features/workbench/traces/RunsPage.tsx`: searchable run list.
+- `apps/web/src/features/workbench/traces/TraceDetailPage.tsx`: focused debugger route and tabs.
+- `apps/web/src/features/workbench/traces/TraceDetailPanels.tsx`: diagnosis, evidence, timeline, comparison, and explicit Quality-case workflows.
+- `apps/web/src/features/workbench/retrieval/RetrievalPage.tsx`: `Debug this run` action after a retrieval query.
 
 ## Storage Model
 
@@ -115,13 +117,14 @@ This helps users see whether lexical, vector, or hybrid retrieval is improving e
 
 ## UI Behavior
 
-The `/app/traces` page has three columns:
+`/app/traces` is a searchable run list. Selecting a run opens `/app/traces/:traceId`, where the debugger has four focused tabs:
 
-- Saved traces list.
-- Trace detail with status, metrics, timeline, and ranked evidence.
-- Rerun lab plus explainer cards.
+- **Summary** explains what happened, likely causes, and the recommended next action.
+- **Evidence** shows ranked chunks, citations, quality, and normalized score bars.
+- **Timeline** shows ordered query, retrieval, evidence, eval, and generation spans.
+- **Compare** reruns the same question with changed retrieval settings and shows score, latency, overlap, and rank movement.
 
-The explainer cards are intentionally in-app. CorpusLab is a learning tool as well as a production workbench; users should understand traces, spans, failure labels, reruns, citations, and eval checks while using the product.
+Summary also exposes **Add to Quality**. It requires an explicit dataset and expected chunk selection; CorpusLab never silently treats the first hit or first dataset as correct.
 
 ## Privacy
 

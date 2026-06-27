@@ -48,15 +48,15 @@ npm run build
 Expected coverage in the scaffold:
 
 - App shell and workbench navigation render tests.
-- Sources page render test, including the structured chunking control.
-- Retrieval page render and mocked query tests, including mode controls, embedding status, evidence summary, score bars, citations, trace saving, and save-to-Eval-Lab.
-- Trace Debugger tests for navigation, trace list/detail, timeline spans, failure labels, rerun controls, comparison metrics, explainer cards, and save-to-Eval-Lab.
-- Eval Lab tests for dataset lists, case editing surface, run controls, experiment mode matrix, gate status, and failure diagnosis.
+- Corpus render and focused document-detail tests, including the advanced structured chunking control.
+- Test Retrieval render and mocked query tests, including one mode control, collapsed advanced settings, evidence summary, score bars, citations, and direct debugger navigation.
+- Runs tests for search/list navigation, focused detail tabs, failure diagnosis, rerun comparison, and explicit dataset/evidence selection for Quality.
+- Quality tests for the overview, focused dataset case management, experiment controls, gate-first result view, mode metrics, and failure diagnosis.
 - Auth tests for backend login/signup integration and session validation.
 - Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.
 - CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.
 - Overview, Reports, and Settings page tests should grow as those workflows deepen.
-- Playwright smoke tests for upload, chunk metadata preview, cited retrieval evidence, trace reruns, Eval Lab experiment, report view, and settings/config display.
+- Playwright tests for upload, focused chunk inspection, cited retrieval evidence, run reruns, responsive workbench layouts, and a real memory-backed login → upload → index → retrieve → debug → compare → Quality workflow.
 
 Browser smoke test:
 

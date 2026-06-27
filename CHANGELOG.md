@@ -14,12 +14,17 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 - Engineering quality baseline for GitHub-first execution, CI gates, PR templates, issue templates, and release discipline.
 - Guided workbench navigation, recoverable route errors, live setup progress, and shared query-state foundations.
+- Focused document, run, Quality dataset, and Quality experiment routes.
+- A memory-backed Playwright workflow covering login through Quality-case creation.
 
 ### Changed
 
 - CI now covers frontend formatting, Playwright smoke tests, technical handbook PDF generation, and SQLx migration checks.
 - API timestamps now use RFC3339 strings while remaining compatible with legacy persisted timestamp arrays.
 - The workbench shell now organizes CorpusLab around Build, Improve, Share, and Workspace workflows.
+- Corpus and Test retrieval now lead with one primary task and disclose chunking, indexing, filters, and ranking controls under Advanced sections.
+- Runs now separate search from debugging; Quality now separates overview, dataset management, and experiment results.
+- Reports prioritize actionable diagnoses, Settings use task-focused tabs, and route-specific styling is isolated in CSS modules.
 
 ## [0.1.0] - Baseline Product Checkpoint
 

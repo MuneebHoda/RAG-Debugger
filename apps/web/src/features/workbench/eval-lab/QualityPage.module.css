@@ -1,0 +1,452 @@
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header p,
+.header h1,
+.header span {
+  margin: 0;
+}
+
+.header p {
+  color: var(--color-teal-900);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--color-ink-950);
+  font-size: 1.8rem;
+}
+
+.header span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.9rem;
+}
+
+.primaryButton,
+.secondaryButton,
+.headerButton {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid var(--color-ink-950);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink-950);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 850;
+  padding: 0 0.8rem;
+  text-decoration: none;
+}
+
+.secondaryButton {
+  border-color: var(--color-ink-200);
+  background: white;
+  color: var(--color-ink-800);
+}
+
+.primaryButton:disabled,
+.secondaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.stat,
+.panel,
+.datasetCard,
+.experimentCard,
+.caseCard,
+.failureCard {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 0.85rem;
+}
+
+.stat small {
+  color: var(--color-ink-500);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.stat strong {
+  color: var(--color-ink-950);
+  font-size: 1.25rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(18rem, 0.75fr);
+  gap: 1rem;
+}
+
+.panel {
+  gap: 0.85rem;
+  padding: 1rem;
+}
+
+.panelHeading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelHeading h2,
+.panelHeading p {
+  margin: 0;
+}
+
+.panelHeading h2 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.panelHeading p {
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.8rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.datasetCard,
+.experimentCard {
+  color: inherit;
+  text-decoration: none;
+}
+
+.datasetCard:hover,
+.experimentCard:hover {
+  border-color: var(--color-teal-500);
+  background: color-mix(in srgb, var(--color-teal-500) 4%, white);
+}
+
+.cardHeader,
+.caseHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cardHeader strong,
+.caseHeader strong {
+  color: var(--color-ink-900);
+  font-size: 0.86rem;
+}
+
+.cardHeader span,
+.caseCard small,
+.datasetCard p,
+.experimentCard p {
+  margin: 0;
+  color: var(--color-ink-600);
+  font-size: 0.77rem;
+  line-height: 1.45;
+}
+
+.passed,
+.failed,
+.neutral {
+  display: inline-flex;
+  min-height: 1.65rem;
+  align-items: center;
+  border: 1px solid var(--color-ink-200);
+  border-radius: 999px;
+  color: var(--color-ink-600);
+  font-size: 0.7rem;
+  font-weight: 850;
+  padding: 0 0.55rem;
+  text-transform: capitalize;
+}
+
+.passed {
+  border-color: #9dc6a0;
+  background: #f0faef;
+  color: #315b33;
+}
+
+.failed {
+  border-color: #e5b7a5;
+  background: #fff4ef;
+  color: #7c3925;
+}
+
+.form,
+.formGrid,
+.checkboxGrid {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.formGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.form label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-ink-700);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.form input,
+.form textarea,
+.form select {
+  width: 100%;
+  min-height: 2.4rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-800);
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+}
+
+.form textarea {
+  min-height: 5rem;
+  resize: vertical;
+}
+
+.checkboxGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.checkboxLabel {
+  display: flex !important;
+  min-height: 2.4rem;
+  align-items: center;
+  gap: 0.45rem !important;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  padding: 0 0.65rem;
+}
+
+.caseActions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.inlineActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.backLink {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-ink-600);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.details {
+  border-top: 1px solid var(--color-ink-200);
+  padding-top: 0.75rem;
+}
+
+.details summary {
+  color: var(--color-ink-700);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 850;
+}
+
+.details .metricRows {
+  margin-top: 0.7rem;
+}
+
+.errorState {
+  display: grid;
+  max-width: 34rem;
+  gap: 0.75rem;
+  border: 1px solid #e5b7a5;
+  border-radius: var(--radius-sm);
+  background: #fff9f6;
+  color: var(--color-ink-800);
+  padding: 1.25rem;
+}
+
+.errorState button {
+  width: fit-content;
+}
+
+.caseActions button {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-700);
+  cursor: pointer;
+}
+
+.gate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.9rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 1rem;
+}
+
+.gateIcon {
+  display: grid;
+  width: 2.5rem;
+  height: 2.5rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-ink-100);
+}
+
+.gate h2,
+.gate p {
+  margin: 0;
+}
+
+.gate h2 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.gate p {
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.82rem;
+}
+
+.modeResults {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.modeCard {
+  display: grid;
+  gap: 0.55rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 0.85rem;
+}
+
+.modeCard h3 {
+  margin: 0;
+  color: var(--color-ink-900);
+  font-size: 0.9rem;
+  text-transform: capitalize;
+}
+
+.metricRows {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.metricRows span {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.7rem;
+  color: var(--color-ink-600);
+  font-size: 0.76rem;
+}
+
+.metricRows strong {
+  color: var(--color-ink-900);
+}
+
+.failureCard {
+  border-color: #e5b7a5;
+  background: #fff9f6;
+}
+
+.failureCard strong {
+  color: #7c3925;
+}
+
+.failureCard p,
+.failureCard small {
+  margin: 0;
+  color: var(--color-ink-600);
+  font-size: 0.78rem;
+}
+
+.error,
+.message,
+.empty {
+  margin: 0;
+  color: #8f2626;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.message {
+  color: #315b33;
+}
+
+.empty {
+  color: var(--color-ink-500);
+}
+
+@media (max-width: 950px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stats,
+  .modeResults {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stats,
+  .modeResults,
+  .formGrid,
+  .checkboxGrid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,296 @@
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.header p,
+.header h1,
+.header span,
+.panelHeading h2,
+.panelHeading p {
+  margin: 0;
+}
+
+.header p {
+  color: var(--color-teal-900);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--color-ink-950);
+  font-size: 1.8rem;
+}
+
+.header span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.9rem;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--color-ink-200);
+  overflow-x: auto;
+}
+
+.tab,
+.activeTab {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-ink-600);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 0 0.75rem;
+  white-space: nowrap;
+}
+
+.activeTab {
+  border-bottom-color: var(--color-teal-700);
+  color: var(--color-ink-950);
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid #e5b7a5;
+  border-radius: var(--radius-sm);
+  background: #fff4ef;
+  color: #7c3925;
+  padding: 0.75rem;
+}
+
+.panel,
+.grid {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.panel {
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 1rem;
+}
+
+.grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.panelHeading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelHeading h2 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.panelHeading p {
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.78rem;
+}
+
+.definitionList {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.definitionList div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 0.4fr) minmax(0, 1fr);
+  gap: 1rem;
+  border-top: 1px solid var(--color-ink-100);
+  padding: 0.65rem 0;
+}
+
+.definitionList dt,
+.definitionList dd {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.definitionList dt {
+  color: var(--color-ink-500);
+  font-weight: 800;
+}
+
+.definitionList dd {
+  color: var(--color-ink-800);
+  overflow-wrap: anywhere;
+}
+
+.createRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.7rem;
+}
+
+.createRow label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-ink-700);
+  font-size: 0.76rem;
+  font-weight: 850;
+}
+
+.createRow input {
+  min-height: 2.4rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink-800);
+  font: inherit;
+  padding: 0 0.65rem;
+}
+
+.primaryButton,
+.secretBox button,
+.keyRow button {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-ink-950);
+  border-radius: var(--radius-sm);
+  background: var(--color-ink-950);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 850;
+  padding: 0 0.7rem;
+}
+
+.primaryButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.secretBox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  border: 1px solid #bdd596;
+  border-radius: var(--radius-sm);
+  background: #f7fbe9;
+  padding: 0.75rem;
+}
+
+.secretBox span {
+  grid-column: 1 / -1;
+  color: #466029;
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.secretBox code {
+  overflow: hidden;
+  color: var(--color-ink-900);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+}
+
+.keyList,
+.privacyList {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.keyRow,
+.privacyList article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  padding: 0.7rem;
+}
+
+.keyRow span,
+.privacyList article span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.keyRow strong,
+.privacyList strong {
+  color: var(--color-ink-900);
+  font-size: 0.8rem;
+}
+
+.keyRow small,
+.privacyList small {
+  color: var(--color-ink-600);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.keyRow button {
+  min-height: 2rem;
+  border-color: var(--color-ink-200);
+  background: white;
+  color: var(--color-ink-700);
+}
+
+.privacyList article {
+  justify-content: start;
+}
+
+.privacyList article > svg {
+  flex: 0 0 auto;
+  color: var(--color-teal-800);
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-ink-500);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 760px) {
+  .grid,
+  .createRow {
+    grid-template-columns: 1fr;
+  }
+
+  .definitionList div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .secretBox,
+  .keyRow {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .keyRow {
+    flex-direction: column;
+  }
+
+  .keyRow button {
+    align-self: start;
+  }
+}

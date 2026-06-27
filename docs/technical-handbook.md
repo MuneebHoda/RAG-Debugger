@@ -34,11 +34,11 @@ The web app lives in `apps/web/src`.
 - `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups.
 - `lib/apiClient.ts` is a compatibility barrel for the API boundary. New code should prefer domain exports under `lib/api`, such as `lib/api/sources`, `lib/api/retrieval`, `lib/api/traces`, and `lib/api/evalLab`.
 - `pages/OverviewPage.tsx` summarizes corpus readiness under `/app`.
-- `pages/SourcesPage.tsx` handles upload, ingestion results, document tables, and chunk preview under `/app/sources`.
-- `pages/RetrievalPage.tsx` handles query, filters, embedding indexing, evidence summary, grouped hits, score bars, save-as-trace, and save-to-eval under `/app/retrieval`.
-- `pages/TracesPage.tsx` handles trace list, timeline spans, ranked evidence, failure labels, rerun comparison, and in-app explainers under `/app/traces`.
-- `pages/EvalsPage.tsx` handles Eval Lab datasets, cases, experiment runs, mode comparison, failure diagnosis, and gates under `/app/evals`.
-- `pages/ReportsPage.tsx` and `pages/SettingsPage.tsx` complete the workbench pages.
+- `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
+- `features/workbench/retrieval` owns the question-first retrieval test, advanced filters/indexing controls, evidence summary, citations, grouped evidence, and direct debugger navigation.
+- `features/workbench/traces` owns the searchable run list and focused `/app/traces/:traceId` debugger with Summary, Evidence, Timeline, and Compare tabs.
+- `features/workbench/eval-lab` owns the Quality overview, focused dataset editing, experiment execution, gate results, and failure diagnosis routes.
+- `pages/ReportsPage.tsx` prioritizes shareable CI failures, run diagnoses, and corpus findings. `pages/SettingsPage.tsx` separates Workspace, API keys, Runtime, and Privacy tabs.
 
 The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`, navigation groups destinations by user intent, and route errors remain inside a recoverable workbench boundary.
 
@@ -218,7 +218,7 @@ Failure labels include missing documents, missing embedding index, bad embedding
 
 Postgres stores trace summaries in `debug_traces`, full trace timelines in `trace_json`, and rerun comparisons in `trace_rerun_experiments`. The memory store supports the same API for tests and local no-Docker sessions.
 
-The web UI exposes `/app/traces` with a saved trace list, timeline, ranked evidence, rerun lab, and explainer cards. The Retrieval page exposes `Save trace` after a query completes.
+The web UI exposes `/app/traces` as a searchable saved-run list. `/app/traces/:traceId` displays diagnosis, ranked evidence, ordered spans, and rerun comparison without overloading the list view. The Retrieval page exposes `Debug this run`, which saves the current retrieval response and navigates directly to that focused detail route.
 
 ## Eval System
 
@@ -228,7 +228,7 @@ Metrics include recall@k, precision@k, MRR, top hit rank, citation coverage, wea
 
 The default gate passes when average recall@k is at least `0.80`, critical missing-embedding failures are absent, and weak-evidence cases are at or below 20%. Failed gates appear in Mission Control and point users to `/app/evals`.
 
-The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Retrieval and Trace Debugger now save cases directly into Eval Lab datasets.
+The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts
 
