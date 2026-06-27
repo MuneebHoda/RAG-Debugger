@@ -17,7 +17,7 @@ describe("App", () => {
     vi.unstubAllGlobals();
   });
 
-  it("renders the CorpusLab public site", () => {
+  it("renders the CorpusLab public site", async () => {
     render(
       <MemoryRouter>
         <App />
@@ -25,13 +25,17 @@ describe("App", () => {
     );
 
     expect(
-      screen.getByRole("heading", {
-        name: /turn every corpus into trusted retrieval/i,
+      await screen.findByRole("heading", {
+        name: /make every rag answer defensible/i,
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/CorpusLab/i).length).toBeGreaterThan(0);
-    expect(screen.getByRole("link", { name: /features/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /pricing/i })).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: /features/i }).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole("link", { name: /pricing/i }).length,
+    ).toBeGreaterThan(0);
   });
 
   it("renders the workbench under the app route", async () => {

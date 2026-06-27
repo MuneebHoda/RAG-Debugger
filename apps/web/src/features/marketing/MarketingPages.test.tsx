@@ -1,6 +1,12 @@
-import { render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { LoginPage } from "../auth/LoginPage";
 import { SignupPage } from "../auth/SignupPage";
@@ -9,6 +15,10 @@ import { LandingPage } from "./LandingPage";
 import { PricingPage } from "./PricingPage";
 
 const blockedLaunchCopy = ["coming soon", "future", "planned", "roadmap"];
+
+afterEach(() => {
+  globalThis.__setReducedMotionForTests(false);
+});
 
 describe("marketing pages", () => {
   it("shows the CorpusLab landing story with product imagery", () => {
@@ -20,15 +30,89 @@ describe("marketing pages", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /turn every corpus into trusted retrieval/i,
+        name: /make every rag answer defensible/i,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByAltText(/abstract corpuslab evidence intelligence map/i),
-    ).toHaveAttribute("src", "/product/corpuslab-hero-theme.png");
+      document.querySelector('img[src="/product/corpuslab-hero-theme.png"]'),
+    ).toBeInTheDocument();
+    expect(screen.getByAltText(/mission control dashboard/i)).toHaveAttribute(
+      "src",
+      "/product/corpuslab-dashboard.png",
+    );
+  });
+
+  it("updates failure diagnosis through accessible stage tabs", async () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
     expect(
-      screen.getByAltText(/dashboard showing corpus health/i),
-    ).toHaveAttribute("src", "/product/corpuslab-dashboard.png");
+      screen.getByText(/bad text creates invisible evidence/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Retrieve" }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/relevant evidence can exist and still rank too low/i),
+      ).toBeInTheDocument(),
+    );
+  });
+
+  it("updates the retrieval demo query and mode", async () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Vector" }));
+    await waitFor(() =>
+      expect(screen.getByText("86% evidence strength")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Support escalation" }));
+    await waitFor(() =>
+      expect(screen.getByText(/support-operations\.md/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("switches the product tour without changing layout ownership", async () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Quality" }));
+    await waitFor(() =>
+      expect(screen.getByAltText(/quality experiment/i)).toHaveAttribute(
+        "src",
+        "/product/corpuslab-evals.png",
+      ),
+    );
+  });
+
+  it("renders reveal sections immediately when reduced motion is requested", () => {
+    globalThis.__setReducedMotionForTests(true);
+
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
+    const capabilitySection = screen
+      .getByRole("heading", {
+        name: /build, test, debug, measure, and share/i,
+      })
+      .closest("section");
+    expect(capabilitySection).not.toHaveStyle({ opacity: "0" });
+    expect(
+      screen.getByRole("heading", {
+        name: /one evidence system. every quality decision/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("describes platform features in present-tense product language", () => {

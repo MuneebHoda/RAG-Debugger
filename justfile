@@ -40,6 +40,7 @@ db-migrate:
 check: fmt lint typecheck test build
 
 full-check: fmt lint typecheck test build
+    cd apps/web && npm run size:check
     cd apps/web && npx playwright test
     cd apps/web && npm run docs:pdf
     docker compose up -d postgres

@@ -16,6 +16,8 @@ This project uses semantic pre-release versioning while the product is pre-launc
 - Guided workbench navigation, recoverable route errors, live setup progress, and shared query-state foundations.
 - Focused document, run, Quality dataset, and Quality experiment routes.
 - A memory-backed Playwright workflow covering login through Quality-case creation.
+- Premium interactive landing sections for failure diagnosis, retrieval-mode comparison, capability storytelling, product tours, enterprise trust, and responsive navigation.
+- Route-isolated Motion animations, reduced-motion behavior, responsive landing screenshots, and JavaScript/CSS gzip budgets.
 
 ### Changed
 
@@ -25,6 +27,8 @@ This project uses semantic pre-release versioning while the product is pre-launc
 - Corpus and Test retrieval now lead with one primary task and disclose chunking, indexing, filters, and ranking controls under Advanced sections.
 - Runs now separate search from debugging; Quality now separates overview, dataset management, and experiment results.
 - Reports prioritize actionable diagnoses, Settings use task-focused tabs, and route-specific styling is isolated in CSS modules.
+- The public landing page now uses an editorial full-width composition instead of repeated feature-card grids.
+- Quality experiment controls now use explicit layout regions and safe wrapping at desktop, tablet, and mobile widths.
 
 ## [0.1.0] - Baseline Product Checkpoint
 

@@ -52,14 +52,89 @@ test("renders the CorpusLab public site", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Turn every corpus into trusted retrieval.",
+      name: "Make every RAG answer defensible.",
     }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Features" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Pricing" })).toBeVisible();
   await expect(
-    page.getByAltText(/abstract corpuslab evidence intelligence map/i),
+    page.locator('img[src="/product/corpuslab-hero-theme.png"]'),
   ).toBeVisible();
+});
+
+test("landing interactions remain accessible and layout-stable", async ({
+  page,
+}) => {
+  await observeCumulativeLayoutShift(page);
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.goto("/");
+
+  const extractTab = page.getByRole("tab", { name: "Extract" });
+  await extractTab.focus();
+  await extractTab.press("ArrowRight");
+  await expect(page.getByRole("tab", { name: "Chunk" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await page.getByRole("tab", { name: "Retrieve" }).click();
+  await expect(
+    page.getByText(/relevant evidence can exist and still rank too low/i),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Vector" }).click();
+  await expect(page.getByText("86% evidence strength")).toBeVisible();
+  await page.getByRole("button", { name: "Support escalation" }).click();
+  await expect(page.getByText(/support-operations\.md/i)).toBeVisible();
+
+  await page.getByRole("tab", { name: "Quality" }).click();
+  await expect(page.getByAltText(/quality experiment/i)).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+
+  await page.waitForLoadState("networkidle");
+  expect(await readCumulativeLayoutShift(page)).toBeLessThan(0.1);
+});
+
+test("mobile navigation and reduced-motion experience remain complete", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/");
+
+  const menuButton = page.getByRole("button", { name: "Open menu" });
+  await menuButton.click();
+  await expect(
+    page.getByRole("button", { name: "Close menu" }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await page.keyboard.press("Escape");
+  await expect(menuButton).toHaveAttribute("aria-expanded", "false");
+  await expect(menuButton).toBeFocused();
+
+  await page.getByRole("tab", { name: "Evaluate" }).click();
+  await expect(
+    page.getByText(/quality needs a release decision, not a hunch/i),
+  ).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+});
+
+test("captures responsive landing screenshots", async ({ page }, testInfo) => {
+  for (const viewport of [
+    { width: 1440, height: 1100 },
+    { width: 1024, height: 900 },
+    { width: 390, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    await revealLandingSections(page, viewport.height);
+    await assertNoHorizontalOverflow(page);
+    await page.screenshot({
+      animations: "disabled",
+      fullPage: true,
+      path: testInfo.outputPath(
+        `landing-${viewport.width}x${viewport.height}.png`,
+      ),
+    });
+  }
 });
 
 test("renders pricing and auth pages", async ({ page }) => {
@@ -792,6 +867,8 @@ test("workbench stays readable without horizontal overflow", async ({
 test("completes the real guided workflow against the memory API", async ({
   page,
 }) => {
+  const fileName = `gpu-platform-guide-${crypto.randomUUID()}.md`;
+
   await page.goto("/login");
   await page.getByLabel("Email").fill("demo@corpuslab.ai");
   await page.getByLabel("Password").fill("CorpusLab#2026");
@@ -800,7 +877,7 @@ test("completes the real guided workflow against the memory API", async ({
 
   await page.goto("/app/sources");
   await page.getByLabel("Choose files").setInputFiles({
-    name: "gpu-platform-guide.md",
+    name: fileName,
     mimeType: "text/markdown",
     buffer: Buffer.from(
       "# GPU indexing\n\nGPU workers accelerate embedding indexing and refresh vector search indexes.\n\n# Reliability\n\nQuality gates compare recall and precision before release.",
@@ -808,7 +885,7 @@ test("completes the real guided workflow against the memory API", async ({
   });
   await page.getByRole("button", { name: "Ingest files" }).click();
   await expect(
-    page.getByRole("link", { name: /gpu-platform-guide\.md/i }),
+    page.getByRole("link").filter({ hasText: fileName }),
   ).toBeVisible();
 
   await page.goto("/app/retrieval");
@@ -841,7 +918,10 @@ test("completes the real guided workflow against the memory API", async ({
   await expect(page.getByText("Quality case saved.")).toBeVisible();
 
   await page.goto("/app/evals");
-  await page.getByRole("link", { name: /Default retrieval dataset/i }).click();
+  await page
+    .locator('a[href^="/app/evals/datasets/"]')
+    .filter({ hasText: "Default retrieval dataset" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "Run an experiment" }),
   ).toBeVisible();
@@ -858,6 +938,10 @@ test("completes the real guided workflow against the memory API", async ({
     await expect(heading).toBeVisible();
     await expect(action).toBeVisible();
     await expectElementsNotToOverlap(heading, action);
+    await expectElementsNotToOverlap(
+      page.getByLabel("Results per question"),
+      action,
+    );
     expect(
       await action.evaluate(
         (element) => element.scrollWidth <= element.clientWidth,
@@ -880,4 +964,56 @@ async function expectElementsNotToOverlap(first: Locator, second: Locator) {
     secondBox.y + secondBox.height <= firstBox.y
   );
   expect(overlaps).toBeFalsy();
+}
+
+async function assertNoHorizontalOverflow(page: Page) {
+  const sizes = await page.evaluate(() => ({
+    content: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+  }));
+  expect(sizes.content).toBeLessThanOrEqual(sizes.viewport);
+}
+
+async function revealLandingSections(page: Page, viewportHeight: number) {
+  const pageHeight = await page.evaluate(
+    () => document.documentElement.scrollHeight,
+  );
+  const step = Math.max(1, Math.floor(viewportHeight * 0.7));
+
+  for (let offset = 0; offset < pageHeight; offset += step) {
+    await page.evaluate(
+      (scrollOffset) => window.scrollTo(0, scrollOffset),
+      offset,
+    );
+    await page.waitForTimeout(50);
+  }
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(100);
+}
+
+async function observeCumulativeLayoutShift(page: Page) {
+  await page.addInitScript(() => {
+    const target = window as Window & { __corpusLabCls?: number };
+    target.__corpusLabCls = 0;
+    const observer = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        const shift = entry as PerformanceEntry & {
+          hadRecentInput?: boolean;
+          value?: number;
+        };
+        if (!shift.hadRecentInput) {
+          target.__corpusLabCls =
+            (target.__corpusLabCls ?? 0) + (shift.value ?? 0);
+        }
+      }
+    });
+    observer.observe({ buffered: true, type: "layout-shift" });
+  });
+}
+
+async function readCumulativeLayoutShift(page: Page) {
+  return page.evaluate(
+    () => (window as Window & { __corpusLabCls?: number }).__corpusLabCls ?? 0,
+  );
 }

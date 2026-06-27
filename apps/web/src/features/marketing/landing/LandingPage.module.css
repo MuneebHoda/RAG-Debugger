@@ -1,0 +1,4 @@
+.page {
+  overflow: clip;
+  background: var(--color-paper);
+}

@@ -66,6 +66,7 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Architecture](docs/architecture.md)
 - [Development Guide](docs/development.md)
 - [Engineering Quality](docs/engineering-quality.md)
+- [Marketing Experience](docs/marketing-experience.md)
 - [File Ingestion](docs/file-ingestion.md)
 - [Retrieval Playground](docs/retrieval-playground.md)
 - [Trace Debugger](docs/trace-debugger.md)
