@@ -216,12 +216,21 @@
 
 .experimentPanel {
   min-width: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "heading"
+    "form";
+  grid-template-rows: auto auto;
+  align-content: start;
 }
 
 .experimentHeading {
+  grid-area: heading;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.experimentForm {
+  grid-area: form;
 }
 
 .experimentHeading > svg,

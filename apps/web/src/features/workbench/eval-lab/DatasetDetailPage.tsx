@@ -251,8 +251,8 @@ export function DatasetDetailPage() {
       ) : null}
 
       <div className={styles.grid}>
-        <section className={`${styles.panel} ${styles.experimentPanel}`}>
-          <div className={`${styles.panelHeading} ${styles.experimentHeading}`}>
+        <section className={styles.panel}>
+          <div className={styles.panelHeading}>
             <div className={styles.panelHeadingCopy}>
               <h2>Cases</h2>
               <p>The retrieval behavior this dataset protects.</p>
@@ -274,15 +274,15 @@ export function DatasetDetailPage() {
           </div>
         </section>
 
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <div>
+        <section className={`${styles.panel} ${styles.experimentPanel}`}>
+          <div className={`${styles.panelHeading} ${styles.experimentHeading}`}>
+            <div className={styles.panelHeadingCopy}>
               <h2>Run an experiment</h2>
               <p>Test the same cases across selected retrieval modes.</p>
             </div>
             <FlaskConical aria-hidden="true" size={18} />
           </div>
-          <div className={styles.form}>
+          <div className={`${styles.form} ${styles.experimentForm}`}>
             <label>
               Experiment name <small>Optional</small>
               <input
