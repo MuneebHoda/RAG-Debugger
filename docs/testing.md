@@ -100,6 +100,8 @@ When changing commands, paths, or architecture, update:
 - `docs/ci-eval-workflows.md`
 - `docs/trace-debugger.md`
 - `docs/rag-invariants.md`
+- `docs/privacy-review-checklist.md`
+- `docs/logging-redaction.md`
 - `docs/technical-handbook.md`
 - `docs/frontend-architecture.md`
 - Relevant ADRs in `docs/adr`

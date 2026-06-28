@@ -53,6 +53,8 @@ For product features:
 - Prefer focused modules over giant route, page, API client, or storage files.
 - Prefer pure functions in `crates/rag` and `crates/core`.
 - Keep raw document handling local-first unless a privacy ADR explicitly changes that boundary.
+- Complete `docs/privacy-review-checklist.md` for data movement, external providers, telemetry, auth, retention, sharing, or export changes.
+- Follow `docs/logging-redaction.md`; never log raw corpus/query content, credentials, headers, cookies, or secret hashes.
 
 ## Rust Rules
 
