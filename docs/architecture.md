@@ -9,7 +9,7 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 - **API service:** Axum backend for health checks, runtime config, local auth, workspaces, API keys, ingestion, embedding status/indexing, retrieval, traces, evals, CI gates, and reports.
 - **Core crate:** Shared domain contracts for projects, sources, documents, chunks, traces, retrieval runs, evals, reports, config, models, and privacy mode.
 - **RAG crate:** File text extraction, structured and whitespace chunking, document intelligence, local embedding generation, hybrid retrieval, trace construction, eval scoring, ingestion, and retrieval interfaces. Implementations are intentionally replaceable.
-- **Storage crate:** Repository traits plus Postgres and in-memory adapters.
+- **Storage crate:** Bounded repository traits for health, projects, sources, documents, embeddings, retrieval, traces, evals, auth, and CI evals, plus Postgres and in-memory adapters.
 - **Local collector:** Future local process that reads raw documents, builds indexes, runs local traces, and syncs approved summaries.
 - **Workers:** Future local or remote jobs for parsing, embedding, indexing, retrieval, reranking, generation, and eval scoring.
 

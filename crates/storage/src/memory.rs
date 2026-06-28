@@ -20,7 +20,11 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
-    repository::{AuthRepository, CiEvalRepository, IngestionRepository},
+    repository::{
+        AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
+        HealthRepository, ProjectRepository, RetrievalRepository, SourceRepository,
+        TraceRepository,
+    },
     StorageError,
 };
 
@@ -55,11 +59,14 @@ struct MemoryStoreInner {
 }
 
 #[async_trait]
-impl IngestionRepository for MemoryStore {
+impl HealthRepository for MemoryStore {
     async fn ping(&self) -> Result<(), StorageError> {
         Ok(())
     }
+}
 
+#[async_trait]
+impl ProjectRepository for MemoryStore {
     async fn ensure_default_project(&self) -> Result<Project, StorageError> {
         let mut inner = self.lock()?;
         if let Some(project) = inner.projects.values().next() {
@@ -77,7 +84,10 @@ impl IngestionRepository for MemoryStore {
         inner.projects.insert(project.id, project.clone());
         Ok(project)
     }
+}
 
+#[async_trait]
+impl SourceRepository for MemoryStore {
     async fn create_source(&self, source: Source) -> Result<Source, StorageError> {
         let mut inner = self.lock()?;
         inner.sources.insert(source.id, source.clone());
@@ -102,17 +112,6 @@ impl IngestionRepository for MemoryStore {
         run.totals = totals;
         run.completed_at = Some(OffsetDateTime::now_utc());
         Ok(run.clone())
-    }
-
-    async fn insert_document_with_chunks(
-        &self,
-        document: Document,
-        chunks: Vec<Chunk>,
-    ) -> Result<Document, StorageError> {
-        let mut inner = self.lock()?;
-        inner.documents.insert(document.id, document.clone());
-        inner.chunks.insert(document.id, chunks);
-        Ok(document)
     }
 
     async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError> {
@@ -146,6 +145,20 @@ impl IngestionRepository for MemoryStore {
 
         Ok(summaries)
     }
+}
+
+#[async_trait]
+impl DocumentRepository for MemoryStore {
+    async fn insert_document_with_chunks(
+        &self,
+        document: Document,
+        chunks: Vec<Chunk>,
+    ) -> Result<Document, StorageError> {
+        let mut inner = self.lock()?;
+        inner.documents.insert(document.id, document.clone());
+        inner.chunks.insert(document.id, chunks);
+        Ok(document)
+    }
 
     async fn list_document_chunks(
         &self,
@@ -156,7 +169,10 @@ impl IngestionRepository for MemoryStore {
         chunks.sort_by_key(|chunk| chunk.ordinal);
         Ok(chunks)
     }
+}
 
+#[async_trait]
+impl RetrievalRepository for MemoryStore {
     async fn list_searchable_chunks(
         &self,
         request: &RetrievalQueryRequest,
@@ -234,7 +250,10 @@ impl IngestionRepository for MemoryStore {
             .cloned()
             .ok_or(StorageError::NotFound)
     }
+}
 
+#[async_trait]
+impl TraceRepository for MemoryStore {
     async fn save_trace(&self, trace: Trace) -> Result<Trace, StorageError> {
         let mut inner = self.lock()?;
         inner.traces.insert(trace.id, trace.clone());
@@ -256,7 +275,10 @@ impl IngestionRepository for MemoryStore {
         let inner = self.lock()?;
         inner.traces.get(&id).cloned().ok_or(StorageError::NotFound)
     }
+}
 
+#[async_trait]
+impl EmbeddingRepository for MemoryStore {
     async fn embedding_status(
         &self,
         request: &EmbeddingIndexRequest,
@@ -326,7 +348,10 @@ impl IngestionRepository for MemoryStore {
         }
         Ok(())
     }
+}
 
+#[async_trait]
+impl EvalRepository for MemoryStore {
     async fn create_retrieval_eval_case(
         &self,
         eval_case: RetrievalEvalCase,
