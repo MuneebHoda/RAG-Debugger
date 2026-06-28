@@ -24,6 +24,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 - Retrieval workbench orchestration now uses a domain hook, focused control panels, and tested pure filter utilities without changing behavior.
 - Runs and Trace Debugger UI now use focused components, a URL-backed trace hook, and tested filtering, recommendation, and route-loading behavior.
+- Storage persistence now exposes bounded repository traits with a method-free ingestion compatibility composite and MemoryStore contract coverage.
 - CI now covers frontend formatting, Playwright smoke tests, technical handbook PDF generation, and SQLx migration checks.
 - API timestamps now use RFC3339 strings while remaining compatible with legacy persisted timestamp arrays.
 - The workbench shell now organizes CorpusLab around Build, Improve, Share, and Workspace workflows.

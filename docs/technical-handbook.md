@@ -18,7 +18,9 @@ The current implementation is privacy-first and local by default. Uploaded binar
 
 ## Rust Workspace Architecture
 
-The Rust workspace keeps domain contracts separate from implementation. `crates/core` owns serializable types and IDs. `crates/rag` owns deterministic RAG behavior. `crates/storage` owns persistence boundaries. `apps/api` composes those crates into HTTP routes.
+The Rust workspace keeps domain contracts separate from implementation. `crates/core` owns serializable types and IDs. `crates/rag` owns deterministic RAG behavior. `crates/storage` owns bounded persistence traits and adapters. `apps/api` composes those crates into HTTP routes.
+
+`crates/storage/src/repository.rs` separates health, project, source, document, embedding, retrieval, trace, eval, auth, and CI eval capabilities. `AppRepository` is the application-facing composite. The narrow `IngestionRepository` compatibility boundary contains no methods of its own and composes only the project, source, and document capabilities required by synchronous uploads.
 
 This shape lets future hosted services, local collectors, workers, and GPU/HPC indexing processes reuse the same contracts without coupling them to Axum route code.
 
