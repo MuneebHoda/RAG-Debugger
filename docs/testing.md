@@ -60,6 +60,8 @@ Expected coverage in the scaffold:
 - Playwright tests for upload, focused chunk inspection, cited retrieval evidence, run reruns, responsive workbench layouts, and a real memory-backed login → upload → index → retrieve → debug → compare → Quality workflow.
 - Marketing tests for failure-stage tabs, retrieval-mode fixtures, product-tour tabs, mobile navigation, keyboard traversal, reduced motion, CLS, horizontal overflow, and responsive screenshot generation.
 
+Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
+
 Browser smoke test:
 
 ```sh
@@ -85,6 +87,7 @@ When changing commands, paths, or architecture, update:
 - `docs/ci-eval-workflows.md`
 - `docs/trace-debugger.md`
 - `docs/technical-handbook.md`
+- `docs/frontend-architecture.md`
 - Relevant ADRs in `docs/adr`
 
 Generate and visually check the handbook PDF when architecture or API documentation changes:

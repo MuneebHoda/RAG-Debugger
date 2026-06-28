@@ -66,6 +66,7 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Architecture](docs/architecture.md)
 - [Development Guide](docs/development.md)
 - [Engineering Quality](docs/engineering-quality.md)
+- [Frontend Architecture](docs/frontend-architecture.md)
 - [Marketing Experience](docs/marketing-experience.md)
 - [File Ingestion](docs/file-ingestion.md)
 - [Retrieval Playground](docs/retrieval-playground.md)
@@ -83,6 +84,8 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 ## Engineering Workflow
 
 CorpusLab uses GitHub as the engineering source of truth. Track product work in GitHub Issues, land changes through pull requests into `main`, require CI before merge, and record milestone changes in `CHANGELOG.md`.
+
+AI-agent and agent-assisted contributions must follow [AGENTS.md](AGENTS.md). Frontend ownership and file-placement rules are documented in the [Frontend Architecture Guide](docs/frontend-architecture.md).
 
 Use the fast local gate while developing:
 

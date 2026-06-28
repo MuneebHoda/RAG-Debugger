@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Repository-level agent engineering rules and a frontend architecture guide covering route, feature, API, CSS, and testing boundaries.
 - Engineering quality baseline for GitHub-first execution, CI gates, PR templates, issue templates, and release discipline.
 - Guided workbench navigation, recoverable route errors, live setup progress, and shared query-state foundations.
 - Focused document, run, Quality dataset, and Quality experiment routes.
@@ -21,6 +22,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Retrieval workbench orchestration now uses a domain hook, focused control panels, and tested pure filter utilities without changing behavior.
 - CI now covers frontend formatting, Playwright smoke tests, technical handbook PDF generation, and SQLx migration checks.
 - API timestamps now use RFC3339 strings while remaining compatible with legacy persisted timestamp arrays.
 - The workbench shell now organizes CorpusLab around Build, Improve, Share, and Workspace workflows.
