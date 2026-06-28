@@ -231,6 +231,8 @@ Current spans are query input, retrieval ranking, evidence summary, eval check, 
 
 Failure labels include missing documents, missing embedding index, bad embedding, weak evidence, bad ranking, duplicate evidence, heading-only evidence, and bad chunking. These labels are deterministic quality signals derived from retrieval response metadata.
 
+The stable guarantees for retrieval responses, trace diagnosis, rerun comparisons, Eval Lab metrics, gates, and local-first behavior are defined in `docs/rag-invariants.md`. Synthetic regression corpora and expected outcomes live under `fixtures/`; typed Rust tests remain the contract-level source of truth while those fixtures provide reviewable scenarios for API, UI, and future SDK tests.
+
 Postgres stores trace summaries in `debug_traces`, full trace timelines in `trace_json`, and rerun comparisons in `trace_rerun_experiments`. The memory store supports the same API for tests and local no-Docker sessions.
 
 The web UI exposes `/app/traces` as a searchable saved-run list. `/app/traces/:traceId` displays diagnosis, ranked evidence, ordered spans, and rerun comparison without overloading the list view. The Retrieval page exposes `Debug this run`, which saves the current retrieval response and navigates directly to that focused detail route.
@@ -323,6 +325,13 @@ just ci-check
 ```
 
 `just full-check` remains a backward-compatible alias for `just ci-check`. Documentation ownership, ADR triggers, and changelog expectations are defined in `docs/doc-maintenance.md`. Generated output is excluded unless intentionally versioned; the handbook PDF and curated product assets are explicit exceptions.
+
+Focused RAG invariant validation:
+
+```bash
+cargo test -p rag-debugger-rag
+cargo test -p rag-debugger-rag --test public_fixtures
+```
 
 Handbook PDF:
 

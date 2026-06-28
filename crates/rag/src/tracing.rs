@@ -287,8 +287,11 @@ fn dedupe_failure_labels(labels: Vec<FailureLabel>) -> Vec<FailureLabel> {
 #[cfg(test)]
 mod tests {
     use rag_debugger_core::{
-        EmbeddingModelInfo, ExtractiveAnswer, RetrievalEmbeddingStatus, RetrievalMode,
-        RetrievalQueryRun, RetrievalQueryRunId,
+        ByteRange, ChunkId, ChunkPreview, ChunkSplitReason, ChunkingStrategy, Document, DocumentId,
+        DocumentProfile, EmbeddingModelInfo, ExtractionQuality, ExtractiveAnswer,
+        RetrievalCitation, RetrievalEmbeddingStatus, RetrievalMatchedTerm, RetrievalMode,
+        RetrievalQueryHit, RetrievalQueryRun, RetrievalQueryRunId, RetrievalScoreBreakdown, Source,
+        SourceId, SourceKind, SourceSyncPolicy,
     };
 
     use super::*;
@@ -314,6 +317,32 @@ mod tests {
         assert!(trace
             .failure_labels
             .contains(&FailureLabel::MissingDocument));
+    }
+
+    #[test]
+    fn quality_failure_labels_are_deterministic_and_deduplicated() {
+        let mut hit = quality_hit();
+        hit.evidence_strength = EvidenceStrength::Weak;
+        hit.quality_flags = vec![
+            RetrievalQualityFlag::Duplicate,
+            RetrievalQualityFlag::HeadingOnly,
+        ];
+        let response = response_with_status(RetrievalEmbeddingReadiness::Ready, vec![hit]);
+
+        let first = diagnose_failure_labels(&response);
+        let second = diagnose_failure_labels(&response);
+
+        assert_eq!(first, second);
+        assert_eq!(
+            first,
+            vec![
+                FailureLabel::WeakEvidence,
+                FailureLabel::BadRanking,
+                FailureLabel::DuplicateEvidence,
+                FailureLabel::BadChunking,
+                FailureLabel::HeadingOnlyEvidence,
+            ]
+        );
     }
 
     #[test]
@@ -366,6 +395,77 @@ mod tests {
                 missing_chunks: 10,
                 stale_chunks: 0,
             },
+        }
+    }
+
+    fn quality_hit() -> RetrievalQueryHit {
+        let source_id = SourceId(Uuid::now_v7());
+        let document_id = DocumentId(Uuid::now_v7());
+        let chunk_id = ChunkId(Uuid::now_v7());
+        let source = Source {
+            id: source_id,
+            project_id: ProjectId(Uuid::now_v7()),
+            name: "Public fixture corpus".to_owned(),
+            kind: SourceKind::FileSet {
+                root_hint: "fixtures/corpora".to_owned(),
+            },
+            sync_policy: SourceSyncPolicy::Manual,
+            chunking: Default::default(),
+        };
+        let document = Document {
+            id: document_id,
+            source_id,
+            path: "technical_docs/gpu-indexing.md".to_owned(),
+            mime_type: Some("text/markdown".to_owned()),
+            checksum: "document-checksum".to_owned(),
+            byte_size: 64,
+            profile: DocumentProfile::TechnicalDocs,
+            extraction_quality: ExtractionQuality::High,
+            warnings: Vec::new(),
+        };
+        let chunk = ChunkPreview {
+            id: chunk_id,
+            document_id,
+            ordinal: 0,
+            text: "GPU indexing".to_owned(),
+            token_count: 2,
+            byte_range: ByteRange { start: 0, end: 12 },
+            checksum: "chunk-checksum".to_owned(),
+            strategy: ChunkingStrategy::SmartSections,
+            section_title: Some("GPU indexing".to_owned()),
+            split_reason: ChunkSplitReason::DocumentEnd,
+            quality_flags: Vec::new(),
+            is_duplicate: false,
+            text_density: 1.0,
+            evidence_score_hint: 0.8,
+        };
+
+        RetrievalQueryHit {
+            rank: 1,
+            score: 1.0,
+            chunk,
+            document,
+            source,
+            matched_terms: vec![RetrievalMatchedTerm {
+                term: "indexing".to_owned(),
+                count: 1,
+            }],
+            score_breakdown: RetrievalScoreBreakdown::zero(),
+            normalized_score_breakdown: RetrievalScoreBreakdown::zero(),
+            snippet: "GPU indexing".to_owned(),
+            citation: RetrievalCitation {
+                label: "[1]".to_owned(),
+                chunk_id,
+                document_id,
+                document_path: "technical_docs/gpu-indexing.md".to_owned(),
+                chunk_ordinal: 0,
+                section_title: Some("GPU indexing".to_owned()),
+                checksum_prefix: "chunk-checksu".to_owned(),
+                snippet: "GPU indexing".to_owned(),
+            },
+            quality_flags: Vec::new(),
+            evidence_strength: EvidenceStrength::Strong,
+            duplicate_count: 1,
         }
     }
 }

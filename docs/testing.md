@@ -19,6 +19,7 @@ Expected coverage in the scaffold:
 - Local embedding tests for deterministic dimensions, cosine similarity, related-domain matching, and dimension mismatch behavior.
 - Local retrieval tests for token normalization, lexical scoring, vector scoring, hybrid missing-embedding behavior, phrase boosts, section/path boosts, deduplication, quality flags, evidence strength, insufficient evidence, and cited evidence summaries.
 - Retrieval eval tests for recall@k, precision@k, MRR, citation coverage, top-hit rank, weak evidence counts, missing embedding failures, deterministic failure labels, and pass/fail calculation.
+- Public regression fixtures for support knowledge bases, policy documents, and technical documentation, with expected retrieval, trace, and Eval Lab outcomes under `fixtures/`.
 - API retrieval tests for all-doc search, document filtering, top-k, no-match response, embedding status/indexing, missing embeddings, lexical fallback mode, eval creation, eval run persistence, and request validation.
 - Trace tests for trace construction, failure label assignment, rerun comparison, trace creation from retrieval runs, trace listing/detail, rerun API behavior, and missing-trace errors.
 - Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, gate evaluation, and failure diagnosis.
@@ -39,7 +40,10 @@ Run the focused in-memory storage contract with:
 
 ```sh
 cargo test -p rag-debugger-storage --test memory_store_contract
+cargo test -p rag-debugger-rag --test public_fixtures
 ```
+
+RAG behavior guarantees and fixture-change rules are defined in [`docs/rag-invariants.md`](rag-invariants.md). Engine tests should prefer typed Rust responses for precise contract coverage; public JSON fixtures remain small, synthetic, and readable for cross-language tooling.
 
 ## Web
 
@@ -95,6 +99,7 @@ When changing commands, paths, or architecture, update:
 - `docs/auth-and-workspaces.md`
 - `docs/ci-eval-workflows.md`
 - `docs/trace-debugger.md`
+- `docs/rag-invariants.md`
 - `docs/technical-handbook.md`
 - `docs/frontend-architecture.md`
 - Relevant ADRs in `docs/adr`

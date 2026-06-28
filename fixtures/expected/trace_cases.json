@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "empty-corpus",
+      "input": { "hit_count": 0, "embedding_readiness": "ready" },
+      "expected_labels": ["missing_document", "weak_evidence"],
+      "expected_status": "failed"
+    },
+    {
+      "id": "unindexed-vector-search",
+      "input": { "hit_count": 0, "embedding_readiness": "missing" },
+      "expected_labels": ["missing_document", "missing_embedding_index", "bad_embedding", "weak_evidence"],
+      "expected_status": "failed"
+    },
+    {
+      "id": "degraded-ranked-evidence",
+      "input": { "evidence_strength": "weak", "quality_flags": ["duplicate", "heading_only"] },
+      "expected_labels": ["weak_evidence", "bad_ranking", "duplicate_evidence", "bad_chunking", "heading_only_evidence"],
+      "expected_status": "warning"
+    }
+  ]
+}

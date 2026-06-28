@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "support-password-expiry",
+      "query": "How long is a password reset link valid?",
+      "expected_document": "support_kb/account-recovery.md",
+      "expected_section": "Reset a password",
+      "signals": ["duplicate_text"]
+    },
+    {
+      "id": "policy-current-retention",
+      "query": "When is deleted workspace content removed?",
+      "expected_document": "policy_docs/data-retention.md",
+      "expected_section": "Deleted workspaces",
+      "must_not_prefer_section": "Historical exception"
+    },
+    {
+      "id": "technical-cross-section",
+      "query": "What must happen before a GPU index is published?",
+      "expected_document": "technical_docs/gpu-indexing.md",
+      "expected_sections": ["Device execution", "Index publication"]
+    }
+  ]
+}
