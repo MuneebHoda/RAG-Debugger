@@ -162,6 +162,8 @@ just docs-pdf
 1. Add or update domain types in `crates/core`.
 2. Add behavior interfaces in `crates/rag` or repository traits in `crates/storage`.
 3. Implement API handlers under `apps/api`.
-4. Add UI routes/components under `apps/web`.
+4. Add thin UI route wrappers under `apps/web/src/pages` and implementation under `apps/web/src/features/workbench/<domain>`.
 5. Add tests at the lowest useful layer.
 6. Update docs or ADRs when the architecture changes.
+
+Read `docs/frontend-architecture.md` before adding or reorganizing frontend code. Route wrappers should compose or re-export feature pages; server state and workflow actions belong in domain hooks when page orchestration becomes complex.

@@ -33,7 +33,8 @@ The web app lives in `apps/web/src`.
 - `components/brand` owns the CorpusLab mark and wordmark.
 - `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups. Landing-specific interaction state remains local to its section instead of expanding shared primitives prematurely.
 - `lib/apiClient.ts` is a compatibility barrel for the API boundary. New code should prefer domain exports under `lib/api`, such as `lib/api/sources`, `lib/api/retrieval`, `lib/api/traces`, and `lib/api/evalLab`.
-- `pages/OverviewPage.tsx` summarizes corpus readiness under `/app`.
+- Domain files under `pages` are thin route wrappers or compatibility re-exports. Product implementation belongs under `features`, following `docs/frontend-architecture.md`.
+- `pages/OverviewPage.tsx`, `ReportsPage.tsx`, and `SettingsPage.tsx` still own legacy route implementations and should move behind feature boundaries through focused refactors.
 - `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
 - `features/workbench/retrieval` owns the question-first retrieval test, advanced filters/indexing controls, evidence summary, citations, grouped evidence, and direct debugger navigation.
 - `features/workbench/traces` owns the searchable run list and focused `/app/traces/:traceId` debugger with Summary, Evidence, Timeline, and Compare tabs.

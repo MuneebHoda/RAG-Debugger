@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Repository-level agent engineering rules and a frontend architecture guide covering route, feature, API, CSS, and testing boundaries.
 - Engineering quality baseline for GitHub-first execution, CI gates, PR templates, issue templates, and release discipline.
 - Guided workbench navigation, recoverable route errors, live setup progress, and shared query-state foundations.
 - Focused document, run, Quality dataset, and Quality experiment routes.
