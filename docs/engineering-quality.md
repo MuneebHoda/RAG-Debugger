@@ -81,7 +81,6 @@ just full-check
 
 The product is moving fast, so these hot spots should be split over dedicated refactor PRs:
 
-- `apps/web/src/lib/api/client.ts`: move implementation behind the new domain API modules instead of adding more exports to the internal client.
 - `apps/web/src/features/workbench/workbench.css`: move route-specific rules into CSS modules.
 - `apps/web/src/features/workbench/eval-lab/DatasetDetailPage.tsx`: separate case editing from experiment controls and mutations.
 - `apps/web/src/features/workbench/sources`: keep corpus upload, library, and document inspection in focused components.
@@ -93,3 +92,5 @@ The Retrieval route now follows the target convention: `RetrievalPage.tsx` compo
 The Runs and Trace Debugger routes now use a trace query/tab hook, a focused run list, separate summary, failure, evidence, metrics, timeline, rerun, and Quality components, plus tested filter and recommendation utilities.
 
 Storage now exposes bounded health, project, source, document, embedding, retrieval, trace, eval, auth, and CI eval traits. `IngestionRepository` is a method-free compatibility composite limited to the upload workflow, and `AppRepository` composes all application capabilities.
+
+The low-level frontend API client remains transport-only and now parses the backend error envelope into status, code, user-facing message, and raw diagnostic body. API route registration is isolated from handler-module declarations.

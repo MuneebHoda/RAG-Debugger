@@ -25,6 +25,21 @@ Local embeddings are derived from persisted chunk text and stored in Postgres. T
 
 All product APIs are versioned under `/api/v1`. Public health probes remain at `/healthz` and `/readyz` for deployment compatibility.
 
+`apps/api/src/http/mod.rs` is the handler-module index. `apps/api/src/http/routing.rs` owns public/protected route composition, session middleware, request-size limits, and CORS. Handler implementations remain in bounded HTTP modules, and route paths must not change during routing refactors.
+
+Failed API requests use one stable JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "not found: trace"
+  }
+}
+```
+
+Clients may present `error.message` and use `error.code` for typed behavior. Internal and storage failures return generic messages so database or infrastructure details are not exposed; server-side diagnostics remain in telemetry.
+
 Current ingestion APIs:
 
 - `GET /api/v1/config`

@@ -54,6 +54,8 @@ Current workbench implementations live in:
 - JSON response parsing.
 - Structured HTTP errors.
 
+`ApiError` preserves the HTTP status, optional backend code, and raw response body for diagnostics. User-facing code receives the structured backend `error.message`; non-JSON and empty failures use a stable `Request failed with <status>` fallback instead of exposing proxy or server output.
+
 Product requests and request/response types belong to domain modules such as `sources.ts`, `retrieval.ts`, `traces.ts`, `evalLab.ts`, `auth.ts`, `overview.ts`, `config.ts`, and `embeddings.ts`.
 
 UI tests should mock the narrow domain boundary or the HTTP route relevant to the workflow. Avoid broad global-fetch fixtures when a focused domain mock communicates intent better.

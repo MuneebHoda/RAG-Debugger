@@ -42,6 +42,9 @@ async fn protected_routes_require_login_and_accept_session_cookie() {
         .await
         .expect("unauthorized response");
     assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let unauthorized_body = json_body(unauthorized).await;
+    assert_eq!(unauthorized_body["error"]["code"], "unauthorized");
+    assert!(unauthorized_body["error"]["message"].is_string());
 
     let (cookie, body) = login(&app).await;
     assert_eq!(body["user"]["user"]["email"], "demo@corpuslab.ai");

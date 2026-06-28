@@ -24,6 +24,7 @@ Expected coverage in the scaffold:
 - Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, gate evaluation, and failure diagnosis.
 - Auth and workspace tests for signup, login, logout, current-user, session cookies, duplicate email behavior, membership role, and protected workbench routes.
 - API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
+- API error contract tests for structured 400, 401, 404, and sanitized internal/storage responses.
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
 - Domain serialization tests as contracts become public.
 
@@ -66,6 +67,7 @@ Expected coverage in the scaffold:
 - Overview, Reports, and Settings page tests should grow as those workflows deepen.
 - Playwright tests for upload, focused chunk inspection, cited retrieval evidence, run reruns, responsive workbench layouts, and a real memory-backed login → upload → index → retrieve → debug → compare → Quality workflow.
 - Marketing tests for failure-stage tabs, retrieval-mode fixtures, product-tour tabs, mobile navigation, keyboard traversal, reduced motion, CLS, horizontal overflow, and responsive screenshot generation.
+- Frontend API client tests for structured JSON, plain-text, and empty error responses.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 
