@@ -67,6 +67,7 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Development Guide](docs/development.md)
 - [Engineering Quality](docs/engineering-quality.md)
 - [Frontend Architecture](docs/frontend-architecture.md)
+- [Documentation Maintenance](docs/doc-maintenance.md)
 - [Marketing Experience](docs/marketing-experience.md)
 - [File Ingestion](docs/file-ingestion.md)
 - [Retrieval Playground](docs/retrieval-playground.md)
@@ -93,11 +94,20 @@ Use the fast local gate while developing:
 just check
 ```
 
+Run one side of the repository when iterating on a focused change:
+
+```sh
+just rust-check
+just web-check
+```
+
 Use the full release gate before baseline or milestone PRs:
 
 ```sh
 just full-check
 ```
+
+`just ci-check` is the explicit release-equivalent command behind `just full-check`.
 
 ## Product Direction
 

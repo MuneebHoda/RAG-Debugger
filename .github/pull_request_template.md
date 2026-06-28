@@ -27,13 +27,15 @@
 - API compatibility:
 - Data backfill or rollback notes:
 
-## Docs Updated
+## Docs Freshness
 
-- [ ] README / development docs
-- [ ] Architecture / handbook
-- [ ] Testing guide
-- [ ] ADR, if architecture changed
-- [ ] Changelog
+- [ ] I checked whether `README.md` or `docs/development.md` needs an update
+- [ ] I checked whether `docs/architecture.md` needs an update
+- [ ] I checked whether the relevant feature guide needs an update
+- [ ] I checked whether `docs/testing.md` needs an update
+- [ ] I checked whether `docs/technical-handbook.md` and PDF need an update
+- [ ] I checked whether an ADR is required
+- [ ] I updated `CHANGELOG.md` or wrote `N/A` with a reason
 
 ## Risks And Rollback
 

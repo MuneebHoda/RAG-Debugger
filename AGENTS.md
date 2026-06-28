@@ -95,6 +95,23 @@ Update documentation in the same PR when changing routes, commands, environment 
 
 Use an ADR for decisions involving architecture boundaries, storage design, privacy or security, API compatibility, worker or deployment strategy, and hosted versus local behavior.
 
+## Dependency Policy
+
+Every new dependency requires a PR note covering:
+
+- Why the dependency is needed.
+- Why existing repository or platform code is insufficient.
+- Runtime, binary, or frontend bundle impact.
+- Security and maintenance impact.
+- Local-first privacy impact.
+- Alternatives considered.
+
+Dev-only use of an existing workspace dependency should still be identified, but does not require a new architecture decision.
+
+## Generated File Policy
+
+Do not commit local database files, uploaded documents, logs, `node_modules`, `target`, coverage, Playwright output, or generated screenshots. Generated PDFs are excluded unless the repository explicitly versions them. Current intentional exceptions are `docs/technical-handbook.pdf` and curated assets under `apps/web/public/product`.
+
 ## Required Task Summary
 
 Every completed agent task must report:

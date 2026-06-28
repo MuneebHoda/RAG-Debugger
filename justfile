@@ -1,5 +1,7 @@
 set dotenv-load := true
 
+database_url := env_var_or_default("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/rag_debugger")
+
 fmt:
     cargo fmt --check
     cd apps/web && npm run format:check
@@ -35,13 +37,28 @@ db-down:
     docker compose down
 
 db-migrate:
-    sqlx migrate run
+    DATABASE_URL='{{ database_url }}' sqlx migrate run
 
-check: fmt lint typecheck test build
+rust-check:
+    cargo fmt --all --check
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo test --workspace
+    cargo build --workspace
 
-full-check: fmt lint typecheck test build
+web-check:
+    cd apps/web && npm run format:check
+    cd apps/web && npm run typecheck
+    cd apps/web && npm run lint
+    cd apps/web && npm test -- --run
+    cd apps/web && npm run build
+
+ci-check: rust-check web-check
     cd apps/web && npm run size:check
     cd apps/web && npx playwright test
     cd apps/web && npm run docs:pdf
     docker compose up -d postgres
-    sqlx migrate run
+    DATABASE_URL='{{ database_url }}' sqlx migrate run
+
+check: rust-check web-check
+
+full-check: ci-check
