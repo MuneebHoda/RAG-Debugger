@@ -40,7 +40,7 @@ Small domains do not need every folder. Add a boundary when it removes real comp
 Current workbench implementations live in:
 
 - `features/workbench/sources`: corpus upload, document library, and chunk inspection.
-- `features/workbench/retrieval`: retrieval queries, filters, embedding readiness, evidence, and debugger handoff.
+- `features/workbench/retrieval`: a thin retrieval page, `useRetrievalWorkbench` orchestration, focused query/filter/embedding panels, pure filter utilities, evidence results, and debugger handoff.
 - `features/workbench/traces`: run list, trace detail, evidence, timeline, and comparison.
 - `features/workbench/eval-lab`: datasets, cases, experiments, gates, and CI quality runs.
 - `features/workbench/home`: guided setup and next actions.
