@@ -26,9 +26,13 @@ apps/web/coverage/
 apps/web/test-results/
 apps/web/playwright-report/
 
+# Generated review output
+docs/*.generated.pdf
+uploads/
+*.log
+
 # Local data
 .data/
 .cache/
 *.sqlite
 *.db
-

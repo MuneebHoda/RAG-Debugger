@@ -56,11 +56,21 @@ With `just`:
 ```sh
 just db-up
 just db-migrate
+just rust-check
+just web-check
 just check
+just ci-check
+just full-check
 just docs-pdf
 just api
 just web
 ```
+
+- `rust-check`: Rust formatting, clippy, workspace tests, and workspace build.
+- `web-check`: web formatting, typecheck, lint, tests, and production build.
+- `check`: the fast local gate combining `rust-check` and `web-check`.
+- `ci-check`: the release gate adding bundle budgets, Playwright, handbook generation, Postgres, and migrations.
+- `full-check`: backward-compatible alias for `ci-check`.
 
 ## Database Flow
 
@@ -72,6 +82,8 @@ sqlx migrate run
 ```
 
 The API runs migrations automatically at startup for local development. `just db-migrate` exists for explicit migration checks and CI-style workflows. `/readyz` checks database connectivity.
+
+The `just` migration recipes honor `DATABASE_URL` from the environment or `.env`. When neither is present, they use the documented Docker default `postgres://postgres:postgres@localhost:5432/rag_debugger`.
 
 ## File Ingestion Flow
 

@@ -291,9 +291,10 @@ All major defaults should be changed through `.env.example` values rather than h
 Rust:
 
 ```bash
-cargo fmt --check
+cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo build --workspace
 ```
 
 Web:
@@ -312,6 +313,16 @@ Full local check:
 ```bash
 just check
 ```
+
+Focused and release-equivalent gates:
+
+```bash
+just rust-check
+just web-check
+just ci-check
+```
+
+`just full-check` remains a backward-compatible alias for `just ci-check`. Documentation ownership, ADR triggers, and changelog expectations are defined in `docs/doc-maintenance.md`. Generated output is excluded unless intentionally versioned; the handbook PDF and curated product assets are explicit exceptions.
 
 Handbook PDF:
 

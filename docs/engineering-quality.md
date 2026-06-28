@@ -66,6 +66,8 @@ just full-check
 
 `just full-check` runs Rust checks, web checks, Playwright, handbook PDF generation, and SQLx migrations against local Postgres.
 
+Use `just rust-check` or `just web-check` for focused iteration. `just check` composes both fast gates. `just ci-check` is the explicit release-equivalent gate, and `just full-check` remains its backward-compatible alias.
+
 ## Code Quality Rules
 
 - AI-agent and agent-assisted changes must follow the root `AGENTS.md` rules.
@@ -76,6 +78,16 @@ just full-check
 - Do not add a large file without either splitting it in the same PR or creating a linked refactor issue.
 - Prefer small domain modules over broad files such as one giant API client, storage adapter, or route component.
 - Follow `docs/frontend-architecture.md` for web feature, API, styling, and testing boundaries.
+
+## Dependency Policy
+
+New dependencies require a PR explanation covering need, existing alternatives, runtime or bundle cost, security and maintenance impact, local-first privacy impact, and alternatives considered. Dev-only use of an existing workspace dependency must still be identified.
+
+## Generated Files
+
+Do not commit local databases, uploaded documents, logs, dependency directories, compiler output, coverage, Playwright output, or generated screenshots. Generated documents are excluded unless intentionally versioned; `docs/technical-handbook.pdf` and curated `apps/web/public/product` assets are explicit exceptions.
+
+Follow `docs/doc-maintenance.md` for documentation ownership, ADR triggers, and changelog rules.
 
 ## Current Cleanup Targets
 
