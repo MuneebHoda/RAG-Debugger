@@ -28,10 +28,10 @@ The web app lives in `apps/web/src`.
 
 - `App.tsx` maps the public site, auth pages, and workbench routes.
 - `layouts/MarketingLayout.tsx`, `layouts/AuthLayout.tsx`, and `layouts/WorkbenchLayout.tsx` separate public, authentication, and application chrome.
-- `features/marketing` owns the landing page, feature page, pricing page, and launch-state product copy.
+- `features/marketing` owns the public product narrative. The landing route is lazy-loaded and decomposed under `features/marketing/landing` into hero, failure story, retrieval demo, capability story, product tour, enterprise trust, and CTA sections.
 - `features/auth` owns the login and signup entry surfaces.
 - `components/brand` owns the CorpusLab mark and wordmark.
-- `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups.
+- `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups. Landing-specific interaction state remains local to its section instead of expanding shared primitives prematurely.
 - `lib/apiClient.ts` is a compatibility barrel for the API boundary. New code should prefer domain exports under `lib/api`, such as `lib/api/sources`, `lib/api/retrieval`, `lib/api/traces`, and `lib/api/evalLab`.
 - `pages/OverviewPage.tsx` summarizes corpus readiness under `/app`.
 - `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
@@ -43,6 +43,14 @@ The web app lives in `apps/web/src`.
 The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`, navigation groups destinations by user intent, and route errors remain inside a recoverable workbench boundary.
 
 Generated `apps/web/dist` files should not be edited by hand. Run `cd apps/web && npm run build`.
+
+### Public Marketing Runtime
+
+The `/` route is a separate Vite chunk loaded through `React.lazy`. This keeps Motion and landing-only CSS out of authenticated workbench startup. `LazyMotion` loads `domAnimation`, while `MotionConfig` honors the user's reduced-motion preference. Motion constants live in `features/marketing/landing/motion.ts`; interactive display fixtures and their TypeScript contracts live in `landingData.ts`.
+
+Landing sections use independent CSS modules and stable media aspect ratios. Animations change only opacity and transforms. The hero bitmap is requested eagerly, while product-tour and diagnosis images load lazily. The production gate enforces combined gzip limits of 180 KB for JavaScript and 20 KB for CSS through `npm run size:check`.
+
+See `docs/marketing-experience.md` for interaction ownership, accessibility behavior, screenshot generation, and visual regression checks.
 
 ## API Route Reference
 

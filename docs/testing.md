@@ -43,6 +43,7 @@ npm run typecheck
 npm run lint
 npm test
 npm run build
+npm run size:check
 ```
 
 Expected coverage in the scaffold:
@@ -57,12 +58,20 @@ Expected coverage in the scaffold:
 - CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.
 - Overview, Reports, and Settings page tests should grow as those workflows deepen.
 - Playwright tests for upload, focused chunk inspection, cited retrieval evidence, run reruns, responsive workbench layouts, and a real memory-backed login → upload → index → retrieve → debug → compare → Quality workflow.
+- Marketing tests for failure-stage tabs, retrieval-mode fixtures, product-tour tabs, mobile navigation, keyboard traversal, reduced motion, CLS, horizontal overflow, and responsive screenshot generation.
 
 Browser smoke test:
 
 ```sh
 cd apps/web
 npx playwright test
+```
+
+Generate the three landing review captures at 1440x1100, 1024x900, and 390x900:
+
+```sh
+cd apps/web
+npm run screenshots:landing
 ```
 
 ## Documentation Check

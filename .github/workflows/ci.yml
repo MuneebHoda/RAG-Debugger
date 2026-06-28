@@ -44,6 +44,8 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Bundle budget
+        run: npm run size:check
       - name: Format
         run: npm run format:check
       - name: Install Playwright

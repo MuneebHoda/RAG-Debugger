@@ -5,6 +5,7 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 ## Components
 
 - **Web app:** React TypeScript workbench for Overview, Sources, Retrieval, Traces, Evals, Reports, and Settings.
+- **Public experience:** Lazy-loaded React marketing routes with an editorial landing narrative, typed interactive examples, responsive product imagery, and reduced-motion support.
 - **API service:** Axum backend for health checks, runtime config, local auth, workspaces, API keys, ingestion, embedding status/indexing, retrieval, traces, evals, CI gates, and reports.
 - **Core crate:** Shared domain contracts for projects, sources, documents, chunks, traces, retrieval runs, evals, reports, config, models, and privacy mode.
 - **RAG crate:** File text extraction, structured and whitespace chunking, document intelligence, local embedding generation, hybrid retrieval, trace construction, eval scoring, ingestion, and retrieval interfaces. Implementations are intentionally replaceable.

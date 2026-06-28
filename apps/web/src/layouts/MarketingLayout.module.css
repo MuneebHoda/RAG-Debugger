@@ -1,6 +1,6 @@
 .layout {
   min-height: 100vh;
-  background: linear-gradient(180deg, #fbfcf8 0%, #eef5f4 52%, #fbfcf8 100%);
+  background: var(--color-paper);
 }
 
 .header {
@@ -15,6 +15,18 @@
   margin: 0 auto;
   padding: 18px 0;
   backdrop-filter: blur(18px);
+}
+
+.header::before {
+  position: fixed;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 78px;
+  border-bottom: 1px solid rgb(216 222 232 / 0.72);
+  background: rgb(251 252 248 / 0.9);
+  content: "";
 }
 
 .brand {
@@ -49,6 +61,11 @@
   color: var(--color-ink-900);
 }
 
+.mobileNav,
+.mobileNavOpen {
+  display: none;
+}
+
 .footer {
   display: flex;
   align-items: center;
@@ -76,8 +93,69 @@
     place-items: center;
   }
 
+  .mobileNav,
+  .mobileNavOpen {
+    display: grid;
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    right: 0;
+    left: 0;
+    gap: 0.25rem;
+    border: 1px solid var(--color-ink-200);
+    border-radius: var(--radius-sm);
+    background: var(--color-paper);
+    box-shadow: var(--shadow-md);
+    padding: 0.75rem;
+    transform: translateY(-0.5rem);
+    visibility: hidden;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      visibility 160ms ease;
+  }
+
+  .mobileNavOpen {
+    transform: translateY(0);
+    visibility: visible;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobileNav a,
+  .mobileNavOpen a {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    border-radius: var(--radius-xs);
+    color: var(--color-ink-800);
+    font-size: 0.85rem;
+    font-weight: 850;
+    padding: 0 0.75rem;
+    text-decoration: none;
+  }
+
+  .mobileNav a:hover,
+  .mobileNavOpen a:hover {
+    background: var(--color-ink-100);
+  }
+
+  .mobileNav .mobileCta,
+  .mobileNavOpen .mobileCta {
+    background: var(--color-citron-500);
+    color: var(--color-ink-950);
+  }
+
   .footer {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileNav,
+  .mobileNavOpen {
+    transition: none;
   }
 }
