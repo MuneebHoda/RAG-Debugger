@@ -10,7 +10,9 @@ pub struct IngestionRun {
     pub source_id: SourceId,
     pub status: IngestionRunStatus,
     pub totals: IngestionTotals,
+    #[serde(with = "crate::wire_time")]
     pub started_at: OffsetDateTime,
+    #[serde(with = "crate::wire_time::option")]
     pub completed_at: Option<OffsetDateTime>,
 }
 

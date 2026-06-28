@@ -33,6 +33,7 @@ pub struct ChunkEmbedding {
     pub chunk_checksum: String,
     pub model: EmbeddingModelInfo,
     pub vector: Vec<f32>,
+    #[serde(with = "crate::wire_time")]
     pub indexed_at: OffsetDateTime,
 }
 
@@ -51,6 +52,7 @@ pub struct EmbeddingStatus {
     pub indexed_chunks: u32,
     pub missing_chunks: u32,
     pub stale_chunks: u32,
+    #[serde(with = "crate::wire_time::option")]
     pub last_indexed_at: Option<OffsetDateTime>,
 }
 

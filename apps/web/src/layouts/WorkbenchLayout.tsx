@@ -1,76 +1,97 @@
 import {
   Activity,
+  ChevronDown,
   Database,
   FileBarChart,
   FlaskConical,
   GitBranch,
-  LayoutDashboard,
+  HelpCircle,
+  Home,
   LogOut,
-  PlayCircle,
+  Menu,
   Search,
   Settings,
   ShieldCheck,
-  UploadCloud,
+  UserRound,
+  X,
 } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import {
+  Link,
+  NavLink,
+  Outlet,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 
 import { CorpusLabLogo } from "../components/brand/CorpusLabLogo";
+import { RouteErrorBoundary } from "../components/workbench/RouteErrorBoundary";
 import {
   clearAuthSession,
   readAuthSession,
   type AuthSession,
 } from "../features/auth/authSession";
 import { logout } from "../lib/api/auth";
-import { getProductConfig, type ProductConfig } from "../lib/api/config";
+import { getProductConfig } from "../lib/api/config";
 import { getHealth } from "../lib/api/health";
-import { getOverview, type OverviewResponse } from "../lib/api/overview";
+import { getOverview } from "../lib/api/overview";
 import styles from "./WorkbenchLayout.module.css";
 
-const navItems = [
-  { to: "/app", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/app/sources", label: "Sources", icon: Database },
-  { to: "/app/retrieval", label: "Retrieval", icon: Search },
-  { to: "/app/traces", label: "Traces", icon: GitBranch },
-  { to: "/app/evals", label: "Evals", icon: FlaskConical },
-  { to: "/app/reports", label: "Reports", icon: FileBarChart },
-  { to: "/app/settings", label: "Settings", icon: Settings },
+const navGroups = [
+  {
+    label: "Build",
+    items: [
+      { to: "/app/sources", label: "Corpus", icon: Database },
+      { to: "/app/retrieval", label: "Test retrieval", icon: Search },
+    ],
+  },
+  {
+    label: "Improve",
+    items: [
+      { to: "/app/traces", label: "Runs", icon: GitBranch },
+      { to: "/app/evals", label: "Quality", icon: FlaskConical },
+    ],
+  },
+  {
+    label: "Share",
+    items: [{ to: "/app/reports", label: "Reports", icon: FileBarChart }],
+  },
+  {
+    label: "Workspace",
+    items: [{ to: "/app/settings", label: "Settings", icon: Settings }],
+  },
 ];
 
+const breadcrumbLabels: Record<string, string> = {
+  sources: "Corpus",
+  retrieval: "Test retrieval",
+  traces: "Runs",
+  evals: "Quality",
+  reports: "Reports",
+  settings: "Settings",
+};
+
 export function WorkbenchLayout() {
+  const location = useLocation();
   const navigate = useNavigate();
-  const [config, setConfig] = useState<ProductConfig | null>(null);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [session, setSession] = useState<AuthSession | null>(() =>
     readAuthSession(),
   );
-  const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">(
-    "checking",
-  );
-  const [overview, setOverview] = useState<OverviewResponse | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    Promise.allSettled([
-      getProductConfig(controller.signal),
-      getHealth(controller.signal),
-      getOverview(controller.signal),
-    ]).then(([configResult, healthResult, overviewResult]) => {
-      if (controller.signal.aborted) {
-        return;
-      }
-
-      if (configResult.status === "fulfilled") {
-        setConfig(configResult.value);
-      }
-      setApiStatus(healthResult.status === "fulfilled" ? "online" : "offline");
-      if (overviewResult.status === "fulfilled") {
-        setOverview(overviewResult.value);
-      }
-    });
-
-    return () => controller.abort();
-  }, []);
+  const configQuery = useQuery({
+    queryKey: ["product-config"],
+    queryFn: ({ signal }) => getProductConfig(signal),
+  });
+  const healthQuery = useQuery({
+    queryKey: ["health"],
+    queryFn: ({ signal }) => getHealth(signal),
+    refetchInterval: 30_000,
+  });
+  const overviewQuery = useQuery({
+    queryKey: ["overview"],
+    queryFn: ({ signal }) => getOverview(signal),
+  });
 
   useEffect(() => {
     const handleAuthChange = () => setSession(readAuthSession());
@@ -85,102 +106,177 @@ export function WorkbenchLayout() {
     navigate("/login", { replace: true });
   }
 
+  const overview = overviewQuery.data;
+  const healthLabel = overview
+    ? `${statusLabel(overview.health.status)} · ${overview.health.score}`
+    : healthQuery.isSuccess
+      ? "Systems online"
+      : healthQuery.isError
+        ? "API unavailable"
+        : "Checking systems";
+
   return (
     <div className={styles.shell}>
-      <aside className={styles.sidebar} aria-label="Workspace navigation">
-        <CorpusLabLogo />
-        <nav className={styles.nav}>
-          {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                isActive ? styles.activeNavItem : styles.navItem
-              }
-            >
-              <item.icon aria-hidden="true" size={18} />
-              <span>{item.label}</span>
-            </NavLink>
+      <button
+        aria-label="Close navigation"
+        className={mobileNavOpen ? styles.scrimVisible : styles.scrim}
+        type="button"
+        onClick={() => setMobileNavOpen(false)}
+      />
+      <aside
+        className={mobileNavOpen ? styles.sidebarOpen : styles.sidebar}
+        aria-label="Workspace navigation"
+      >
+        <div className={styles.brandRow}>
+          <CorpusLabLogo />
+          <button
+            aria-label="Close navigation"
+            className={styles.closeNav}
+            type="button"
+            onClick={() => setMobileNavOpen(false)}
+          >
+            <X aria-hidden="true" size={19} />
+          </button>
+        </div>
+
+        <nav className={styles.nav} onClick={() => setMobileNavOpen(false)}>
+          <NavLink
+            end
+            to="/app"
+            className={({ isActive }) =>
+              isActive ? styles.activeNavItem : styles.navItem
+            }
+          >
+            <Home aria-hidden="true" size={18} />
+            <span>Home</span>
+          </NavLink>
+
+          {navGroups.map((group) => (
+            <div className={styles.navGroup} key={group.label}>
+              <span className={styles.navGroupLabel}>{group.label}</span>
+              {group.items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    isActive ? styles.activeNavItem : styles.navItem
+                  }
+                >
+                  <item.icon aria-hidden="true" size={18} />
+                  <span>{item.label}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
         </nav>
+
         <div className={styles.privacyNote}>
           <ShieldCheck aria-hidden="true" size={16} />
-          <span>Private corpus controls are active.</span>
+          <span>Private corpus controls active</span>
         </div>
       </aside>
-      <main className={styles.main}>
-        <div className={styles.topbar} aria-label="Workspace status">
-          <div className={styles.statusCluster}>
-            <span className={styles.statusPill}>
-              <Activity aria-hidden="true" size={16} /> API {apiStatus}
-            </span>
-            <span className={styles.statusPill}>
-              <Database aria-hidden="true" size={16} />{" "}
-              {config?.product.workspace_name ?? "Corpus Workspace"}
-            </span>
-            <span className={styles.statusPill}>
-              <Search aria-hidden="true" size={16} />{" "}
-              {config?.retrieval.default_mode ?? "hybrid"} retrieval
-            </span>
-            {overview ? (
-              <>
-                <span className={styles.statusPill}>
-                  <ShieldCheck aria-hidden="true" size={16} />{" "}
-                  {statusLabel(overview.health.status)} ·{" "}
-                  {overview.health.score}/100
-                </span>
-                <span className={styles.statusPill}>
-                  <SparklineIcon /> {overview.embedding_status.indexed_chunks}/
-                  {overview.embedding_status.total_chunks} embedded
-                </span>
-              </>
-            ) : null}
-            <span className={styles.statusPill}>
-              <ShieldCheck aria-hidden="true" size={16} />{" "}
-              {session?.email ?? "session"}
-            </span>
-          </div>
-          <div className={styles.quickActions} aria-label="Quick actions">
-            <Link to="/app/sources">
-              <UploadCloud aria-hidden="true" size={15} />
-              Ingest documents
-            </Link>
-            <Link to="/app/retrieval">
-              <PlayCircle aria-hidden="true" size={15} />
-              Run retrieval
-            </Link>
-            <Link to="/app/traces">
-              <GitBranch aria-hidden="true" size={15} />
-              Open traces
-            </Link>
-            <Link to="/app/evals">
-              <FlaskConical aria-hidden="true" size={15} />
-              Run evals
-            </Link>
+
+      <div className={styles.workspace}>
+        <header className={styles.topbar} aria-label="Workspace header">
+          <div className={styles.topbarStart}>
             <button
-              className={styles.logoutButton}
+              aria-label="Open navigation"
+              className={styles.menuButton}
               type="button"
-              onClick={handleLogout}
+              onClick={() => setMobileNavOpen(true)}
             >
-              <LogOut aria-hidden="true" size={15} />
-              Logout
+              <Menu aria-hidden="true" size={20} />
             </button>
+            <details className={styles.menu}>
+              <summary className={styles.workspacePicker}>
+                <Database aria-hidden="true" size={16} />
+                <span>
+                  {configQuery.data?.product.workspace_name ??
+                    "Corpus Workspace"}
+                </span>
+                <ChevronDown aria-hidden="true" size={15} />
+              </summary>
+              <div className={styles.menuPanel}>
+                <strong>Current workspace</strong>
+                <span>
+                  {configQuery.data?.product.workspace_name ??
+                    "Corpus Workspace"}
+                </span>
+                <Link to="/app/settings">Manage workspace</Link>
+              </div>
+            </details>
+            <span className={styles.breadcrumb} aria-label="Current page">
+              {breadcrumbFor(location.pathname)}
+            </span>
           </div>
-        </div>
-        <Outlet />
-      </main>
+
+          <div className={styles.topbarEnd}>
+            <Link className={styles.healthStatus} to="/app">
+              <Activity aria-hidden="true" size={16} />
+              <span>{healthLabel}</span>
+            </Link>
+            <details className={styles.menu}>
+              <summary className={styles.iconButton} aria-label="Open help">
+                <HelpCircle aria-hidden="true" size={18} />
+              </summary>
+              <div className={`${styles.menuPanel} ${styles.helpPanel}`}>
+                <strong>CorpusLab workflow</strong>
+                <span>Corpus → Test → Runs → Quality → Reports</span>
+                <Link to="/app">Open guided setup</Link>
+              </div>
+            </details>
+            <details className={styles.menu}>
+              <summary
+                className={styles.userButton}
+                aria-label="Open user menu"
+              >
+                <span className={styles.avatar}>
+                  <UserRound aria-hidden="true" size={16} />
+                </span>
+                <span className={styles.userEmail}>
+                  {session?.email ?? "Account"}
+                </span>
+                <ChevronDown aria-hidden="true" size={15} />
+              </summary>
+              <div className={styles.menuPanel}>
+                <strong>{session?.email ?? "CorpusLab account"}</strong>
+                <Link to="/app/settings">
+                  <Settings aria-hidden="true" size={14} /> Settings
+                </Link>
+                <button type="button" onClick={handleLogout}>
+                  <LogOut aria-hidden="true" size={14} /> Sign out
+                </button>
+              </div>
+            </details>
+          </div>
+        </header>
+
+        <main className={styles.main}>
+          <RouteErrorBoundary>
+            <Outlet />
+          </RouteErrorBoundary>
+        </main>
+      </div>
     </div>
   );
 }
 
-function statusLabel(status: OverviewResponse["health"]["status"]) {
-  return status
-    .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ");
+function breadcrumbFor(pathname: string) {
+  const segment = pathname.split("/").filter(Boolean)[1];
+  return segment ? (breadcrumbLabels[segment] ?? "Detail") : "Home";
 }
 
-function SparklineIcon() {
-  return <span className={styles.sparklineIcon} aria-hidden="true" />;
+function statusLabel(
+  status:
+    | "ready"
+    | "needs_indexing"
+    | "needs_eval_coverage"
+    | "needs_documents",
+) {
+  return {
+    ready: "Ready",
+    needs_indexing: "Needs indexing",
+    needs_eval_coverage: "Needs quality checks",
+    needs_documents: "Needs documents",
+  }[status];
 }

@@ -6,25 +6,22 @@ import {
   FlaskConical,
   GitBranch,
   Layers3,
-  Search,
   Sparkles,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { ActionCard } from "../components/dashboard/ActionCard";
 import { ActivityList } from "../components/dashboard/ActivityList";
-import { EmptyState } from "../components/dashboard/EmptyState";
-import { HealthScore } from "../components/dashboard/HealthScore";
 import { MetricTile } from "../components/dashboard/MetricTile";
-import { PipelineStep } from "../components/dashboard/PipelineStep";
 import { ProgressBar } from "../components/dashboard/ProgressBar";
 import { RiskList } from "../components/dashboard/RiskList";
+import { SetupChecklist } from "../features/workbench/home/SetupChecklist";
 import {
   getOverview,
   type OverviewMetric,
   type OverviewResponse,
 } from "../lib/api/overview";
 import type { DocumentProfile } from "../lib/api/sources";
+import { formatDateTime } from "../lib/dateTime";
 import styles from "./OverviewPage.module.css";
 
 const metricIcons: Record<string, typeof FileText> = {
@@ -37,130 +34,125 @@ const metricIcons: Record<string, typeof FileText> = {
   warnings: AlertTriangle,
 };
 
+const primaryMetricIds = new Set([
+  "documents",
+  "embeddings",
+  "traces",
+  "evals",
+]);
+
 export function OverviewPage() {
-  const [overview, setOverview] = useState<OverviewResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    getOverview(controller.signal)
-      .then((nextOverview) => {
-        setOverview(nextOverview);
-        setError(null);
-      })
-      .catch((cause: unknown) => {
-        if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : "Request failed");
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) {
-          setLoading(false);
-        }
-      });
-
-    return () => controller.abort();
-  }, []);
+  const overviewQuery = useQuery({
+    queryKey: ["overview"],
+    queryFn: ({ signal }) => getOverview(signal),
+  });
 
   return (
     <section className={styles.page} aria-labelledby="overview-title">
       <header className={styles.header}>
         <div>
-          <p>Corpus operations</p>
-          <h1 id="overview-title">Mission Control</h1>
-          <span>
-            Monitor corpus readiness, retrieval quality, trace risk, and eval
-            coverage from one operational surface.
-          </span>
+          <p>Workspace</p>
+          <h1 id="overview-title">Home</h1>
+          <span>Your next action, current quality, and recent work.</span>
         </div>
-        {overview ? (
+        {overviewQuery.data ? (
           <div className={styles.snapshot}>
-            <small>Snapshot</small>
-            <strong>{formatDate(overview.generated_at)}</strong>
+            <small>Updated</small>
+            <strong>{formatDateTime(overviewQuery.data.generated_at)}</strong>
           </div>
         ) : null}
       </header>
 
-      {error ? (
+      {overviewQuery.isError ? (
         <div className={styles.alert} role="alert">
           <AlertTriangle aria-hidden="true" size={18} />
-          <span>{error}</span>
+          <span>
+            {overviewQuery.error instanceof Error
+              ? overviewQuery.error.message
+              : "Could not load workspace status."}
+          </span>
+          <button type="button" onClick={() => void overviewQuery.refetch()}>
+            Retry
+          </button>
         </div>
       ) : null}
 
-      {loading ? <LoadingSkeleton /> : null}
+      {overviewQuery.isLoading ? <LoadingSkeleton /> : null}
 
-      {overview && !loading ? (
-        <>
-          {overview.health.status === "needs_documents" ? (
-            <EmptyState action={overview.health.primary_action} />
-          ) : null}
-
-          <HealthScore health={overview.health} />
-
-          <section
-            className={styles.metrics}
-            aria-label="Mission Control metrics"
-          >
-            {overview.metrics.map((metric) => (
-              <MetricTile
-                key={metric.id}
-                metric={metric}
-                icon={metricIcon(metric)}
-              />
-            ))}
-          </section>
-
-          <section className={styles.panel} aria-labelledby="pipeline-title">
-            <div className={styles.panelHeading}>
-              <div>
-                <p>Pipeline board</p>
-                <h2 id="pipeline-title">Ingest to report flow</h2>
-              </div>
-              <span>Operational sequence</span>
-            </div>
-            <div className={styles.pipeline}>
-              {overview.pipeline.map((step) => (
-                <PipelineStep key={step.id} step={step} />
-              ))}
-            </div>
-          </section>
-
-          <div className={styles.grid}>
-            <RiskList issues={overview.issues} />
-
-            <section
-              className={styles.panel}
-              aria-labelledby="next-actions-title"
-            >
-              <div className={styles.panelHeading}>
-                <div>
-                  <p>Next best actions</p>
-                  <h2 id="next-actions-title">What to do now</h2>
-                </div>
-              </div>
-              <div className={styles.actions}>
-                {overview.actions.map((action) => (
-                  <ActionCard key={action.id} action={action} />
-                ))}
-              </div>
-            </section>
-          </div>
-
-          <div className={styles.grid}>
-            <ActivityList activity={overview.recent_activity} />
-            <DocumentMix overview={overview} />
-          </div>
-        </>
+      {overviewQuery.data ? (
+        <HomeContent overview={overviewQuery.data} />
       ) : null}
     </section>
   );
 }
 
+function HomeContent({ overview }: { overview: OverviewResponse }) {
+  const primaryMetrics = overview.metrics.filter((metric) =>
+    primaryMetricIds.has(metric.id),
+  );
+
+  return (
+    <>
+      <SetupChecklist overview={overview} />
+
+      <section className={styles.healthBand} aria-label="Workspace health">
+        <div className={styles.healthScore}>
+          <strong>{overview.health.score}</strong>
+          <span>/100</span>
+        </div>
+        <div>
+          <p>{statusLabel(overview.health.status)}</p>
+          <h2>{overview.health.summary}</h2>
+        </div>
+      </section>
+
+      <section className={styles.metrics} aria-label="Workspace metrics">
+        {primaryMetrics.map((metric) => (
+          <MetricTile
+            key={metric.id}
+            metric={metric}
+            icon={metricIcon(metric)}
+          />
+        ))}
+      </section>
+
+      <div className={styles.grid}>
+        <RiskList issues={overview.issues} />
+        <ActivityList activity={overview.recent_activity} />
+      </div>
+
+      <details className={styles.systemDetails}>
+        <summary>System details</summary>
+        <div className={styles.detailsGrid}>
+          <DocumentMix overview={overview} />
+          <section className={styles.panel}>
+            <div className={styles.panelHeading}>
+              <div>
+                <p>Corpus totals</p>
+                <h2>Storage and quality signals</h2>
+              </div>
+            </div>
+            <div className={styles.secondaryMetrics}>
+              {overview.metrics
+                .filter((metric) => !primaryMetricIds.has(metric.id))
+                .map((metric) => (
+                  <MetricTile
+                    key={metric.id}
+                    metric={metric}
+                    icon={metricIcon(metric)}
+                  />
+                ))}
+            </div>
+          </section>
+        </div>
+      </details>
+    </>
+  );
+}
+
 function LoadingSkeleton() {
   return (
-    <div className={styles.loading} aria-label="Loading overview">
+    <div className={styles.loading} aria-label="Loading workspace">
       <span />
       <span />
       <span />
@@ -169,9 +161,6 @@ function LoadingSkeleton() {
 }
 
 function DocumentMix({ overview }: { overview: OverviewResponse }) {
-  const warningMetric = overview.metrics.find(
-    (metric) => metric.id === "warnings",
-  );
   const totalDocuments = overview.document_mix.reduce(
     (total, profile) => total + profile.count,
     0,
@@ -182,7 +171,7 @@ function DocumentMix({ overview }: { overview: OverviewResponse }) {
       <div className={styles.panelHeading}>
         <div>
           <p>Document mix</p>
-          <h2 id="document-mix-title">Profiles and quality signals</h2>
+          <h2 id="document-mix-title">Profiles</h2>
         </div>
         <span>{totalDocuments} documents</span>
       </div>
@@ -190,8 +179,7 @@ function DocumentMix({ overview }: { overview: OverviewResponse }) {
       <div className={styles.profileList}>
         {overview.document_mix.length === 0 ? (
           <div className={styles.noProfiles}>
-            <Layers3 aria-hidden="true" size={18} />
-            No document profiles detected yet.
+            <Layers3 aria-hidden="true" size={18} /> No profiles yet
           </div>
         ) : (
           overview.document_mix.map((profile) => (
@@ -210,18 +198,6 @@ function DocumentMix({ overview }: { overview: OverviewResponse }) {
           ))
         )}
       </div>
-
-      <div className={styles.qualityStrip}>
-        <span>
-          <Search aria-hidden="true" size={15} />
-          {overview.embedding_status.indexed_chunks}/
-          {overview.embedding_status.total_chunks} embedded
-        </span>
-        <span>
-          <AlertTriangle aria-hidden="true" size={15} />
-          {warningMetric?.value ?? "0"} warnings
-        </span>
-      </div>
     </section>
   );
 }
@@ -230,13 +206,13 @@ function metricIcon(metric: OverviewMetric) {
   return metricIcons[metric.id] ?? Database;
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
+function statusLabel(status: OverviewResponse["health"]["status"]) {
+  return {
+    ready: "Ready",
+    needs_indexing: "Indexing needed",
+    needs_eval_coverage: "Quality coverage needed",
+    needs_documents: "Documents needed",
+  }[status];
 }
 
 function profileLabel(profile: DocumentProfile) {

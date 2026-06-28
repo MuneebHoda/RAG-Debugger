@@ -14,6 +14,7 @@ import {
   revokeApiKey,
   type ApiKey,
 } from "../lib/api/apiKeys";
+import { formatDateTime } from "../lib/dateTime";
 import { getProductConfig, type ProductConfig } from "../lib/api/config";
 
 export function SettingsPage() {
@@ -168,7 +169,7 @@ export function SettingsPage() {
                   {apiKey.revoked_at
                     ? "revoked"
                     : apiKey.last_used_at
-                      ? `last used ${new Date(apiKey.last_used_at).toLocaleString()}`
+                      ? `last used ${formatDateTime(apiKey.last_used_at)}`
                       : "not used yet"}
                 </small>
                 {!apiKey.revoked_at ? (

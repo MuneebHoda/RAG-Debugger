@@ -17,7 +17,9 @@ pub struct Trace {
     pub project_id: ProjectId,
     pub input: String,
     pub output: Option<String>,
+    #[serde(with = "crate::wire_time")]
     pub started_at: OffsetDateTime,
+    #[serde(with = "crate::wire_time::option")]
     pub completed_at: Option<OffsetDateTime>,
     #[serde(default)]
     pub retrieval_runs: Vec<RetrievalRun>,
@@ -50,6 +52,7 @@ pub struct TraceSummary {
     pub failure_labels: Vec<FailureLabel>,
     pub span_count: u32,
     pub rerun_count: u32,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -68,7 +71,9 @@ pub struct TraceSpan {
     pub kind: TraceSpanKind,
     pub title: String,
     pub description: String,
+    #[serde(with = "crate::wire_time")]
     pub started_at: OffsetDateTime,
+    #[serde(with = "crate::wire_time::option")]
     pub completed_at: Option<OffsetDateTime>,
     pub latency_ms: u64,
     pub status: TraceSpanStatus,
@@ -137,6 +142,7 @@ pub struct TraceRerunComparison {
     pub latency_delta_ms: i64,
     pub overlap_count: u32,
     pub changed_rank_count: u32,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 

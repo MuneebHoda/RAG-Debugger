@@ -77,6 +77,7 @@ pub struct RetrievalEvalCase {
     pub expected_chunk_ids: Vec<ChunkId>,
     pub expected_document_ids: Vec<DocumentId>,
     pub notes: Option<String>,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -86,9 +87,9 @@ pub struct RetrievalEvalDataset {
     pub name: String,
     pub description: Option<String>,
     pub cases: Vec<RetrievalEvalCase>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -102,7 +103,7 @@ pub struct RetrievalEvalDatasetSummary {
     pub latest_gate: Option<RetrievalEvalGate>,
     pub latest_average_recall_at_k: Option<f32>,
     pub latest_average_precision_at_k: Option<f32>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub updated_at: OffsetDateTime,
 }
 
@@ -163,7 +164,7 @@ pub struct RetrievalEvalExperiment {
     pub comparison: RetrievalEvalComparison,
     pub gate: RetrievalEvalGate,
     pub failures: Vec<RetrievalEvalFailure>,
-    #[serde(with = "time::serde::rfc3339")]
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 
@@ -298,6 +299,7 @@ pub struct RetrievalEvalRun {
     pub passed_count: u32,
     pub average_recall_at_k: f32,
     pub average_precision_at_k: f32,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
     pub results: Vec<RetrievalEvalResult>,
 }

@@ -2,6 +2,7 @@ import { Database, FileText, FlaskConical, GitBranch } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import type { OverviewActivity } from "../../lib/api/overview";
+import { formatDateTime } from "../../lib/dateTime";
 import styles from "./ActivityList.module.css";
 
 const activityIcon = {
@@ -29,7 +30,7 @@ export function ActivityList({ activity }: { activity: OverviewActivity[] }) {
                 <small>{item.detail}</small>
               </span>
               {item.created_at ? (
-                <time>{formatTime(item.created_at)}</time>
+                <time>{formatDateTime(item.created_at)}</time>
               ) : null}
             </Link>
           );
@@ -37,13 +38,4 @@ export function ActivityList({ activity }: { activity: OverviewActivity[] }) {
       </div>
     </section>
   );
-}
-
-function formatTime(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }

@@ -72,6 +72,7 @@ pub struct RetrievalQueryRun {
     pub top_k: u32,
     pub retrieval_mode: RetrievalMode,
     pub latency_ms: u64,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 

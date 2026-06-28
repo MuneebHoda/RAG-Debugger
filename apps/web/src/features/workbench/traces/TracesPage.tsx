@@ -32,6 +32,7 @@ import {
   type TraceSpan,
   type TraceSummary,
 } from "../../../lib/api/traces";
+import { formatDateTime } from "../../../lib/dateTime";
 import "./TracesPage.module.css";
 
 const FAILURE_LABELS: Record<FailureLabel, string> = {
@@ -307,7 +308,7 @@ function TraceList({
                 <strong>{summary.query}</strong>
                 <small>
                   {summary.retrieval_mode} · {summary.latency_ms} ms ·{" "}
-                  {formatDate(summary.created_at)}
+                  {formatDateTime(summary.created_at)}
                 </small>
               </span>
               <EvidencePill strength={summary.evidence_strength} />
@@ -742,13 +743,4 @@ function uniqueStrings(values: string[]) {
 
 function formatScore(score: number) {
   return score.toFixed(2);
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
 }

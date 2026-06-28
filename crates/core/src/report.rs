@@ -15,6 +15,7 @@ pub struct RetrievalReport {
     pub diagnosis: RetrievalDiagnosis,
     pub evidence: Vec<RetrievalCitation>,
     pub issues: Vec<EvidenceIssue>,
+    #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
 

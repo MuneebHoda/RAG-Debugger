@@ -57,6 +57,8 @@ async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
     let trace_id = trace_body["id"].as_str().expect("trace id");
     assert_eq!(trace_body["input"], "gpu embedding workers");
     assert_eq!(trace_body["spans"].as_array().expect("spans").len(), 4);
+    assert!(trace_body["started_at"].is_string());
+    assert!(trace_body["retrieval"]["run"]["created_at"].is_string());
 
     let list_response = app
         .clone()
@@ -67,6 +69,7 @@ async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
     let list_body = json_body(list_response).await;
     assert_eq!(list_body[0]["id"], trace_id);
     assert_eq!(list_body[0]["retrieval_mode"], "hybrid");
+    assert!(list_body[0]["created_at"].is_string());
 
     let detail_response = app
         .clone()
