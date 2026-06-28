@@ -57,6 +57,10 @@ See `docs/marketing-experience.md` for interaction ownership, accessibility beha
 
 ## API Route Reference
 
+Route composition lives in `apps/api/src/http/routing.rs`; `apps/api/src/http/mod.rs` only declares handler modules and exports the router. Protected workbench routes share session middleware without changing their `/api/v1` paths.
+
+All handler errors serialize as `{ "error": { "code", "message" } }`. Expected client errors retain specific messages, while internal storage failures are sanitized to prevent infrastructure details from crossing the API boundary. The web API client parses this envelope and keeps raw response text only for diagnostics.
+
 - `GET /healthz`: process liveness.
 - `GET /readyz`: readiness; checks database connectivity when storage is configured.
 - `GET /api/v1/config`: safe product/runtime config for the web app.

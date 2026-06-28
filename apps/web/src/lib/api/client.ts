@@ -6,6 +6,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly body: string,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -43,14 +44,46 @@ export async function readJsonResponse<T>(
 ): Promise<T> {
   if (!okStatuses.includes(response.status)) {
     const text = await response.text();
+    const error = parseErrorEnvelope(text);
     throw new ApiError(
-      text || `Request failed with ${response.status}`,
+      error.message ?? `Request failed with ${response.status}`,
       response.status,
       text,
+      error.code,
     );
   }
 
   return response.json() as Promise<T>;
+}
+
+type ApiErrorEnvelope = {
+  error?: {
+    code?: unknown;
+    message?: unknown;
+  };
+};
+
+function parseErrorEnvelope(body: string): {
+  code?: string;
+  message?: string;
+} {
+  if (!body) return {};
+
+  try {
+    const envelope = JSON.parse(body) as ApiErrorEnvelope;
+    return {
+      code:
+        typeof envelope.error?.code === "string"
+          ? envelope.error.code
+          : undefined,
+      message:
+        typeof envelope.error?.message === "string"
+          ? envelope.error.message
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 function apiUrl(path: string): string {
