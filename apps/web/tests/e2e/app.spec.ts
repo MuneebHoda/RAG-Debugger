@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const authSession = {
   email: "demo@corpuslab.ai",
@@ -223,19 +223,18 @@ test("uploads a sample file and shows chunk preview", async ({ page }) => {
   });
   await page.getByRole("button", { name: "Ingest files" }).click();
 
+  const documentLink = page.getByRole("link", { name: /sample\.md.*1 chunks/ });
+  await expect(documentLink).toBeVisible();
+  await documentLink.click();
+  await expect(page).toHaveURL(new RegExp(`/app/sources/${documentId}$`));
+  await expect(page.getByText("Projects", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /sample\.md.*1 chunks/ }),
-  ).toBeVisible();
-  await expect(page.locator(".chunk-card").getByText("Projects")).toBeVisible();
-  await expect(
-    page.locator(".chunk-card").getByText("Structured document"),
+    page.getByText("Structured document", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText("Alpha beta")).toBeVisible();
 });
 
-test("queries retrieval playground and shows cited evidence", async ({
-  page,
-}) => {
+test("tests retrieval and shows cited evidence", async ({ page }) => {
   await seedDemoSession(page);
 
   const documentId = "018f7a2a-6e2e-7000-a000-000000000101";
@@ -407,7 +406,7 @@ test("queries retrieval playground and shows cited evidence", async ({
   });
 
   await page.goto("/app/retrieval");
-  await page.getByLabel("Question").fill("gpu indexing");
+  await page.getByLabel("What should the corpus answer?").fill("gpu indexing");
   await page.getByRole("button", { name: "Run retrieval" }).click();
 
   await expect(
@@ -660,19 +659,225 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   });
 
   await page.goto("/app/traces");
-  await expect(
-    page.getByRole("heading", { name: "Trace Debugger" }),
-  ).toBeVisible();
-  await expect(page.getByText("Retrieval ranking")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+  await page.getByRole("link", { name: /gpu embedding workers/i }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/traces/${traceId}$`));
+  await expect(page.getByText("What happened")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Evidence" }).click();
   await expect(
     page.getByText("GPU workers speed up embedding refreshes."),
   ).toBeVisible();
-  await expect(page.getByText("Failure label", { exact: true })).toBeVisible();
 
-  await page.getByLabel("Mode").selectOption("lexical");
-  await page.getByLabel("Top K").fill("3");
-  await page.getByRole("button", { name: "Rerun trace" }).click();
+  await page.getByRole("tab", { name: "Timeline" }).click();
+  await expect(page.getByText("Retrieval ranking")).toBeVisible();
 
-  await expect(page.getByText("Score delta")).toBeVisible();
-  await expect(page.getByText("-0.40")).toBeVisible();
+  await page.getByRole("tab", { name: "Compare" }).click();
+  await page.getByLabel("Retrieval mode").selectOption("lexical");
+  await page.getByLabel("Results to return").fill("3");
+  await page.getByRole("button", { name: "Run comparison" }).click();
+
+  await expect(page.getByText("Top-score change")).toBeVisible();
+  await expect(page.getByText("-0.40", { exact: false })).toBeVisible();
 });
+
+test("workbench stays readable without horizontal overflow", async ({
+  page,
+}) => {
+  await seedDemoSession(page);
+  await page.route("**/healthz", (route) =>
+    route.fulfill({ contentType: "application/json", json: { status: "ok" } }),
+  );
+  await page.route("**/api/v1/config", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        product: {
+          name: "CorpusLab",
+          workspace_name: "Corpus Demo Workspace",
+          deployment_mode: "local",
+        },
+        ingestion: {
+          max_files_per_request: 10,
+          max_file_bytes: 20_971_520,
+          max_request_bytes: 52_428_800,
+          preview_chunk_limit: 8,
+          supported_extensions: ["txt", "md", "pdf"],
+        },
+        chunking: {
+          target_tokens: 512,
+          overlap_tokens: 64,
+          strategy: "structured",
+        },
+        retrieval: {
+          default_top_k: 5,
+          max_top_k: 25,
+          default_mode: "hybrid",
+          min_evidence_score: 0.35,
+          min_semantic_similarity: 0.25,
+          answer_citation_limit: 3,
+          weights: {},
+        },
+        embedding: {
+          model: {
+            provider: "local",
+            model_name: "local-hash-v1",
+            dimension: 384,
+          },
+          provider_kind: "local_hash",
+        },
+        ui: { api_base_url: "http://127.0.0.1:18080", show_local_badges: true },
+      },
+    }),
+  );
+  await page.route("**/api/v1/overview", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: {
+        generated_at: "2026-06-27T00:00:00Z",
+        health: {
+          score: 0,
+          status: "needs_documents",
+          summary: "Add documents.",
+          primary_action: {
+            id: "ingest",
+            label: "Add documents",
+            detail: "Build the corpus.",
+            route: "/app/sources",
+            priority: "primary",
+          },
+        },
+        metrics: [],
+        pipeline: [],
+        issues: [],
+        actions: [],
+        recent_activity: [],
+        document_mix: [],
+        embedding_status: {
+          model: {
+            provider: "local",
+            model_name: "local-hash-v1",
+            dimension: 384,
+          },
+          total_chunks: 0,
+          indexed_chunks: 0,
+          missing_chunks: 0,
+          stale_chunks: 0,
+          last_indexed_at: null,
+        },
+        latest_eval_run: null,
+      },
+    }),
+  );
+  await page.route("**/api/v1/sources", (route) =>
+    route.fulfill({ contentType: "application/json", json: [] }),
+  );
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 768, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/app/sources");
+    await expect(page.getByRole("heading", { name: "Corpus" })).toBeVisible();
+    const sizes = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      content: document.documentElement.scrollWidth,
+    }));
+    expect(sizes.content).toBeLessThanOrEqual(sizes.viewport);
+  }
+});
+
+test("completes the real guided workflow against the memory API", async ({
+  page,
+}) => {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("demo@corpuslab.ai");
+  await page.getByLabel("Password").fill("CorpusLab#2026");
+  await page.getByRole("button", { name: /open workbench/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+
+  await page.goto("/app/sources");
+  await page.getByLabel("Choose files").setInputFiles({
+    name: "gpu-platform-guide.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from(
+      "# GPU indexing\n\nGPU workers accelerate embedding indexing and refresh vector search indexes.\n\n# Reliability\n\nQuality gates compare recall and precision before release.",
+    ),
+  });
+  await page.getByRole("button", { name: "Ingest files" }).click();
+  await expect(
+    page.getByRole("link", { name: /gpu-platform-guide\.md/i }),
+  ).toBeVisible();
+
+  await page.goto("/app/retrieval");
+  await page.getByText("Advanced", { exact: true }).click();
+  await page.getByRole("button", { name: "Index" }).click();
+  await expect(page.getByText(/indexed · local-hash-v1/i)).toBeVisible();
+  await page
+    .getByLabel("What should the corpus answer?")
+    .fill("How do GPU workers help indexing?");
+  await page.getByRole("button", { name: "Run retrieval" }).click();
+  await expect(
+    page.getByText(/GPU workers accelerate embedding indexing/i).first(),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Debug this run" }).click();
+  await expect(page).toHaveURL(/\/app\/traces\/[0-9a-f-]+$/);
+  await expect(page.getByText("What happened")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Compare" }).click();
+  await page.getByLabel("Retrieval mode").selectOption("lexical");
+  await page.getByRole("button", { name: "Run comparison" }).click();
+  await expect(page.getByText("Top-score change")).toBeVisible();
+
+  await page.getByRole("tab", { name: "Summary" }).click();
+  await page.getByRole("button", { name: "Choose evidence" }).click();
+  await page
+    .getByLabel("Quality dataset")
+    .selectOption({ label: "Default retrieval dataset" });
+  await page.getByRole("checkbox").first().check();
+  await page.getByRole("button", { name: "Save quality case" }).click();
+  await expect(page.getByText("Quality case saved.")).toBeVisible();
+
+  await page.goto("/app/evals");
+  await page.getByRole("link", { name: /Default retrieval dataset/i }).click();
+  await expect(
+    page.getByRole("heading", { name: "Run an experiment" }),
+  ).toBeVisible();
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1024, height: 900 },
+    { width: 768, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    const heading = page.getByRole("heading", { name: "Run an experiment" });
+    const action = page.getByRole("button", { name: "Run experiment" });
+    await expect(heading).toBeVisible();
+    await expect(action).toBeVisible();
+    await expectElementsNotToOverlap(heading, action);
+    expect(
+      await action.evaluate(
+        (element) => element.scrollWidth <= element.clientWidth,
+      ),
+    ).toBeTruthy();
+  }
+});
+
+async function expectElementsNotToOverlap(first: Locator, second: Locator) {
+  const firstBox = await first.boundingBox();
+  const secondBox = await second.boundingBox();
+  expect(firstBox).not.toBeNull();
+  expect(secondBox).not.toBeNull();
+  if (!firstBox || !secondBox) return;
+
+  const overlaps = !(
+    firstBox.x + firstBox.width <= secondBox.x ||
+    secondBox.x + secondBox.width <= firstBox.x ||
+    firstBox.y + firstBox.height <= secondBox.y ||
+    secondBox.y + secondBox.height <= firstBox.y
+  );
+  expect(overlaps).toBeFalsy();
+}

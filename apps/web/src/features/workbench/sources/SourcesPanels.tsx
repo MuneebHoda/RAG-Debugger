@@ -1,4 +1,5 @@
 import { AlertCircle, CheckCircle2, FileText, ShieldAlert } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import type {
   ChunkPreview,
@@ -6,6 +7,7 @@ import type {
   DocumentIngestResult,
   DocumentSummary,
 } from "../../../lib/api/sources";
+import styles from "./SourcesPage.module.css";
 
 const CHUNKING_STRATEGY_LABELS: Record<ChunkingStrategy, string> = {
   structured: "Structured document",
@@ -40,9 +42,9 @@ export function UploadResults({
   }
 
   return (
-    <div className="result-list">
+    <div className={styles.resultList}>
       {results.map((result) => (
-        <article className="result-row" key={result.file_name}>
+        <article className={styles.resultRow} key={result.file_name}>
           {result.status === "success" ? (
             <CheckCircle2 aria-hidden="true" size={18} />
           ) : (
@@ -62,31 +64,18 @@ export function UploadResults({
   );
 }
 
-export function DocumentList({
-  documents,
-  selectedDocumentId,
-  onSelect,
-}: {
-  documents: DocumentSummary[];
-  selectedDocumentId: string | null;
-  onSelect: (documentId: string) => void;
-}) {
+export function DocumentList({ documents }: { documents: DocumentSummary[] }) {
   if (documents.length === 0) {
     return <p>No documents indexed yet.</p>;
   }
 
   return (
-    <div className="document-list">
+    <div className={styles.documentList}>
       {documents.map(({ document, chunk_count }) => (
-        <button
-          className={
-            document.id === selectedDocumentId
-              ? "document-row selected"
-              : "document-row"
-          }
+        <Link
+          className={styles.documentRow}
+          to={`/app/sources/${document.id}`}
           key={document.id}
-          type="button"
-          onClick={() => onSelect(document.id)}
         >
           <FileText aria-hidden="true" size={18} />
           <span>
@@ -104,7 +93,7 @@ export function DocumentList({
           ) : (
             <span className="row-badge">ready</span>
           )}
-        </button>
+        </Link>
       ))}
     </div>
   );
@@ -126,14 +115,14 @@ export function ChunkList({
   }
 
   return (
-    <div className="chunk-list">
+    <div className={styles.chunkList}>
       {chunks.map((chunk) => (
-        <article className="chunk-card" key={chunk.id}>
+        <article className={styles.chunkCard} key={chunk.id}>
           <header>
             <strong>Chunk {chunk.ordinal + 1}</strong>
             <span>{chunk.token_count} tokens</span>
           </header>
-          <div className="chunk-meta">
+          <div className={styles.chunkMeta}>
             <span>{CHUNKING_STRATEGY_LABELS[chunk.strategy]}</span>
             <span>{chunk.section_title ?? "Unsectioned"}</span>
             <span>{SPLIT_REASON_LABELS[chunk.split_reason]}</span>

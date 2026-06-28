@@ -4,15 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { getProductConfig, type ProductConfig } from "../../../lib/api/config";
 import {
   ingestFiles,
-  listDocumentChunks,
   listSources,
-  type ChunkPreview,
   type ChunkingStrategy,
   type IngestFilesResponse,
   type SourceSummary,
 } from "../../../lib/api/sources";
-import { ChunkList, DocumentList, UploadResults } from "./SourcesPanels";
-import "./SourcesPage.module.css";
+import { DocumentList, UploadResults } from "./SourcesPanels";
+import styles from "./SourcesPage.module.css";
 
 const DEFAULT_TARGET_TOKENS = 512;
 const DEFAULT_OVERLAP_TOKENS = 64;
@@ -29,59 +27,29 @@ export function SourcesPage() {
     null,
   );
   const [sources, setSources] = useState<SourceSummary[]>([]);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(
-    null,
-  );
-  const [chunks, setChunks] = useState<ChunkPreview[]>([]);
   const [uploadResponse, setUploadResponse] =
     useState<IngestFilesResponse | null>(null);
   const [isLoadingSources, setIsLoadingSources] = useState(true);
-  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const selectDocument = useCallback((documentId: string | null) => {
-    setSelectedDocumentId(documentId);
-    setChunks([]);
+  const refreshSources = useCallback(async (signal?: AbortSignal) => {
+    setIsLoadingSources(true);
+    setError(null);
 
-    if (!documentId) {
-      setIsLoadingChunks(false);
-      return;
-    }
-
-    setIsLoadingChunks(true);
-    listDocumentChunks(documentId)
-      .then(setChunks)
-      .catch((cause: unknown) => setError(errorMessage(cause)))
-      .finally(() => setIsLoadingChunks(false));
-  }, []);
-
-  const refreshSources = useCallback(
-    async (signal?: AbortSignal, preferredDocumentId?: string | null) => {
-      setIsLoadingSources(true);
-      setError(null);
-
-      try {
-        const nextSources = await listSources(signal);
-        setSources(nextSources);
-        const nextSelectedDocumentId =
-          preferredDocumentId && hasDocument(nextSources, preferredDocumentId)
-            ? preferredDocumentId
-            : (nextSources[0]?.documents[0]?.document.id ?? null);
-
-        selectDocument(nextSelectedDocumentId);
-      } catch (cause) {
-        if (!signal?.aborted) {
-          setError(errorMessage(cause));
-        }
-      } finally {
-        if (!signal?.aborted) {
-          setIsLoadingSources(false);
-        }
+    try {
+      const nextSources = await listSources(signal);
+      setSources(nextSources);
+    } catch (cause) {
+      if (!signal?.aborted) {
+        setError(errorMessage(cause));
       }
-    },
-    [selectDocument],
-  );
+    } finally {
+      if (!signal?.aborted) {
+        setIsLoadingSources(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,10 +75,6 @@ export function SourcesPage() {
     () => sources.flatMap((source) => source.documents),
     [sources],
   );
-  const selectedDocument = documents.find(
-    (document) => document.document.id === selectedDocumentId,
-  );
-
   async function handleUpload() {
     if (files.length === 0 || isUploading) {
       return;
@@ -127,11 +91,7 @@ export function SourcesPage() {
       });
       setUploadResponse(response);
 
-      const firstDocumentId = response.documents.find(
-        (document) => document.status === "success",
-      )?.document?.id;
-
-      await refreshSources(undefined, firstDocumentId ?? null);
+      await refreshSources();
     } catch (cause) {
       setError(errorMessage(cause));
     } finally {
@@ -140,15 +100,12 @@ export function SourcesPage() {
   }
 
   return (
-    <section className="sources-page" aria-labelledby="sources-title">
-      <header className="page-header">
+    <section className={styles.page} aria-labelledby="sources-title">
+      <header className={styles.pageHeader}>
         <div>
-          <p className="eyebrow">Corpus ingestion</p>
-          <h1 id="sources-title">Sources</h1>
-          <p>
-            Upload corpus documents, extract readable text, detect document
-            profile, persist chunks, and inspect retrieval-ready evidence units.
-          </p>
+          <p className={styles.eyebrow}>Build</p>
+          <h1 id="sources-title">Corpus</h1>
+          <p>Add documents and inspect what CorpusLab can retrieve.</p>
         </div>
       </header>
 
@@ -159,10 +116,10 @@ export function SourcesPage() {
         </div>
       ) : null}
 
-      <section className="sources-layout">
+      <section className={styles.layout}>
         <div className="panel upload-panel">
           <div className="panel-heading">
-            <h2>Upload Files</h2>
+            <h2>Add documents</h2>
             <span className="status-pill">
               {productConfig
                 ? productConfig.ingestion?.supported_extensions?.join(", ")
@@ -171,7 +128,7 @@ export function SourcesPage() {
           </div>
 
           <label
-            className="upload-zone"
+            className={styles.uploadZone}
             htmlFor="source-files"
             onDragOver={(event) => event.preventDefault()}
             onDrop={(event) => {
@@ -196,7 +153,7 @@ export function SourcesPage() {
             />
           </label>
 
-          <div className="selected-files" aria-label="Selected files">
+          <div className={styles.selectedFiles} aria-label="Selected files">
             {files.length === 0 ? (
               <span>No files selected</span>
             ) : (
@@ -208,45 +165,48 @@ export function SourcesPage() {
             )}
           </div>
 
-          <div className="config-grid">
-            <label>
-              Strategy
-              <select
-                aria-label="Chunking strategy"
-                value={chunkingStrategy}
-                onChange={(event) =>
-                  setChunkingStrategy(
-                    event.currentTarget.value as ChunkingStrategy,
-                  )
-                }
-              >
-                <option value="structured">Structured document</option>
-                <option value="whitespace">Whitespace</option>
-              </select>
-            </label>
-            <label>
-              Target tokens
-              <input
-                min={1}
-                type="number"
-                value={targetTokens}
-                onChange={(event) =>
-                  setTargetTokens(Number(event.currentTarget.value))
-                }
-              />
-            </label>
-            <label>
-              Overlap tokens
-              <input
-                min={0}
-                type="number"
-                value={overlapTokens}
-                onChange={(event) =>
-                  setOverlapTokens(Number(event.currentTarget.value))
-                }
-              />
-            </label>
-          </div>
+          <details className={styles.advanced}>
+            <summary>Advanced chunking</summary>
+            <div className="config-grid">
+              <label>
+                Strategy
+                <select
+                  aria-label="Chunking strategy"
+                  value={chunkingStrategy}
+                  onChange={(event) =>
+                    setChunkingStrategy(
+                      event.currentTarget.value as ChunkingStrategy,
+                    )
+                  }
+                >
+                  <option value="structured">Structured document</option>
+                  <option value="whitespace">Whitespace</option>
+                </select>
+              </label>
+              <label>
+                Target tokens
+                <input
+                  min={1}
+                  type="number"
+                  value={targetTokens}
+                  onChange={(event) =>
+                    setTargetTokens(Number(event.currentTarget.value))
+                  }
+                />
+              </label>
+              <label>
+                Overlap tokens
+                <input
+                  min={0}
+                  type="number"
+                  value={overlapTokens}
+                  onChange={(event) =>
+                    setOverlapTokens(Number(event.currentTarget.value))
+                  }
+                />
+              </label>
+            </div>
+          </details>
 
           <button
             className="primary-button"
@@ -281,43 +241,18 @@ export function SourcesPage() {
         </div>
       </section>
 
-      <section className="sources-layout wide">
+      <section className={`${styles.layout} ${styles.library}`}>
         <div className="panel document-panel">
           <div className="panel-heading">
-            <h2>Documents</h2>
+            <h2>Document library</h2>
             <span className="status-pill">
               {isLoadingSources ? "Loading" : `${documents.length} indexed`}
             </span>
           </div>
-          <DocumentList
-            documents={documents}
-            selectedDocumentId={selectedDocumentId}
-            onSelect={selectDocument}
-          />
-        </div>
-
-        <div className="panel chunk-panel">
-          <div className="panel-heading">
-            <h2>Chunk Preview</h2>
-            {selectedDocument ? (
-              <span className="status-pill">
-                {selectedDocument.chunk_count} chunks
-              </span>
-            ) : null}
-          </div>
-          <ChunkList
-            chunks={selectedDocumentId ? chunks : []}
-            isLoading={isLoadingChunks}
-          />
+          <DocumentList documents={documents} />
         </div>
       </section>
     </section>
-  );
-}
-
-function hasDocument(sources: SourceSummary[], documentId: string) {
-  return sources.some((source) =>
-    source.documents.some((document) => document.document.id === documentId),
   );
 }
 

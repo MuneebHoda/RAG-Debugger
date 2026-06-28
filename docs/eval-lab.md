@@ -66,17 +66,17 @@ Failed gates store human-readable reasons. Mission Control surfaces failed gates
 
 ## UI Workflow
 
-Eval Lab lives at `/app/evals`.
+Quality starts at `/app/evals` and uses focused detail routes.
 
-1. Create or select a dataset.
-2. Add cases manually, from Retrieval, or from Trace Debugger.
+1. Create or select a dataset from the Quality overview.
+2. Open `/app/evals/datasets/:datasetId` and add cases with an expected document and chunk, or add one explicitly from a saved run.
 3. Choose retrieval modes: lexical, vector, hybrid.
 4. Pick `top_k`.
 5. Run an experiment.
-6. Inspect the mode comparison, gate result, and failure diagnosis.
+6. Open `/app/evals/experiments/:experimentId`. Inspect the gate result and failed cases first, then expand detailed metrics.
 7. Use failed cases to improve documents, chunking, indexing, or retrieval config.
 
-The Retrieval page saves top cited hits into Eval Lab. The Trace Debugger saves trace evidence into Eval Lab with a note pointing back to the trace. This makes it easy to convert real observed behavior into regression coverage.
+The Trace Debugger saves evidence into Quality with a note pointing back to the run. The user must choose both the target dataset and expected evidence. This prevents accidental labels and turns observed behavior into deliberate regression coverage.
 
 ## Storage Model
 

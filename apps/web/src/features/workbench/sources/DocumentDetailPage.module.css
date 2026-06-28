@@ -1,0 +1,156 @@
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.backLink {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--color-ink-600);
+  font-size: 0.8rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header h1,
+.header p {
+  margin: 0;
+}
+
+.header h1 {
+  overflow-wrap: anywhere;
+  color: var(--color-ink-950);
+  font-size: 1.6rem;
+}
+
+.header p {
+  margin-top: 0.3rem;
+  color: var(--color-ink-600);
+  font-size: 0.85rem;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.badge,
+.warning {
+  display: inline-flex;
+  min-height: 1.75rem;
+  align-items: center;
+  border: 1px solid var(--color-ink-200);
+  border-radius: 999px;
+  color: var(--color-ink-700);
+  font-size: 0.72rem;
+  font-weight: 850;
+  padding: 0 0.6rem;
+  text-transform: capitalize;
+}
+
+.warning {
+  border-color: #d6c78d;
+  background: #fff9df;
+  color: #66521f;
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.7rem;
+}
+
+.metric,
+.panel {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 0.85rem;
+}
+
+.metric small {
+  color: var(--color-ink-500);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  overflow-wrap: anywhere;
+  color: var(--color-ink-900);
+  font-size: 0.86rem;
+}
+
+.panel {
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.panelHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelHeading h2 {
+  margin: 0;
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.loading,
+.error {
+  display: grid;
+  min-height: 20rem;
+  place-items: center;
+  align-content: center;
+  gap: 0.7rem;
+  border: 1px dashed var(--color-ink-300);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-600);
+  text-align: center;
+}
+
+.error button {
+  border: 0;
+  background: transparent;
+  color: var(--color-teal-900);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 850;
+}
+
+@media (max-width: 800px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .header {
+    flex-direction: column;
+  }
+
+  .badges {
+    justify-content: flex-start;
+  }
+
+  .summary {
+    grid-template-columns: 1fr;
+  }
+}

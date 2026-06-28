@@ -1,20 +1,57 @@
-:global(.sources-layout) {
+.page {
+  display: grid;
+  max-width: none;
+  gap: 1rem;
+}
+
+.pageHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-ink-200);
+  padding-bottom: 0.75rem;
+}
+
+.pageHeader p,
+.pageHeader h1 {
+  margin: 0;
+}
+
+.pageHeader h1 {
+  color: var(--color-ink-950);
+  font-size: 1.8rem;
+}
+
+.eyebrow {
+  color: var(--color-teal-900);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.pageHeader div > p:last-child {
+  color: var(--color-ink-600);
+  font-size: 0.9rem;
+}
+
+.layout {
   display: grid;
   grid-template-columns: minmax(300px, 0.8fr) minmax(0, 1.2fr);
-  gap: 16px;
+  gap: 1rem;
 }
 
-:global(.sources-layout.wide) {
-  grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr);
+.library {
+  grid-template-columns: 1fr;
 }
 
-:global(.upload-zone) {
+.uploadZone {
   display: grid;
   min-height: 164px;
   place-items: center;
   gap: 8px;
   border: 1px dashed #94aaba;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: #f8fbfd;
   color: #324656;
   cursor: pointer;
@@ -22,7 +59,7 @@
   text-align: center;
 }
 
-:global(.upload-zone input) {
+.uploadZone input {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -30,114 +67,127 @@
   pointer-events: none;
 }
 
-:global(.upload-zone span),
-:global(.selected-files span),
-:global(.result-row small),
-:global(.document-row small),
-:global(.chunk-card small) {
+.uploadZone span,
+.selectedFiles span,
+.resultRow small,
+.documentRow small,
+.chunkCard small {
   color: #617080;
-  font-size: 13px;
+  font-size: 0.78rem;
 }
 
-:global(.selected-files),
-:global(.result-list),
-:global(.document-list),
-:global(.chunk-list) {
+.selectedFiles,
+.resultList,
+.documentList,
+.chunkList {
   display: grid;
   gap: 8px;
 }
 
-:global(.selected-files) {
+.selectedFiles {
   margin: 14px 0;
 }
 
-:global(.result-row),
-:global(.document-row) {
+.advanced {
+  margin-bottom: 0.9rem;
+  border-top: 1px solid var(--color-ink-200);
+}
+
+.advanced > summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--color-ink-700);
+  font-size: 0.8rem;
+  font-weight: 850;
+  padding: 0.8rem 0;
+}
+
+.resultRow,
+.documentRow {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
   padding: 11px;
 }
 
-:global(.document-row) {
+.documentRow {
   grid-template-columns: 22px minmax(0, 1fr) auto;
   width: 100%;
   color: inherit;
   cursor: pointer;
+  text-decoration: none;
   text-align: left;
 }
 
-:global(.document-row.selected),
-:global(.document-row:hover) {
+.documentRow:hover {
   border-color: #8bb8c5;
   background: #eef8fa;
 }
 
-:global(.result-row span),
-:global(.document-row span) {
+.resultRow span,
+.documentRow > span:not(:last-child) {
   display: grid;
-  gap: 2px;
   min-width: 0;
+  gap: 2px;
 }
 
-:global(.result-row strong),
-:global(.document-row strong) {
+.resultRow strong,
+.documentRow strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-:global(.chunk-list) {
+.chunkList {
   max-height: 640px;
   overflow: auto;
   padding-right: 4px;
 }
 
-:global(.chunk-card) {
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
+.chunkCard {
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
   background: #fbfcfe;
   padding: 14px;
 }
 
-:global(.chunk-card header) {
+.chunkCard header {
   display: flex;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
 }
 
-:global(.chunk-meta) {
+.chunkMeta {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 10px;
 }
 
-:global(.chunk-meta span) {
+.chunkMeta span {
   border: 1px solid #c9d6df;
   border-radius: 999px;
   color: #335466;
-  font-size: 12px;
+  font-size: 0.72rem;
   font-weight: 700;
   padding: 3px 8px;
 }
 
-:global(.chunk-card p) {
+.chunkCard p {
   margin-bottom: 10px;
   color: #273541;
-  font-size: 14px;
+  font-size: 0.85rem;
   line-height: 1.55;
   white-space: pre-wrap;
 }
 
 @media (max-width: 860px) {
-  :global(.sources-layout),
-  :global(.sources-layout.wide) {
+  .layout {
     grid-template-columns: 1fr;
   }
 }

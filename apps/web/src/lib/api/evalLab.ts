@@ -308,6 +308,16 @@ export function listEvalLabExperiments(
   );
 }
 
+export function getEvalLabExperiment(
+  experimentId: string,
+  signal?: AbortSignal,
+): Promise<RetrievalEvalExperiment> {
+  return requestJson<RetrievalEvalExperiment>(
+    `/api/v1/eval-lab/experiments/${experimentId}`,
+    { signal },
+  );
+}
+
 export function compareEvalLabExperiment(
   experimentId: string,
   modes: RetrievalMode[],
