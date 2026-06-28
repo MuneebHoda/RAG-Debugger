@@ -477,6 +477,126 @@ mod tests {
         assert_eq!(result.top_hit_rank, Some(1));
     }
 
+    #[test]
+    fn failure_diagnosis_is_deterministic_for_degraded_evidence() {
+        let document_id = DocumentId(Uuid::now_v7());
+        let expected_chunk_id = ChunkId(Uuid::now_v7());
+        let case = eval_case(expected_chunk_id, Some(document_id));
+        let mut degraded_hit = hit(ChunkId(Uuid::now_v7()), document_id);
+        degraded_hit.evidence_strength = EvidenceStrength::Weak;
+        degraded_hit.duplicate_count = 2;
+        degraded_hit.quality_flags = vec![
+            RetrievalQualityFlag::HeadingOnly,
+            RetrievalQualityFlag::Duplicate,
+        ];
+        let response = eval_response(vec![degraded_hit], RetrievalEmbeddingReadiness::Missing);
+
+        let first = evaluate_retrieval_eval_case(&case, &response);
+        let second = evaluate_retrieval_eval_case(&case, &response);
+        let labels = first
+            .failures
+            .iter()
+            .map(|failure| failure.label)
+            .collect::<Vec<_>>();
+
+        assert_eq!(first.failures, second.failures);
+        assert_eq!(
+            labels,
+            vec![
+                RetrievalEvalFailureLabel::MissingEmbeddings,
+                RetrievalEvalFailureLabel::CorrectDocumentWrongChunk,
+                RetrievalEvalFailureLabel::WeakEvidence,
+                RetrievalEvalFailureLabel::HeadingOnlyEvidence,
+                RetrievalEvalFailureLabel::DuplicateEvidence,
+            ]
+        );
+    }
+
+    #[test]
+    fn missing_expected_evidence_also_reports_low_precision() {
+        let expected_chunk_id = ChunkId(Uuid::now_v7());
+        let case = eval_case(expected_chunk_id, None);
+        let response = eval_response(
+            vec![
+                hit(ChunkId(Uuid::now_v7()), DocumentId(Uuid::now_v7())),
+                hit(ChunkId(Uuid::now_v7()), DocumentId(Uuid::now_v7())),
+            ],
+            RetrievalEmbeddingReadiness::Ready,
+        );
+
+        let result = evaluate_retrieval_eval_case(&case, &response);
+        let labels = result
+            .failures
+            .iter()
+            .map(|failure| failure.label)
+            .collect::<Vec<_>>();
+
+        assert_eq!(result.recall_at_k, 0.0);
+        assert_eq!(result.precision_at_k, 0.0);
+        assert_eq!(
+            labels,
+            vec![
+                RetrievalEvalFailureLabel::ExpectedEvidenceMissing,
+                RetrievalEvalFailureLabel::LowPrecision,
+            ]
+        );
+    }
+
+    fn eval_case(
+        expected_chunk_id: ChunkId,
+        expected_document_id: Option<DocumentId>,
+    ) -> RetrievalEvalCase {
+        RetrievalEvalCase {
+            id: RetrievalEvalCaseId(Uuid::now_v7()),
+            name: "Fixture expectation".to_owned(),
+            query: "How is GPU indexing configured?".to_owned(),
+            top_k: 5,
+            expected_chunk_ids: vec![expected_chunk_id],
+            expected_document_ids: expected_document_id.into_iter().collect(),
+            notes: Some("Deterministic regression fixture".to_owned()),
+            created_at: OffsetDateTime::now_utc(),
+        }
+    }
+
+    fn eval_response(
+        hits: Vec<RetrievalQueryHit>,
+        readiness: RetrievalEmbeddingReadiness,
+    ) -> RetrievalQueryResponse {
+        RetrievalQueryResponse {
+            run: RetrievalQueryRun {
+                id: RetrievalQueryRunId(Uuid::now_v7()),
+                query: "How is GPU indexing configured?".to_owned(),
+                top_k: 5,
+                retrieval_mode: RetrievalMode::Hybrid,
+                latency_ms: 7,
+                created_at: OffsetDateTime::now_utc(),
+            },
+            answer: ExtractiveAnswer {
+                status: ExtractiveAnswerStatus::InsufficientEvidence,
+                text: "Not enough local evidence.".to_owned(),
+                citations: Vec::new(),
+            },
+            embedding_status: RetrievalEmbeddingStatus {
+                readiness,
+                required: true,
+                model: EmbeddingModelInfo::default(),
+                total_chunks: hits.len() as u32,
+                indexed_chunks: if readiness == RetrievalEmbeddingReadiness::Ready {
+                    hits.len() as u32
+                } else {
+                    0
+                },
+                missing_chunks: if readiness == RetrievalEmbeddingReadiness::Missing {
+                    hits.len() as u32
+                } else {
+                    0
+                },
+                stale_chunks: 0,
+            },
+            hits,
+        }
+    }
+
     fn hit(chunk_id: ChunkId, document_id: DocumentId) -> RetrievalQueryHit {
         let source_id = SourceId(Uuid::now_v7());
         let source = Source {

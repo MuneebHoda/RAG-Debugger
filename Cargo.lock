@@ -1472,6 +1472,7 @@ dependencies = [
  "mime_guess",
  "pdf-extract",
  "rag-debugger-core",
+ "serde_json",
  "sha2",
  "thiserror",
  "time",
