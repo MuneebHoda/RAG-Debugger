@@ -79,6 +79,8 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Technical Handbook](docs/technical-handbook.md)
 - [Testing Guide](docs/testing.md)
 - [Privacy and Security](docs/privacy-security.md)
+- [Privacy Review Checklist](docs/privacy-review-checklist.md)
+- [Logging and Redaction](docs/logging-redaction.md)
 - [Roadmap](docs/roadmap.md)
 - [ADRs](docs/adr)
 - [Changelog](CHANGELOG.md)

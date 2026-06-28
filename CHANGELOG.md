@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Privacy-review triggers and a logging/redaction allowlist covering corpus data, queries, traces, credentials, exports, and hosted sync.
 - Documented retrieval, trace, Eval Lab, and privacy invariants with synthetic public regression corpora and deterministic failure-label coverage.
 - Documentation maintenance, dependency, and generated-file policies plus aligned Rust, web, and CI `just` gates.
 - Repository-level agent engineering rules and a frontend architecture guide covering route, feature, API, CSS, and testing boundaries.

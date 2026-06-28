@@ -27,6 +27,14 @@
 - API compatibility:
 - Data backfill or rollback notes:
 
+## Privacy / Security
+
+- [ ] No raw documents, chunks, queries, prompts, answers, or vectors are newly sent outside the documented storage boundary, or the movement is documented and approved
+- [ ] No passwords, tokens, cookies, API keys, authorization headers, secret hashes, or database/provider credentials are logged
+- [ ] API-key, session, role, retention, and deletion behavior is unchanged or documented and tested
+- [ ] Trace, report, eval, and corpus export/sharing behavior is unchanged or explicitly redacted and user initiated
+- [ ] `docs/privacy-security.md`, the privacy checklist, logging policy, and any required ADR are updated or marked `N/A` with a reason
+
 ## Docs Freshness
 
 - [ ] I checked whether `README.md` or `docs/development.md` needs an update

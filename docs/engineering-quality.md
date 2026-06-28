@@ -78,6 +78,14 @@ Use `just rust-check` or `just web-check` for focused iteration. `just check` co
 - Do not add a large file without either splitting it in the same PR or creating a linked refactor issue.
 - Prefer small domain modules over broad files such as one giant API client, storage adapter, or route component.
 - Follow `docs/frontend-architecture.md` for web feature, API, styling, and testing boundaries.
+- Complete `docs/privacy-review-checklist.md` for changes involving data movement, external services, telemetry, authentication, retention, sharing, or exports.
+- Follow `docs/logging-redaction.md` for every log, telemetry event, support bundle, and CI diagnostic.
+
+## Privacy Review Gate
+
+Privacy review is part of engineering review, not a post-release compliance task. A pull request that changes a privacy boundary must name the affected data classes, local and external destinations, access control, retention/deletion behavior, redaction, user control, and rollback path. Hosted sync, an external model/provider, auth-provider replacement, or a change to local-first defaults requires an ADR.
+
+The current logging audit permits structured startup metadata and prohibits raw corpus, query, prompt, answer, vector, credential, header, and cookie data. Use opaque IDs and aggregate operational fields to correlate failures.
 
 ## Dependency Policy
 

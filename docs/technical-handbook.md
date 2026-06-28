@@ -269,6 +269,10 @@ Default behavior is local and privacy-first.
 
 Local auth now implements the first hosted boundary: signup/login/logout/current-user, organizations, workspaces, workspace memberships, opaque HttpOnly session cookies, and workspace-scoped API keys. API key secrets use a `clab_...` prefix, are shown once, and are stored only as SHA-256 hashes. Workbench APIs require a session; CI eval routes require a key with the `ci_eval_runs` scope.
 
+`docs/privacy-review-checklist.md` defines the mandatory review gate for data movement, external providers, hosted features, auth, retention, sharing, exports, and telemetry. `docs/logging-redaction.md` defines an allowlist for safe structured metadata and prohibits raw corpus/query content, vectors, credentials, headers, cookies, and secret hashes. Queries are sensitive by default, and future hosted sync must show and redact its payload before crossing the local boundary.
+
+The current logging audit found one API startup event containing bind address, environment, and storage backend kind. Request bodies and sensitive RAG/auth data are not logged. Adding request tracing requires route-template logging and explicit sensitive-header handling.
+
 Hosted mode will still need tenant isolation hardening, invitations, SSO/SAML, SCIM, audit events, upload scanning, and configurable data retention.
 
 ## Configuration Model
