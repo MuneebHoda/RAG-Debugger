@@ -1,12 +1,19 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RunsPage } from "./RunsPage";
 import { TraceDetailPage } from "./TraceDetailPage";
 
 const traceId = "018f7a2a-6e2e-7000-a000-000000000201";
+const secondTraceId = "018f7a2a-6e2e-7000-a000-000000000202";
 const datasetId = "018f7a2a-6e2e-7000-a000-000000000210";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000205";
 
@@ -117,6 +124,53 @@ describe("guided run workflow", () => {
       name: /save quality case/i,
     });
     expect(saveButton).toBeEnabled();
+  });
+
+  it("shows a loading state when navigating to a different trace", async () => {
+    let resolveSecondTrace: ((response: Response) => void) | undefined;
+    const secondTraceRequest = new Promise<Response>((resolve) => {
+      resolveSecondTrace = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((input: RequestInfo | URL) => {
+        const url = input.toString();
+        if (url.endsWith(`/api/v1/traces/${secondTraceId}`)) {
+          return secondTraceRequest;
+        }
+        return responseJson(trace);
+      }),
+    );
+
+    renderWithClient(
+      <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>
+        <Link to={`/app/traces/${secondTraceId}`}>Open second run</Link>
+        <Routes>
+          <Route path="/app/traces/:traceId" element={<TraceDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText(/likely causes/i);
+    fireEvent.click(screen.getByRole("link", { name: /open second run/i }));
+    expect(
+      await screen.findByText(/loading run diagnosis/i),
+    ).toBeInTheDocument();
+
+    await act(async () => {
+      resolveSecondTrace?.(
+        await responseJson({
+          ...trace,
+          id: secondTraceId,
+          input: "second retrieval question",
+        }),
+      );
+    });
+    expect(
+      await screen.findByRole("heading", {
+        name: "second retrieval question",
+      }),
+    ).toBeInTheDocument();
   });
 });
 

@@ -83,7 +83,6 @@ The product is moving fast, so these hot spots should be split over dedicated re
 
 - `apps/web/src/lib/api/client.ts`: move implementation behind the new domain API modules instead of adding more exports to the internal client.
 - `apps/web/src/features/workbench/workbench.css`: move route-specific rules into CSS modules.
-- `apps/web/src/features/workbench/traces/TraceDetailPanels.tsx`: split evidence, timeline, rerun, and quality-case panels into owned components.
 - `apps/web/src/features/workbench/eval-lab/DatasetDetailPage.tsx`: separate case editing from experiment controls and mutations.
 - `apps/web/src/features/workbench/sources`: keep corpus upload, library, and document inspection in focused components.
 - `crates/storage/src/repository.rs`: split repository traits by domain as the API grows.
@@ -91,3 +90,5 @@ The product is moving fast, so these hot spots should be split over dedicated re
 Domain files under `apps/web/src/pages` are route wrappers or compatibility re-exports and should remain thin. The remaining legacy page implementations should move into `apps/web/src/features/workbench/<domain>` through focused refactors. Cleanup targets should not change product behavior unless a separately tested bug is found.
 
 The Retrieval route now follows the target convention: `RetrievalPage.tsx` composes a domain hook, focused control panels, result panels, and tested pure filter utilities.
+
+The Runs and Trace Debugger routes now use a trace query/tab hook, a focused run list, separate summary, failure, evidence, metrics, timeline, rerun, and Quality components, plus tested filter and recommendation utilities.
