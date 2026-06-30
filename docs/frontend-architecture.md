@@ -43,7 +43,7 @@ Current workbench implementations live in:
 - `features/workbench/retrieval`: a thin retrieval page, `useRetrievalWorkbench` orchestration, focused query/filter/embedding panels, pure filter utilities, evidence results, and debugger handoff.
 - `features/workbench/traces`: a focused run list, trace query/tab orchestration hook, and separate summary, failure, evidence, metrics, timeline, rerun, and Quality components.
 - `features/workbench/eval-lab`: datasets, cases, experiments, gates, and CI quality runs.
-- `features/workbench/home`: guided setup and next actions.
+- `features/workbench/home`: persisted six-step guided demo, sample-source mutations, workspace health, and next actions; `pages/OverviewPage.tsx` remains a thin compatibility export.
 - `features/workbench/reports`: report creation, generated report lists, focused report detail, privacy status, and Markdown copy actions.
 
 ## API Boundary

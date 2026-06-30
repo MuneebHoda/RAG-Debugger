@@ -70,8 +70,8 @@ export function RunsPage() {
         <div className={styles.empty}>
           <GitBranch aria-hidden="true" size={24} />
           <strong>No saved runs yet</strong>
-          <span>Test a question, then choose Debug this run.</span>
-          <Link to="/app/retrieval">Open Test retrieval</Link>
+          <span>Run a suggested question, then choose Debug this run.</span>
+          <Link to="/app">Continue the guided demo</Link>
         </div>
       ) : (
         <TraceList runs={runs} />

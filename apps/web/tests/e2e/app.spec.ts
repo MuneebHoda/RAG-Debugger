@@ -40,6 +40,28 @@ async function mockCurrentUser(page: Page) {
 
 async function seedDemoSession(page: Page) {
   await mockCurrentUser(page);
+  await page.route("**/api/v1/demo", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        version: "corpuslab-guided-demo-v1",
+        project_id: null,
+        source_id: null,
+        progress: {
+          sample_corpus_loaded: false,
+          chunks_created: false,
+          embeddings_indexed: false,
+          document_count: 0,
+          chunk_count: 0,
+          indexed_chunk_count: 0,
+          retrieval_run_id: null,
+          trace_id: null,
+          report_id: null,
+        },
+        suggested_queries: [],
+      },
+    });
+  });
   await page.addInitScript((session) => {
     window.localStorage.setItem(
       "corpuslab.auth.session",
@@ -1082,6 +1104,64 @@ test("completes the real guided workflow against the memory API", async ({
         (element) => element.scrollWidth <= element.clientWidth,
       ),
     ).toBeTruthy();
+  }
+});
+
+test("completes the versioned sample demo through Markdown audit export", async ({
+  page,
+}) => {
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("demo@corpuslab.ai");
+  await page.getByLabel("Password").fill("CorpusLab#2026");
+  await page.getByRole("button", { name: /open workbench/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+
+  const loadButton = page.getByRole("button", { name: "Load sample corpus" });
+  await expect(loadButton).toBeVisible();
+  await loadButton.click();
+  const indexButton = page.getByRole("button", { name: "Index sample" });
+  await expect(indexButton).toBeVisible();
+  await indexButton.click();
+
+  const recommendedQuery = page.getByRole("link", {
+    name: "Test recommended query",
+  });
+  await expect(recommendedQuery).toBeVisible();
+  await recommendedQuery.click();
+  await expect(page).toHaveURL(/demo_query=account_recovery/);
+  await expect(
+    page.getByLabel("What should the corpus answer?"),
+  ).not.toHaveValue("");
+  await page.getByText("Advanced", { exact: true }).click();
+  await expect(
+    page.getByRole("checkbox", { name: /CorpusLab Sample Corpus/i }),
+  ).toBeChecked();
+  await page.getByRole("button", { name: "Run retrieval" }).click();
+  await expect(page.getByText("Evidence summary")).toBeVisible();
+  await page.getByRole("button", { name: "Debug this run" }).click();
+  await expect(page).toHaveURL(/\/app\/traces\/[0-9a-f-]+$/);
+
+  await page.getByRole("button", { name: "Create audit report" }).click();
+  await expect(page.getByLabel("Privacy")).toHaveValue("metadata_only");
+  await page.getByRole("button", { name: "Create report" }).click();
+  await expect(page).toHaveURL(/\/app\/reports\/[0-9a-f-]+$/);
+  await page.getByRole("button", { name: "Copy Markdown" }).click();
+  await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download Markdown" }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^corpuslab-report-.*\.md$/);
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 768, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByRole("heading", { name: /audit/i })).toBeVisible();
+    await assertNoHorizontalOverflow(page);
   }
 });
 

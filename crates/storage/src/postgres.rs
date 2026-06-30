@@ -6,8 +6,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 
 use crate::{
     repository::{
-        AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
-        HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
+        AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
+        EvalRepository, HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
         SourceRepository, TraceRepository,
     },
     StorageError,
@@ -16,6 +16,7 @@ use crate::{
 mod auth;
 mod ci_eval;
 mod codec;
+mod demo;
 mod embeddings;
 mod eval_lab;
 mod ingestion;
@@ -106,6 +107,51 @@ impl DocumentRepository for PostgresStore {
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError> {
         PostgresStore::list_document_chunks(self, document_id).await
+    }
+}
+
+#[async_trait]
+impl DemoRepository for PostgresStore {
+    async fn ensure_demo_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project: Project,
+    ) -> Result<Project, StorageError> {
+        PostgresStore::ensure_demo_project(self, workspace_id, project).await
+    }
+
+    async fn ensure_demo_source(&self, source: Source) -> Result<Source, StorageError> {
+        PostgresStore::ensure_demo_source(self, source).await
+    }
+
+    async fn upsert_demo_document_with_chunks(
+        &self,
+        document: Document,
+        chunks: Vec<Chunk>,
+    ) -> Result<bool, StorageError> {
+        PostgresStore::upsert_demo_document_with_chunks(self, document, chunks).await
+    }
+
+    async fn get_demo_source(
+        &self,
+        workspace_id: WorkspaceId,
+        version_marker: &str,
+    ) -> Result<Option<SourceSummary>, StorageError> {
+        PostgresStore::get_demo_source(self, workspace_id, version_marker).await
+    }
+
+    async fn latest_retrieval_query_for_source(
+        &self,
+        source_id: SourceId,
+    ) -> Result<Option<RetrievalQueryResponse>, StorageError> {
+        PostgresStore::latest_retrieval_query_for_source(self, source_id).await
+    }
+
+    async fn latest_trace_for_source(
+        &self,
+        source_id: SourceId,
+    ) -> Result<Option<Trace>, StorageError> {
+        PostgresStore::latest_trace_for_source(self, source_id).await
     }
 }
 

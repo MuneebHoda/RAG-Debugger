@@ -9,8 +9,8 @@ use axum::{
 use tower_http::cors::CorsLayer;
 
 use super::{
-    api_keys, auth_routes, ci_eval, config, embeddings, eval_lab, evals, health, overview, reports,
-    retrieval, sources, traces,
+    api_keys, auth_routes, ci_eval, config, demo, embeddings, eval_lab, evals, health, overview,
+    reports, retrieval, sources, traces,
 };
 use crate::{auth, config::RuntimeEnvironment, error::ApiError, state::AppState};
 
@@ -52,6 +52,8 @@ fn public_routes() -> Router<AppState> {
 
 fn protected_routes(state: AppState) -> Router<AppState> {
     Router::new()
+        .route("/demo", get(demo::get_demo))
+        .route("/demo/load", post(demo::load_demo))
         .route("/overview", get(overview::get_overview))
         .route("/embeddings/status", get(embeddings::embedding_status))
         .route("/embeddings/index", post(embeddings::index_embeddings))

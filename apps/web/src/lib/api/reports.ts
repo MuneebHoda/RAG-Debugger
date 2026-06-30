@@ -1,4 +1,4 @@
-import { jsonRequest, requestJson, requestText } from "./client";
+import { API_BASE_URL, jsonRequest, requestJson, requestText } from "./client";
 
 export type DebugReportPrivacyMode =
   | "metadata_only"
@@ -137,4 +137,8 @@ export function exportDebugReportMarkdown(
   signal?: AbortSignal,
 ): Promise<string> {
   return requestText(`/api/v1/reports/${reportId}/export.md`, { signal });
+}
+
+export function debugReportMarkdownUrl(reportId: string): string {
+  return `${API_BASE_URL}/api/v1/reports/${encodeURIComponent(reportId)}/export.md`;
 }

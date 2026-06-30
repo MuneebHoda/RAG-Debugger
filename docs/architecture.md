@@ -48,6 +48,8 @@ Current ingestion APIs:
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/auth/me`
 - `GET /api/v1/workspaces/current`
+- `GET /api/v1/demo`
+- `POST /api/v1/demo/load`
 - `GET /api/v1/api-keys`
 - `POST /api/v1/api-keys`
 - `DELETE /api/v1/api-keys/:api_key_id`
@@ -92,6 +94,8 @@ Retrieval queries search all indexed documents by default and can filter by sour
 Embedding indexing is synchronous in v1. The API reports missing or stale embeddings explicitly so hybrid/vector retrieval never silently degrades to lexical-only behavior.
 
 Trace debugging wraps retrieval responses into inspectable timelines. A trace stores the query, spans, ranked evidence, citations, deterministic failure labels, and rerun comparisons. Reruns reuse the same local retrieval engine with different mode or `top_k` settings.
+
+The guided demo is an orchestration layer over existing bounded contexts, not a parallel data model. Its fixtures pass through the shared API ingestion preparation service, then persist as normal workspace-owned project/source/document/chunk records. `DemoRepository` owns deterministic upserts and source-specific progress lookups. SHA-256-derived IDs and a versioned source marker make repeated loads repairable without a migration.
 
 Eval Lab is the release-readiness layer. It stores datasets, expected-evidence cases, cross-mode experiments, deterministic failure labels, and pass/fail gates. Retrieval and trace workflows can save observed evidence directly into a dataset so real debugging sessions become regression coverage.
 

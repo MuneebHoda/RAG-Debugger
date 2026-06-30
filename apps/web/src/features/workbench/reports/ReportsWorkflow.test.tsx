@@ -116,6 +116,12 @@ describe("audit reports workbench", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Weak evidence")).toBeInTheDocument();
     expect(screen.getByText("Increase retrieval depth")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Download Markdown" }),
+    ).toHaveAttribute(
+      "href",
+      `http://127.0.0.1:8080/api/v1/reports/${reportId}/export.md`,
+    );
     fireEvent.click(screen.getByRole("button", { name: "Copy Markdown" }));
 
     await waitFor(() =>
@@ -144,6 +150,9 @@ describe("audit reports workbench", () => {
       name: "Copy Markdown",
     });
     expect(copyButton).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Download Markdown" }),
+    ).toBeDisabled();
     expect(
       screen.getByText(/export is blocked until it is redacted/i),
     ).toBeInTheDocument();

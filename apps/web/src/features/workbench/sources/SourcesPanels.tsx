@@ -66,7 +66,13 @@ export function UploadResults({
 
 export function DocumentList({ documents }: { documents: DocumentSummary[] }) {
   if (documents.length === 0) {
-    return <p>No documents indexed yet.</p>;
+    return (
+      <p>
+        No documents indexed yet.{" "}
+        <Link to="/app">Load the guided sample corpus</Link> or upload your own
+        files.
+      </p>
+    );
   }
 
   return (

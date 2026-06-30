@@ -3,10 +3,12 @@ import {
   ArrowLeft,
   Check,
   Clipboard,
+  Download,
   FileLock2,
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
+import { debugReportMarkdownUrl } from "../../../lib/api/reports";
 import { formatDateTime } from "../../../lib/dateTime";
 import { useCopyReportMarkdown, useDebugReport } from "./hooks/useReports";
 import styles from "./ReportDetailPage.module.css";
@@ -48,23 +50,38 @@ export function ReportDetailPage() {
           <h1 id="report-title">{report.title}</h1>
           <span>{formatDateTime(report.created_at)}</span>
         </div>
-        <button
-          type="button"
-          className={styles.copyButton}
-          disabled={exportBlocked || copyMarkdown.isPending}
-          onClick={() => copyMarkdown.mutate(report.id)}
-        >
-          {copyMarkdown.isSuccess ? (
-            <Check aria-hidden="true" size={16} />
+        <div className={styles.exportActions}>
+          <button
+            type="button"
+            className={styles.copyButton}
+            disabled={exportBlocked || copyMarkdown.isPending}
+            onClick={() => copyMarkdown.mutate(report.id)}
+          >
+            {copyMarkdown.isSuccess ? (
+              <Check aria-hidden="true" size={16} />
+            ) : (
+              <Clipboard aria-hidden="true" size={16} />
+            )}
+            {copyMarkdown.isSuccess
+              ? "Copied"
+              : copyMarkdown.isPending
+                ? "Copying…"
+                : "Copy Markdown"}
+          </button>
+          {exportBlocked ? (
+            <button className={styles.copyButton} disabled type="button">
+              <Download aria-hidden="true" size={16} /> Download Markdown
+            </button>
           ) : (
-            <Clipboard aria-hidden="true" size={16} />
+            <a
+              className={styles.downloadButton}
+              download={`corpuslab-report-${report.id}.md`}
+              href={debugReportMarkdownUrl(report.id)}
+            >
+              <Download aria-hidden="true" size={16} /> Download Markdown
+            </a>
           )}
-          {copyMarkdown.isSuccess
-            ? "Copied"
-            : copyMarkdown.isPending
-              ? "Copying…"
-              : "Copy Markdown"}
-        </button>
+        </div>
       </header>
 
       <section className={styles.privacyBanner}>

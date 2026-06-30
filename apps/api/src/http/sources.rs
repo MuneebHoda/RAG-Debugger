@@ -10,18 +10,16 @@ use rag_debugger_core::{
     IngestionRunId, IngestionRunStatus, IngestionTotals, ProductConfig, Source, SourceId,
     SourceKind, SourceSummary, SourceSyncPolicy,
 };
-use rag_debugger_rag::{
-    chunking::{Chunker, SmartSectionChunker, WhitespaceChunker},
-    intelligence::{analyze_document, annotate_chunk_quality},
-    ExtractionError, TextExtractor,
-};
 use rag_debugger_storage::repository::IngestionRepository;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{
+    error::ApiError,
+    ingestion::{prepare_document, DocumentPreparationError, IngestionFile},
+    state::AppState,
+};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IngestFilesResponse {
@@ -94,7 +92,6 @@ pub async fn ingest_files(
         })
         .await?;
 
-    let extractor = TextExtractor;
     let mut totals = IngestionTotals {
         files_received,
         failed_files: results.len() as u32,
@@ -104,7 +101,6 @@ pub async fn ingest_files(
     for uploaded_file in uploaded_files {
         match process_file(
             repository.clone(),
-            &extractor,
             source.id,
             chunking,
             product_config.ingestion.preview_chunk_limit as usize,
@@ -349,55 +345,24 @@ async fn create_upload_source(
 
 async fn process_file(
     repository: Arc<dyn IngestionRepository>,
-    extractor: &TextExtractor,
     source_id: SourceId,
     chunking: ChunkingConfig,
     preview_chunk_limit: usize,
     uploaded_file: UploadedFile,
 ) -> Result<DocumentIngestResult, FileFailure> {
-    let extracted = extractor
-        .extract(
-            &uploaded_file.file_name,
-            uploaded_file.content_type.as_deref(),
-            &uploaded_file.bytes,
-        )
-        .map_err(|error| extraction_failure(&uploaded_file.file_name, error))?;
-
-    if extracted.text.trim().is_empty() {
-        return Err(FileFailure {
-            file_name: uploaded_file.file_name,
-            error_code: "empty_extracted_text",
-            message: "no readable text was extracted from the file".to_owned(),
-        });
-    }
-
-    let intelligence = analyze_document(&uploaded_file.file_name, &extracted.text);
-    let document = Document {
-        id: DocumentId(Uuid::now_v7()),
+    let prepared = prepare_document(
         source_id,
-        path: uploaded_file.file_name.clone(),
-        mime_type: extracted.mime_type,
-        checksum: checksum_bytes(&uploaded_file.bytes),
-        byte_size: uploaded_file.bytes.len() as u64,
-        profile: intelligence.profile,
-        extraction_quality: intelligence.extraction_quality,
-        warnings: intelligence.warnings,
-    };
-    let mut chunks =
-        chunk_document(&document, &extracted.text, chunking).map_err(|error| FileFailure {
-            file_name: uploaded_file.file_name.clone(),
-            error_code: "chunking_failed",
-            message: error.to_string(),
-        })?;
-    annotate_chunk_quality(&mut chunks);
-
-    if chunks.is_empty() {
-        return Err(FileFailure {
-            file_name: uploaded_file.file_name,
-            error_code: "empty_chunks",
-            message: "text extraction produced no chunks".to_owned(),
-        });
-    }
+        DocumentId(Uuid::now_v7()),
+        chunking,
+        IngestionFile {
+            file_name: &uploaded_file.file_name,
+            content_type: uploaded_file.content_type.as_deref(),
+            bytes: &uploaded_file.bytes,
+        },
+    )
+    .map_err(|error| preparation_failure(&uploaded_file.file_name, error))?;
+    let document = prepared.document;
+    let chunks = prepared.chunks;
 
     let preview_chunks = chunks
         .iter()
@@ -426,19 +391,6 @@ async fn process_file(
     })
 }
 
-fn chunk_document(
-    document: &Document,
-    text: &str,
-    chunking: ChunkingConfig,
-) -> Result<Vec<rag_debugger_core::Chunk>, rag_debugger_rag::RagError> {
-    match chunking.strategy.normalized() {
-        ChunkingStrategy::Structured | ChunkingStrategy::SmartSections => {
-            SmartSectionChunker.chunk(document, text, chunking)
-        }
-        ChunkingStrategy::Whitespace => WhitespaceChunker.chunk(document, text, chunking),
-    }
-}
-
 fn failure_result(failure: FileFailure) -> DocumentIngestResult {
     DocumentIngestResult {
         file_name: failure.file_name,
@@ -451,24 +403,11 @@ fn failure_result(failure: FileFailure) -> DocumentIngestResult {
     }
 }
 
-fn extraction_failure(file_name: &str, error: ExtractionError) -> FileFailure {
-    let (error_code, message) = match error {
-        ExtractionError::UnsupportedFileType => (
-            "unsupported_file_type",
-            "supported files are .txt, .md, .markdown, .html, .htm, and .pdf".to_owned(),
-        ),
-        ExtractionError::InvalidUtf8 => (
-            "invalid_utf8",
-            "text and markdown files must be valid UTF-8".to_owned(),
-        ),
-        ExtractionError::Html(message) => ("html_extraction_failed", message),
-        ExtractionError::Pdf(message) => ("pdf_extraction_failed", message),
-    };
-
+fn preparation_failure(file_name: &str, error: DocumentPreparationError) -> FileFailure {
     FileFailure {
         file_name: file_name.to_owned(),
-        error_code,
-        message,
+        error_code: error.code,
+        message: error.message,
     }
 }
 
@@ -479,8 +418,4 @@ fn clean_file_name(file_name: &str) -> String {
         .filter(|file_name| !file_name.trim().is_empty())
         .unwrap_or("upload")
         .to_owned()
-}
-
-fn checksum_bytes(bytes: &[u8]) -> String {
-    hex::encode(Sha256::digest(bytes))
 }

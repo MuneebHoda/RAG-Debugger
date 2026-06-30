@@ -55,6 +55,7 @@
 }
 
 .copyButton,
+.downloadButton,
 .errorState button,
 .errorState a {
   display: inline-flex;
@@ -70,6 +71,17 @@
   font-size: 0.78rem;
   font-weight: 850;
   padding: 0.55rem 0.75rem;
+  text-decoration: none;
+}
+
+.exportActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.downloadButton {
   text-decoration: none;
 }
 

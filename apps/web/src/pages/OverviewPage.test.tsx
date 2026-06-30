@@ -4,12 +4,24 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OverviewPage } from "./OverviewPage";
+import type { DemoProgress } from "../lib/api/demo";
+
+let overviewResponse: unknown;
+let demoResponse: unknown;
 
 describe("OverviewPage", () => {
   beforeEach(() => {
+    overviewResponse = baseOverview();
+    demoResponse = baseDemo();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => responseJson(baseOverview())),
+      vi.fn(async (input: RequestInfo | URL) =>
+        responseJson(
+          input.toString().endsWith("/api/v1/demo")
+            ? demoResponse
+            : overviewResponse,
+        ),
+      ),
     );
   });
 
@@ -33,125 +45,134 @@ describe("OverviewPage", () => {
   });
 
   it("guides an empty workspace toward Sources", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      responseJson({
-        ...baseOverview(),
-        health: {
-          score: 0,
-          status: "needs_documents",
-          summary: "Ingest documents to begin.",
-          primary_action: {
-            id: "ingest_documents",
-            label: "Ingest documents",
-            detail: "Add the first corpus source.",
-            route: "/app/sources",
-            priority: "primary",
-          },
+    overviewResponse = {
+      ...baseOverview(),
+      health: {
+        score: 0,
+        status: "needs_documents",
+        summary: "Ingest documents to begin.",
+        primary_action: {
+          id: "ingest_documents",
+          label: "Ingest documents",
+          detail: "Add the first corpus source.",
+          route: "/app/sources",
+          priority: "primary",
         },
-        metrics: metricSet({ documents: "0", chunks: "0" }),
-        pipeline: baseOverview().pipeline.map((pipelineStep) => ({
-          ...pipelineStep,
-          count: 0,
-          status: "pending",
-        })),
-        issues: [
-          {
-            id: "no_documents",
-            severity: "critical",
-            title: "No documents ingested",
-            detail: "CorpusLab needs documents before retrieval can run.",
-            route: "/app/sources",
-            action_label: "Ingest documents",
-          },
-        ],
-        document_mix: [],
-        embedding_status: {
-          ...baseOverview().embedding_status,
-          total_chunks: 0,
-          indexed_chunks: 0,
+      },
+      metrics: metricSet({ documents: "0", chunks: "0" }),
+      pipeline: baseOverview().pipeline.map((pipelineStep) => ({
+        ...pipelineStep,
+        count: 0,
+        status: "pending",
+      })),
+      issues: [
+        {
+          id: "no_documents",
+          severity: "critical",
+          title: "No documents ingested",
+          detail: "CorpusLab needs documents before retrieval can run.",
+          route: "/app/sources",
+          action_label: "Ingest documents",
         },
-      }),
-    );
+      ],
+      document_mix: [],
+      embedding_status: {
+        ...baseOverview().embedding_status,
+        total_chunks: 0,
+        indexed_chunks: 0,
+      },
+    };
+    demoResponse = baseDemo({
+      sample_corpus_loaded: false,
+      chunks_created: false,
+      embeddings_indexed: false,
+      document_count: 0,
+      chunk_count: 0,
+      indexed_chunk_count: 0,
+      retrieval_run_id: null,
+      trace_id: null,
+      report_id: null,
+    });
 
     renderOverview();
 
     expect(
-      await screen.findByText(/get to a trusted retrieval result/i),
+      await screen.findByText(/from sample corpus to audit report/i),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /open corpus/i })).toHaveAttribute(
-      "href",
-      "/app/sources",
-    );
+    expect(
+      screen.getByRole("button", { name: /load sample corpus/i }),
+    ).toBeInTheDocument();
   });
 
   it("recommends indexing when embeddings are missing", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      responseJson({
-        ...baseOverview(),
-        health: {
-          score: 70,
-          status: "needs_indexing",
-          summary: "Embeddings need attention.",
-          primary_action: {
-            id: "index_embeddings",
-            label: "Index embeddings",
-            detail: "Refresh local embeddings.",
-            route: "/app/retrieval",
-            priority: "primary",
-          },
+    overviewResponse = {
+      ...baseOverview(),
+      health: {
+        score: 70,
+        status: "needs_indexing",
+        summary: "Embeddings need attention.",
+        primary_action: {
+          id: "index_embeddings",
+          label: "Index embeddings",
+          detail: "Refresh local embeddings.",
+          route: "/app/retrieval",
+          priority: "primary",
         },
-        issues: [
-          {
-            id: "missing_embeddings",
-            severity: "warning",
-            title: "Missing embeddings",
-            detail: "2 chunks need local embeddings.",
-            route: "/app/retrieval",
-            action_label: "Index embeddings",
-          },
-        ],
-        embedding_status: {
-          ...baseOverview().embedding_status,
-          indexed_chunks: 2,
-          missing_chunks: 2,
+      },
+      issues: [
+        {
+          id: "missing_embeddings",
+          severity: "warning",
+          title: "Missing embeddings",
+          detail: "2 chunks need local embeddings.",
+          route: "/app/retrieval",
+          action_label: "Index embeddings",
         },
-      }),
-    );
+      ],
+      embedding_status: {
+        ...baseOverview().embedding_status,
+        indexed_chunks: 2,
+        missing_chunks: 2,
+      },
+    };
+    demoResponse = baseDemo({
+      ...baseDemo().progress,
+      embeddings_indexed: false,
+      indexed_chunk_count: 2,
+    });
 
     renderOverview();
 
     expect(await screen.findByText(/indexing needed/i)).toBeInTheDocument();
     expect(screen.getByText("Missing embeddings")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /index evidence/i }),
-    ).toHaveAttribute("href", "/app/retrieval");
+      screen.getByRole("button", { name: /index sample/i }),
+    ).toBeInTheDocument();
   });
 
   it("surfaces weak trace risk and links to the Trace Debugger", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      responseJson({
-        ...baseOverview(),
-        issues: [
-          {
-            id: "weak_traces",
-            severity: "warning",
-            title: "Weak trace evidence",
-            detail: "1 trace contains weak evidence or failure labels.",
-            route: "/app/traces",
-            action_label: "Debug traces",
-          },
-        ],
-        actions: [
-          {
-            id: "review_weak_traces",
-            label: "Review weak traces",
-            detail: "Inspect failure labels and rerun retrieval modes.",
-            route: "/app/traces",
-            priority: "primary",
-          },
-        ],
-      }),
-    );
+    overviewResponse = {
+      ...baseOverview(),
+      issues: [
+        {
+          id: "weak_traces",
+          severity: "warning",
+          title: "Weak trace evidence",
+          detail: "1 trace contains weak evidence or failure labels.",
+          route: "/app/traces",
+          action_label: "Debug traces",
+        },
+      ],
+      actions: [
+        {
+          id: "review_weak_traces",
+          label: "Review weak traces",
+          detail: "Inspect failure labels and rerun retrieval modes.",
+          route: "/app/traces",
+          priority: "primary",
+        },
+      ],
+    };
 
     renderOverview();
 
@@ -280,6 +301,35 @@ function baseOverview() {
       average_precision_at_k: 1,
       created_at: "2026-06-25T00:00:00Z",
     },
+  };
+}
+
+function baseDemo(
+  progress: DemoProgress = {
+    sample_corpus_loaded: true,
+    chunks_created: true,
+    embeddings_indexed: true,
+    document_count: 3,
+    chunk_count: 12,
+    indexed_chunk_count: 12,
+    retrieval_run_id: "run-1",
+    trace_id: "trace-1",
+    report_id: "report-1",
+  },
+) {
+  return {
+    version: "corpuslab-guided-demo-v1",
+    project_id: "project-1",
+    source_id: "source-1",
+    progress,
+    suggested_queries: [
+      {
+        id: "account_recovery",
+        question: "How long does a password reset link remain valid?",
+        description: "Diagnose duplicate support evidence.",
+        recommended: true,
+      },
+    ],
   };
 }
 

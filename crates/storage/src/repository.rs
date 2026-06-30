@@ -215,6 +215,34 @@ pub trait ReportRepository: Send + Sync {
     ) -> Result<DebugReport, StorageError>;
 }
 
+#[async_trait]
+pub trait DemoRepository: Send + Sync {
+    async fn ensure_demo_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project: Project,
+    ) -> Result<Project, StorageError>;
+    async fn ensure_demo_source(&self, source: Source) -> Result<Source, StorageError>;
+    async fn upsert_demo_document_with_chunks(
+        &self,
+        document: Document,
+        chunks: Vec<Chunk>,
+    ) -> Result<bool, StorageError>;
+    async fn get_demo_source(
+        &self,
+        workspace_id: WorkspaceId,
+        version_marker: &str,
+    ) -> Result<Option<SourceSummary>, StorageError>;
+    async fn latest_retrieval_query_for_source(
+        &self,
+        source_id: rag_debugger_core::SourceId,
+    ) -> Result<Option<RetrievalQueryResponse>, StorageError>;
+    async fn latest_trace_for_source(
+        &self,
+        source_id: rag_debugger_core::SourceId,
+    ) -> Result<Option<Trace>, StorageError>;
+}
+
 /// Compatibility boundary for the synchronous upload workflow.
 pub trait IngestionRepository:
     ProjectRepository + SourceRepository + DocumentRepository + Send + Sync
@@ -236,6 +264,7 @@ pub trait AppRepository:
     + AuthRepository
     + CiEvalRepository
     + ReportRepository
+    + DemoRepository
 {
 }
 
@@ -249,5 +278,6 @@ impl<T> AppRepository for T where
         + AuthRepository
         + CiEvalRepository
         + ReportRepository
+        + DemoRepository
 {
 }

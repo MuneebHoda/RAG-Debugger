@@ -1,6 +1,7 @@
 export * from "./apiKeys";
 export * from "./auth";
 export * from "./config";
+export * from "./demo";
 export * from "./embeddings";
 export * from "./evalLab";
 export * from "./health";

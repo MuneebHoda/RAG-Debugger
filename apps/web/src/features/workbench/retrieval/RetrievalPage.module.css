@@ -41,6 +41,19 @@
   gap: 1rem;
 }
 
+.emptyNotice {
+  border-left: 3px solid var(--color-citron-500);
+  background: color-mix(in srgb, var(--color-citron-500) 8%, white);
+  color: var(--color-ink-700);
+  font-size: 0.8rem;
+  padding: 0.7rem 0.85rem;
+}
+
+.emptyNotice a {
+  color: var(--color-teal-900);
+  font-weight: 850;
+}
+
 .controls {
   min-height: 0;
 }
@@ -60,6 +73,46 @@
   border: 1px solid #c9d6df;
   border-radius: var(--radius-sm);
   padding: 10px;
+}
+
+.suggestedQueries {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.suggestedQueries > span {
+  color: var(--color-ink-600);
+  font-size: 0.72rem;
+  font-weight: 850;
+}
+
+.suggestedQueries > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.suggestedQueries button {
+  display: inline-flex;
+  min-height: 2.1rem;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-800);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.73rem;
+  font-weight: 800;
+  padding: 0.35rem 0.6rem;
+  text-transform: capitalize;
+}
+
+.suggestedQueries small {
+  color: var(--color-teal-900);
+  font-size: 0.6rem;
+  text-transform: uppercase;
 }
 
 .primaryAction {
