@@ -36,12 +36,12 @@ The web app lives in `apps/web/src`.
 - `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups. Landing-specific interaction state remains local to its section instead of expanding shared primitives prematurely.
 - `lib/apiClient.ts` is a compatibility barrel for the API boundary. New code should prefer domain exports under `lib/api`, such as `lib/api/sources`, `lib/api/retrieval`, `lib/api/traces`, and `lib/api/evalLab`.
 - Domain files under `pages` are thin route wrappers or compatibility re-exports. Product implementation belongs under `features`, following `docs/frontend-architecture.md`.
-- `pages/OverviewPage.tsx`, `ReportsPage.tsx`, and `SettingsPage.tsx` still own legacy route implementations and should move behind feature boundaries through focused refactors.
+- `pages/OverviewPage.tsx` and `SettingsPage.tsx` still own legacy route implementations and should move behind feature boundaries through focused refactors.
 - `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
 - `features/workbench/retrieval` owns the question-first retrieval test. A domain hook coordinates source, embedding, query, and trace mutations; focused panels own query, filter, and embedding controls; result components own evidence summaries, citations, and ranking details.
 - `features/workbench/traces` owns the searchable run list and focused `/app/traces/:traceId` debugger. A domain hook owns trace loading and tab state; separate components own summary, failure labels, evidence metrics, timeline spans, reruns, and Quality-case creation.
 - `features/workbench/eval-lab` owns the Quality overview, focused dataset editing, experiment execution, gate results, and failure diagnosis routes.
-- `pages/ReportsPage.tsx` prioritizes shareable CI failures, run diagnoses, and corpus findings. `pages/SettingsPage.tsx` separates Workspace, API keys, Runtime, and Privacy tabs.
+- `features/workbench/reports` owns audit report creation, generated report lists, focused `/app/reports/:reportId` detail, privacy classification, and Markdown copy. Existing CI failures, run diagnoses, and corpus findings remain visible as report candidates. `pages/SettingsPage.tsx` separates Workspace, API keys, Runtime, and Privacy tabs.
 
 The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`, navigation groups destinations by user intent, and route errors remain inside a recoverable workbench boundary.
 

@@ -44,6 +44,7 @@ Current workbench implementations live in:
 - `features/workbench/traces`: a focused run list, trace query/tab orchestration hook, and separate summary, failure, evidence, metrics, timeline, rerun, and Quality components.
 - `features/workbench/eval-lab`: datasets, cases, experiments, gates, and CI quality runs.
 - `features/workbench/home`: guided setup and next actions.
+- `features/workbench/reports`: report creation, generated report lists, focused report detail, privacy status, and Markdown copy actions.
 
 ## API Boundary
 

@@ -25,6 +25,18 @@ export async function requestJson<T>(
   return readJsonResponse<T>(response, okStatuses);
 }
 
+export async function requestText(
+  path: string,
+  init: RequestInit = {},
+  okStatuses: number[] = [200],
+): Promise<string> {
+  const response = await fetch(apiUrl(path), {
+    credentials: "include",
+    ...init,
+  });
+  return readTextResponse(response, okStatuses);
+}
+
 export function jsonRequest(
   method: "POST" | "PATCH" | "DELETE",
   body: unknown,
@@ -43,17 +55,21 @@ export async function readJsonResponse<T>(
   okStatuses: number[] = [200],
 ): Promise<T> {
   if (!okStatuses.includes(response.status)) {
-    const text = await response.text();
-    const error = parseErrorEnvelope(text);
-    throw new ApiError(
-      error.message ?? `Request failed with ${response.status}`,
-      response.status,
-      text,
-      error.code,
-    );
+    throw await responseError(response);
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function readTextResponse(
+  response: Response,
+  okStatuses: number[] = [200],
+): Promise<string> {
+  if (!okStatuses.includes(response.status)) {
+    throw await responseError(response);
+  }
+
+  return response.text();
 }
 
 type ApiErrorEnvelope = {
@@ -84,6 +100,17 @@ function parseErrorEnvelope(body: string): {
   } catch {
     return {};
   }
+}
+
+async function responseError(response: Response): Promise<ApiError> {
+  const body = await response.text();
+  const error = parseErrorEnvelope(body);
+  return new ApiError(
+    error.message ?? `Request failed with ${response.status}`,
+    response.status,
+    body,
+    error.code,
+  );
 }
 
 function apiUrl(path: string): string {
