@@ -16,9 +16,10 @@ use crate::{
     },
     source::{DocumentId, SourceId},
     trace::TraceId,
+    EvidenceDiagnosisSummary,
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DebugReport {
     pub id: DebugReportId,
     pub workspace_id: WorkspaceId,
@@ -36,6 +37,8 @@ pub struct DebugReport {
     pub recommendations: Vec<DebugReportRecommendation>,
     #[serde(default)]
     pub evidence: Vec<DebugReportEvidenceRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosis: Option<EvidenceDiagnosisSummary>,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
@@ -120,6 +123,8 @@ pub struct DebugReportRecommendation {
     pub action: String,
     #[serde(default)]
     pub finding_codes: Vec<String>,
+    #[serde(default)]
+    pub evidence_refs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]

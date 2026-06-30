@@ -29,6 +29,24 @@ fn debug_report_round_trips_with_rfc3339_timestamp() {
 }
 
 #[test]
+fn older_reports_default_new_diagnosis_fields() {
+    let mut value = serde_json::to_value(sample_report()).expect("report serializes");
+    value
+        .as_object_mut()
+        .expect("report object")
+        .remove("diagnosis");
+    value["recommendations"][0]
+        .as_object_mut()
+        .expect("recommendation object")
+        .remove("evidence_refs");
+
+    let decoded: DebugReport = serde_json::from_value(value).expect("legacy report deserializes");
+
+    assert!(decoded.diagnosis.is_none());
+    assert!(decoded.recommendations[0].evidence_refs.is_empty());
+}
+
+#[test]
 fn report_sources_use_stable_discriminators() {
     let sources = [
         (
@@ -149,6 +167,7 @@ fn sample_report() -> DebugReport {
             rationale: "Duplicate chunks reduce result diversity.".to_owned(),
             action: "Deduplicate normalized chunk text before embedding.".to_owned(),
             finding_codes: vec!["duplicate_evidence".to_owned()],
+            evidence_refs: vec!["E1".to_owned()],
         }],
         evidence: vec![DebugReportEvidenceRef {
             label: "E1".to_owned(),
@@ -166,6 +185,7 @@ fn sample_report() -> DebugReport {
             chunk_quality_flags: vec![ChunkQualityFlag::Duplicate],
             retrieval_quality_flags: vec![RetrievalQualityFlag::Duplicate],
         }],
+        diagnosis: None,
         created_at: OffsetDateTime::parse("2026-06-30T08:15:30Z", &Rfc3339)
             .expect("valid timestamp"),
     }

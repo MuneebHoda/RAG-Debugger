@@ -52,6 +52,8 @@ pub async fn create_report_from_trace(
         .get_trace_detail(request.trace_id)
         .await
         .map_err(source_storage_error("trace"))?;
+    let trace =
+        rag_debugger_rag::tracing::ensure_trace_diagnosis(trace, &state.config().product.debugger);
     let report = build_trace_debug_report(
         build_context(user.workspace.id, trace.project_id, request.privacy_mode),
         &trace,

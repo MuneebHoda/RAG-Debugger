@@ -27,7 +27,7 @@ The report should answer:
 
 `crates/core/src/report.rs` defines the additive audit-report contracts.
 
-`DebugReport` contains workspace and project ownership, a title, privacy-filtered subject, source, privacy mode, executive summary, deterministic context metadata, findings, recommendations, evidence references, and creation time.
+`DebugReport` contains workspace and project ownership, a title, privacy-filtered subject, source, privacy mode, executive summary, deterministic context metadata, findings, recommendations, evidence references, an optional structured diagnosis snapshot, and creation time.
 
 Report sources are tagged by `type`:
 
@@ -62,7 +62,7 @@ Allows complete local diagnostic detail for investigation. It is not shareable o
 
 ## Determinism
 
-Reports do not use an LLM. Given the same stored source, privacy mode, and report-builder version, findings, evidence ordering, failure-label ordering, and recommendations must be stable. Generated IDs and timestamps are excluded from deterministic equality.
+Reports do not use an LLM. The same analyzer in `crates/rag/src/diagnosis.rs` supplies retrieval, trace, Eval Lab, and report diagnosis. Given the same stored source, privacy mode, debugger policy, and report-builder version, findings, evidence ordering, failure-label ordering, score explanations, and recommendations must be stable. Generated IDs and timestamps are excluded from deterministic equality.
 
 Configuration context uses an ordered map so Markdown and API output remain stable. Report builders must derive recommendations from explicit failure labels and metrics rather than open-ended text generation.
 
@@ -106,18 +106,19 @@ Markdown responses use `text/markdown; charset=utf-8` and a stable attachment fi
 The renderer in `crates/rag/src/reports/markdown.rs` produces these stable sections:
 
 1. Executive Summary
-2. Report Source and Privacy Classification
-3. System and Configuration Snapshot
-4. Failing Queries or Cases
-5. Evidence Diagnosis
-6. Failure Labels
-7. Rerun, Experiment, and Regression Changes
-8. Prioritized Recommendations
-9. Privacy and Sharing Note
+2. Deterministic Diagnosis, when the report contains a v2 diagnosis snapshot
+3. Report Source and Privacy Classification
+4. System and Configuration Snapshot
+5. Failing Queries or Cases
+6. Evidence Diagnosis
+7. Failure Labels
+8. Rerun, Experiment, and Regression Changes
+9. Prioritized Recommendations
+10. Privacy and Sharing Note
 
 Context metadata is emitted in ordered-map order. Findings, evidence, failure labels, and recommendations preserve contract order, with duplicate failure labels removed by first occurrence. User-controlled Markdown punctuation is escaped and angle brackets cannot become raw HTML.
 
-`metadata_only` export performs defense-in-depth filtering: it omits subject content, document paths, section titles, evidence snippets, and context keys associated with queries, prompts, answers, text, paths, or sections. `snippets_allowed` may include approved content, but evidence snippets are capped at 280 characters both during report construction and again during export. `full_local_only` remains non-exportable.
+`metadata_only` export performs defense-in-depth filtering: it omits subject content, document paths, section titles, evidence snippets, and context keys associated with queries, prompts, answers, text, paths, or sections. Structured diagnosis contains only IDs, scores, labels, and deterministic remediation text, so it remains safe under this mode. `snippets_allowed` may include approved content, but evidence snippets are capped at 280 characters both during report construction and again during export. `full_local_only` remains non-exportable.
 
 Checked-in fixtures under `crates/rag/tests/fixtures/reports` lock exact trace, eval, CI, metadata-only, and snippets-allowed output. Maintainers can intentionally regenerate them with:
 

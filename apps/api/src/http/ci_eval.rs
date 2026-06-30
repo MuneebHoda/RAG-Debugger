@@ -14,7 +14,8 @@ use rag_debugger_core::{
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
     evals::{
-        compare_mode_results, evaluate_gate, evaluate_retrieval_eval_case, summarize_mode_result,
+        compare_mode_results, evaluate_gate, evaluate_retrieval_eval_case_with_config,
+        summarize_mode_result,
     },
     retrieval::LocalHybridRetriever,
     RagError,
@@ -170,7 +171,8 @@ async fn run_experiment_for_dataset(
 ) -> Result<RetrievalEvalExperiment, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
-    let retriever = LocalHybridRetriever::new(provider, state.config().product.retrieval.clone());
+    let retriever = LocalHybridRetriever::new(provider, state.config().product.retrieval.clone())
+        .with_debugger_config(state.config().product.debugger.clone());
     let mut mode_results = Vec::with_capacity(modes.len());
 
     for mode in &modes {
@@ -191,7 +193,11 @@ async fn run_experiment_for_dataset(
             let response = retriever
                 .retrieve(query_request, candidates)
                 .map_err(rag_error_to_api_error)?;
-            case_results.push(evaluate_retrieval_eval_case(&case, &response));
+            case_results.push(evaluate_retrieval_eval_case_with_config(
+                &case,
+                &response,
+                &state.config().product.debugger,
+            ));
         }
         mode_results.push(summarize_mode_result(*mode, case_results));
     }

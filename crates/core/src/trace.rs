@@ -3,6 +3,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
+    diagnosis::{EvidenceDiagnosisSummary, RerunDiagnosisSummary},
     model::ModelConfigId,
     project::ProjectId,
     retrieval::{
@@ -40,6 +41,8 @@ pub struct Trace {
     pub retrieval: Option<RetrievalQueryResponse>,
     #[serde(default)]
     pub reruns: Vec<TraceRerunComparison>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosis: Option<EvidenceDiagnosisSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -142,6 +145,8 @@ pub struct TraceRerunComparison {
     pub latency_delta_ms: i64,
     pub overlap_count: u32,
     pub changed_rank_count: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosis: Option<RerunDiagnosisSummary>,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }

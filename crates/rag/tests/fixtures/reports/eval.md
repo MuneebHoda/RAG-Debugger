@@ -6,6 +6,16 @@ CorpusLab RAG Audit Report
 
 The evaluation gate failed with one missing-evidence case.
 
+## Deterministic Diagnosis
+
+| Diagnosis field | Value |
+| --- | --- |
+| Outcome | failing |
+| Primary issue | missing\_expected\_evidence |
+| Severity | critical |
+
+This report looks failing. Primary issue: Expected evidence was not retrieved
+
 ## Report Source and Privacy Classification
 
 | Field | Value |

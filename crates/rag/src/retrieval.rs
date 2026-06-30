@@ -5,8 +5,8 @@ use std::{
 
 use async_trait::async_trait;
 use rag_debugger_core::{
-    Chunk, ChunkEmbedding, ChunkPreview, ChunkQualityFlag, EmbeddingModelInfo, EvidenceStrength,
-    ExtractiveAnswer, ExtractiveAnswerStatus, RetrievalCitation, RetrievalConfig,
+    Chunk, ChunkEmbedding, ChunkPreview, ChunkQualityFlag, DebuggerConfig, EmbeddingModelInfo,
+    EvidenceStrength, ExtractiveAnswer, ExtractiveAnswerStatus, RetrievalCitation, RetrievalConfig,
     RetrievalEmbeddingReadiness, RetrievalEmbeddingStatus, RetrievalMatchedTerm, RetrievalMode,
     RetrievalQualityFlag, RetrievalQueryHit, RetrievalQueryRequest, RetrievalQueryResponse,
     RetrievalQueryRun, RetrievalQueryRunId, RetrievalRun, RetrievalScoreBreakdown,
@@ -16,6 +16,7 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
+    diagnosis::attach_diagnosis,
     embedding::{cosine_similarity, EmbeddingProvider, LocalHashEmbeddingProvider},
     RagError,
 };
@@ -46,6 +47,7 @@ impl Retriever for PlaceholderRetriever {
 pub struct LocalHybridRetriever {
     embedding_provider: LocalHashEmbeddingProvider,
     config: RetrievalConfig,
+    debugger_config: DebuggerConfig,
 }
 
 impl LocalHybridRetriever {
@@ -53,7 +55,13 @@ impl LocalHybridRetriever {
         Self {
             embedding_provider,
             config,
+            debugger_config: DebuggerConfig::default(),
         }
+    }
+
+    pub fn with_debugger_config(mut self, debugger_config: DebuggerConfig) -> Self {
+        self.debugger_config = debugger_config;
+        self
     }
 
     pub fn retrieve(
@@ -75,11 +83,14 @@ impl LocalHybridRetriever {
         let embedding_model = self.embedding_provider.model();
         let query_terms = query_terms(&request.query);
         if query_terms.is_empty() && matches!(request.retrieval_mode, RetrievalMode::Lexical) {
-            return Ok(response_without_evidence(
-                request,
-                started_at.elapsed().as_millis() as u64,
-                not_required_embedding_status(embedding_model, candidates.len() as u32),
-                None,
+            return Ok(attach_diagnosis(
+                response_without_evidence(
+                    request,
+                    started_at.elapsed().as_millis() as u64,
+                    not_required_embedding_status(embedding_model, candidates.len() as u32),
+                    None,
+                ),
+                &self.debugger_config,
             ));
         }
 
@@ -95,11 +106,14 @@ impl LocalHybridRetriever {
             && embedding_status.indexed_chunks == 0
             && embedding_status.total_chunks > 0
         {
-            return Ok(response_without_evidence(
+            return Ok(attach_diagnosis(
+                response_without_evidence(
                 request,
                 started_at.elapsed().as_millis() as u64,
                 embedding_status,
                 Some("Embeddings are not indexed yet. Index local embeddings, then run this query again."),
+                ),
+                &self.debugger_config,
             ));
         }
 
@@ -145,12 +159,16 @@ impl LocalHybridRetriever {
             created_at: OffsetDateTime::now_utc(),
         };
 
-        Ok(RetrievalQueryResponse {
-            run,
-            answer,
-            hits,
-            embedding_status,
-        })
+        Ok(attach_diagnosis(
+            RetrievalQueryResponse {
+                run,
+                answer,
+                hits,
+                embedding_status,
+                diagnosis: None,
+            },
+            &self.debugger_config,
+        ))
     }
 }
 
@@ -172,6 +190,7 @@ fn response_without_evidence(
         answer: insufficient_answer_with_message(message),
         hits: Vec::new(),
         embedding_status,
+        diagnosis: None,
     }
 }
 

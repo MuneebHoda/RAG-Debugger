@@ -66,6 +66,12 @@ export function AnswerPanel({
       ) : response ? (
         <>
           <EmbeddingQueryStatus response={response} />
+          {response.diagnosis ? (
+            <div className={styles.diagnosisNotice}>
+              <strong>{response.diagnosis.outcome}</strong>
+              <span>{response.diagnosis.summary}</span>
+            </div>
+          ) : null}
           <p className={styles.answerText}>{response.answer.text}</p>
           {response.answer.citations.length > 0 ? (
             <div className={styles.citationList}>

@@ -12,8 +12,15 @@ pub struct ProductConfig {
     pub ingestion: IngestionConfig,
     pub chunking: ChunkingConfig,
     pub retrieval: RetrievalConfig,
+    #[serde(default)]
+    pub debugger: DebuggerConfig,
     pub embedding: EmbeddingConfig,
     pub ui: UiConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DebuggerConfig {
+    pub low_score_margin_ratio: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -93,11 +100,20 @@ impl Default for ProductConfig {
             ingestion: IngestionConfig::default(),
             chunking: ChunkingConfig::default(),
             retrieval: RetrievalConfig::default(),
+            debugger: DebuggerConfig::default(),
             embedding: EmbeddingConfig::default(),
             ui: UiConfig {
                 api_base_url: "http://127.0.0.1:8080".to_owned(),
                 show_local_badges: true,
             },
+        }
+    }
+}
+
+impl Default for DebuggerConfig {
+    fn default() -> Self {
+        Self {
+            low_score_margin_ratio: 0.10,
         }
     }
 }

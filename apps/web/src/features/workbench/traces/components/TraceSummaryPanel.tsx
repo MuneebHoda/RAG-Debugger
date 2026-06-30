@@ -1,36 +1,22 @@
-import { ArrowRight } from "lucide-react";
-import { Link } from "react-router-dom";
-
 import type { Trace } from "../../../../lib/api/traces";
 import styles from "../TraceDetailPage.module.css";
-import { recommendationFor } from "../utils/traceLabels";
 import { SaveToQualityPanel } from "./SaveToQualityPanel";
+import { TraceDiagnosisPanel } from "./TraceDiagnosisPanel";
 import { TraceFailureLabels } from "./TraceFailureLabels";
 
 export function TraceSummaryPanel({ trace }: { trace: Trace }) {
-  const recommendation = recommendationFor(trace.failure_labels);
   return (
     <div className={styles.stack}>
-      <div className={styles.summaryGrid}>
+      {trace.diagnosis ? (
+        <TraceDiagnosisPanel diagnosis={trace.diagnosis} />
+      ) : (
         <section className={styles.diagnosis}>
-          <span className={styles.diagnosisLabel}>What happened</span>
+          <span className={styles.diagnosisLabel}>Legacy diagnosis</span>
           <h2>{trace.summary}</h2>
-          <p>
-            {trace.failure_labels.length === 0
-              ? "CorpusLab found usable evidence without a deterministic failure signal."
-              : "CorpusLab found the following likely causes."}
-          </p>
+          <p>This saved run uses the earlier failure-label format.</p>
           <TraceFailureLabels labels={trace.failure_labels} />
         </section>
-
-        <section className={styles.actionPanel}>
-          <h2>Recommended next action</h2>
-          <p>{recommendation.detail}</p>
-          <Link to={recommendation.route}>
-            {recommendation.label} <ArrowRight aria-hidden="true" size={16} />
-          </Link>
-        </section>
-      </div>
+      )}
 
       <section className={styles.panel}>
         <div className={styles.panelHeading}>

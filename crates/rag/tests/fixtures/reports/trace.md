@@ -6,6 +6,16 @@ CorpusLab RAG Audit Report
 
 Duplicate evidence weakened the result and the rerun improved latency.
 
+## Deterministic Diagnosis
+
+| Diagnosis field | Value |
+| --- | --- |
+| Outcome | mixed |
+| Primary issue | duplicate\_evidence |
+| Severity | warning |
+
+This report looks mixed. Primary issue: Duplicate evidence crowded the ranking
+
 ## Report Source and Privacy Classification
 
 | Field | Value |

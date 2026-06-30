@@ -32,6 +32,9 @@ export interface ProductConfig {
     answer_citation_limit: number;
     weights: Record<string, number>;
   };
+  debugger: {
+    low_score_margin_ratio: number;
+  };
   embedding: {
     model: EmbeddingModelInfo;
     provider_kind: "local_hash";

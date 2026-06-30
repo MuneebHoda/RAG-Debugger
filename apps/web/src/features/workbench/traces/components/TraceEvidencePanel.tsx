@@ -17,16 +17,31 @@ export function TraceEvidencePanel({ trace }: { trace: Trace }) {
         <p className={styles.answer}>No evidence was retrieved.</p>
       ) : (
         <div className={styles.evidenceList}>
-          {hits.map((hit) => (
-            <EvidenceCard hit={hit} key={hit.chunk.id} />
-          ))}
+          {hits.map((hit) => {
+            const explanation = trace.diagnosis?.score_explanations.find(
+              (item) => item.chunk_id === hit.chunk.id,
+            );
+            return (
+              <EvidenceCard
+                explanation={explanation}
+                hit={hit}
+                key={hit.chunk.id}
+              />
+            );
+          })}
         </div>
       )}
     </section>
   );
 }
 
-function EvidenceCard({ hit }: { hit: RetrievalQueryHit }) {
+function EvidenceCard({
+  hit,
+  explanation,
+}: {
+  hit: RetrievalQueryHit;
+  explanation?: NonNullable<Trace["diagnosis"]>["score_explanations"][number];
+}) {
   return (
     <article className={styles.evidenceCard}>
       <div className={styles.evidenceHeader}>
@@ -46,7 +61,7 @@ function EvidenceCard({ hit }: { hit: RetrievalQueryHit }) {
         ) : null}
         <span>{hit.citation.checksum_prefix}</span>
       </div>
-      <TraceScoreBars hit={hit} />
+      <TraceScoreBars explanation={explanation} hit={hit} />
     </article>
   );
 }

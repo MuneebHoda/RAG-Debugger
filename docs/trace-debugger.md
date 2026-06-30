@@ -17,7 +17,7 @@ The implementation is deterministic and local in this pass. It does not call a h
 4. Click `Debug this run`. CorpusLab saves the trace and opens `/app/traces/:traceId`.
 5. Read the Summary diagnosis and recommended next action.
 6. Inspect ranked evidence and ordered spans in the Evidence and Timeline tabs.
-7. Rerun the trace with `lexical`, `vector`, or `hybrid` mode and compare score delta, latency delta, ranking movement, and overlap.
+7. Rerun the trace with `lexical`, `vector`, or `hybrid` mode and compare diagnosis outcome, resolved and introduced failures, evidence/citation changes, score delta, latency delta, ranking movement, and overlap.
 8. Create a privacy-classified audit report when the run diagnosis is ready to review or share.
 
 ## API Routes
@@ -59,8 +59,10 @@ The response includes the updated trace and the latest rerun comparison.
 
 ## Code Structure
 
-- `crates/core/src/trace.rs`: shared trace contracts, spans, failure labels, rerun comparison, and API request/response shapes.
-- `crates/rag/src/tracing.rs`: deterministic trace construction, failure-label assignment, timeline spans, and rerun comparison metrics.
+- `crates/core/src/diagnosis.rs`: shared outcome, failure, score-explanation, recommendation, and rerun-diagnosis contracts.
+- `crates/core/src/trace.rs`: trace snapshots, spans, legacy failure labels, rerun comparison, and API request/response shapes.
+- `crates/rag/src/diagnosis.rs`: the single deterministic analyzer used by retrieval, traces, Eval Lab, and reports.
+- `crates/rag/src/tracing.rs`: trace construction, legacy-label compatibility, timeline spans, and rerun comparison metrics.
 - `crates/storage/src/repository.rs`: repository methods for retrieval lookup and trace persistence.
 - `crates/storage/src/memory.rs`: in-memory trace storage for tests and no-Docker development.
 - `crates/storage/src/postgres/traces.rs`: Postgres trace storage with summary columns plus full JSON timeline.
@@ -69,7 +71,7 @@ The response includes the updated trace and the latest rerun comparison.
 - `apps/web/src/features/workbench/traces/TraceDetailPage.tsx`: focused debugger route composition.
 - `apps/web/src/features/workbench/traces/hooks/useTraceDebugger.ts`: trace query lifecycle and URL-backed tab selection.
 - `apps/web/src/features/workbench/traces/components`: run list, diagnosis, failure labels, evidence metrics, timeline, rerun, and explicit Quality-case workflows.
-- `apps/web/src/features/workbench/traces/utils`: pure run filtering, failure-label recommendations, and comparison formatting.
+- `apps/web/src/features/workbench/traces/utils`: pure run filtering and comparison formatting. Recommendation diagnosis comes from the backend analyzer.
 - `apps/web/src/features/workbench/retrieval/RetrievalPage.tsx`: `Debug this run` action after a retrieval query.
 
 ## Storage Model
@@ -92,7 +94,15 @@ Current spans are:
 - `eval_check`: placeholder status showing whether an eval was linked.
 - `generation`: reserved for future generation metadata when hosted or local model generation is added.
 
-## Failure Labels
+## Debugger Intelligence
+
+Every new retrieval response snapshots an `EvidenceDiagnosisSummary`. The summary classifies the run as `strong`, `mixed`, `weak`, or `failing`; identifies one primary issue; records affected evidence labels; explains the score components for every ranked chunk; and provides ordered remediation actions.
+
+The analyzer detects missing or partial embeddings, weak evidence, duplicate and heading-only chunks, a low top-two score margin, hybrid semantic/lexical disagreement, missing citations, an uncited top result, and missing expected evidence when Eval Lab supplies expectations. The low-margin rule uses `(top_score - second_score) / top_score` and the validated `RAG_DEBUGGER_LOW_SCORE_MARGIN_RATIO` setting, which defaults to `0.10`.
+
+Diagnosis contains only IDs, scores, labels, counts, and deterministic templates. It never copies queries, document paths, section titles, snippets, or chunk text. New results persist the diagnosis snapshot for reproducibility. Older trace JSON remains readable; the API computes a diagnosis when an older trace is opened and persists it on the next rerun or report creation.
+
+## Legacy Failure Labels
 
 The trace builder assigns labels from the saved retrieval response:
 
@@ -105,7 +115,7 @@ The trace builder assigns labels from the saved retrieval response:
 - `heading_only_evidence`: a heading-only chunk appeared as evidence.
 - `bad_chunking`: chunk quality signals suggest chunk boundaries need review.
 
-These labels are deterministic. They are meant to guide debugging, not replace human review.
+These fields remain populated from the structured diagnosis for `/api/v1` compatibility. They are meant to guide debugging, not replace human review.
 
 ## Rerun Comparison
 
@@ -115,6 +125,9 @@ A rerun keeps the original query and changes retrieval settings. The comparison 
 - `latency_delta_ms`: latest latency minus original latency.
 - `overlap_count`: how many chunk IDs appear in both original and rerun hits.
 - `changed_rank_count`: how many overlapping chunks moved rank.
+- outcome before and after;
+- resolved and introduced failure codes; and
+- gained/lost evidence and citation chunk IDs.
 
 This helps users see whether lexical, vector, or hybrid retrieval is improving evidence quality or merely reshuffling the same weak chunks.
 
@@ -122,8 +135,8 @@ This helps users see whether lexical, vector, or hybrid retrieval is improving e
 
 `/app/traces` is a searchable run list. Selecting a run opens `/app/traces/:traceId`, where the debugger has four focused tabs:
 
-- **Summary** explains what happened, likely causes, and the recommended next action.
-- **Evidence** shows ranked chunks, citations, quality, and normalized score bars.
+- **Summary** shows the primary diagnosis, all failure labels, affected evidence, and prioritized next actions.
+- **Evidence** shows ranked chunks, citations, quality, normalized score bars, dominant signal, and adjacent-score margins.
 - **Timeline** shows ordered query, retrieval, evidence, eval, and generation spans.
 - **Compare** reruns the same question with changed retrieval settings and shows score, latency, overlap, and rank movement.
 
@@ -133,7 +146,7 @@ Trace Detail also exposes **Create audit report** above the debugger tabs. The a
 
 ## Privacy
 
-Traces are local in this pass. A trace stores retrieval query text, extracted chunk evidence, citations, metadata, and diagnostics. Original uploaded binaries are not stored. Hosted sync should later honor `PrivacyMode` and sync only approved metadata, redacted traces, or explicit snippets.
+Traces remain inside the configured CorpusLab storage boundary. A trace stores retrieval query text, extracted chunk evidence, citations, metadata, and diagnostics. The structured diagnosis itself is content-free metadata. Original uploaded binaries are not stored, and no diagnosis path calls an external model.
 
 ## Next Steps
 

@@ -60,6 +60,8 @@ async fn retrieval_query_searches_all_indexed_documents() {
     assert_eq!(body["hits"][0]["rank"], 1);
     assert_eq!(body["hits"][0]["matched_terms"][0]["term"], "gpu");
     assert_eq!(body["hits"][0]["document"]["path"], "resume.md");
+    assert!(body["diagnosis"]["outcome"].is_string());
+    assert!(body["diagnosis"]["score_explanations"][0]["summary"].is_string());
 }
 
 #[tokio::test]
@@ -118,6 +120,11 @@ async fn retrieval_query_returns_insufficient_evidence_when_no_chunks_match() {
 
     assert_eq!(body["answer"]["status"], "insufficient_evidence");
     assert!(body["hits"].as_array().expect("hits").is_empty());
+    assert_eq!(body["diagnosis"]["outcome"], "failing");
+    assert_eq!(
+        body["diagnosis"]["primary_issue"]["code"],
+        "missing_document"
+    );
 }
 
 #[tokio::test]

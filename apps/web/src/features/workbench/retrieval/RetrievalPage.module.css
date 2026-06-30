@@ -54,6 +54,22 @@
   font-weight: 850;
 }
 
+.diagnosisNotice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  border-left: 3px solid var(--color-teal-700);
+  background: color-mix(in srgb, var(--color-teal-500) 6%, white);
+  color: var(--color-ink-700);
+  font-size: 0.78rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.diagnosisNotice strong {
+  color: var(--color-teal-900);
+  text-transform: capitalize;
+}
+
 .controls {
   min-height: 0;
 }

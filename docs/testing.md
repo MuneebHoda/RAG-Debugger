@@ -17,11 +17,11 @@ Expected coverage in the scaffold:
 - Document intelligence tests for profile detection, extraction quality, duplicate chunks, heading-only chunks, and evidence hints.
 - File extraction, multipart ingestion, source listing, chunk listing, strategy metadata, and structured failure tests.
 - Local embedding tests for deterministic dimensions, cosine similarity, related-domain matching, and dimension mismatch behavior.
-- Local retrieval tests for token normalization, lexical scoring, vector scoring, hybrid missing-embedding behavior, phrase boosts, section/path boosts, deduplication, quality flags, evidence strength, insufficient evidence, and cited evidence summaries.
+- Local retrieval tests for token normalization, lexical scoring, vector scoring, hybrid missing-embedding behavior, phrase boosts, section/path boosts, deduplication, quality flags, evidence strength, insufficient evidence, cited evidence summaries, weak/duplicate evidence diagnosis, score margins, hybrid disagreement, citations, and expected evidence.
 - Retrieval eval tests for recall@k, precision@k, MRR, citation coverage, top-hit rank, weak evidence counts, missing embedding failures, deterministic failure labels, and pass/fail calculation.
 - Public regression fixtures for support knowledge bases, policy documents, and technical documentation, with expected retrieval, trace, and Eval Lab outcomes under `fixtures/`.
 - API retrieval tests for all-doc search, document filtering, top-k, no-match response, embedding status/indexing, missing embeddings, lexical fallback mode, eval creation, eval run persistence, and request validation.
-- Trace tests for trace construction, failure label assignment, rerun comparison, trace creation from retrieval runs, trace listing/detail, rerun API behavior, and missing-trace errors.
+- Trace tests for trace construction, legacy failure-label compatibility, legacy snapshot enrichment, rerun diagnosis comparison, trace creation from retrieval runs, trace listing/detail, rerun API behavior, and missing-trace errors.
 - Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, gate evaluation, and failure diagnosis.
 - Auth and workspace tests for signup, login, logout, current-user, session cookies, duplicate email behavior, membership role, and protected workbench routes.
 - API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
@@ -70,7 +70,7 @@ Expected coverage in the scaffold:
 - App shell and workbench navigation render tests.
 - Corpus render and focused document-detail tests, including the advanced structured chunking control.
 - Test Retrieval render and mocked query tests, including one mode control, collapsed advanced settings, evidence summary, score bars, citations, and direct debugger navigation.
-- Runs tests for search/list navigation, focused detail tabs, failure diagnosis, rerun comparison, and explicit dataset/evidence selection for Quality.
+- Runs tests for search/list navigation, primary diagnosis, backend failure labels and recommendations, per-evidence score explanations, rerun diagnosis comparison, and explicit dataset/evidence selection for Quality.
 - Quality tests for the overview, focused dataset case management, experiment controls, gate-first result view, mode metrics, and failure diagnosis.
 - Auth tests for backend login/signup integration and session validation.
 - Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.

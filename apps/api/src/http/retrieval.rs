@@ -17,7 +17,8 @@ pub async fn query_retrieval(
     let retriever = LocalHybridRetriever::new(
         LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone()),
         state.config().product.retrieval.clone(),
-    );
+    )
+    .with_debugger_config(state.config().product.debugger.clone());
     let response = retriever
         .retrieve(request, candidates)
         .map_err(rag_error_to_api_error)?;

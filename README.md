@@ -2,7 +2,7 @@
 
 CorpusLab is a corpus workbench and observability platform for retrieval-augmented generation teams. It helps engineers diagnose why evidence was or was not retrieved across PDFs, policies, product docs, support knowledge bases, research papers, contracts, technical specs, code docs, wikis, resumes, and enterprise document sets.
 
-The current product slice includes file ingestion, structured document chunking, local embeddings, lexical/vector/hybrid retrieval, evidence summaries with citations, trace debugging, Eval Lab gates, CI-triggered eval runs, API keys, local auth/workspaces, corpus reports, safe runtime config, and a React workbench UI.
+The current product slice includes file ingestion, structured document chunking, local embeddings, lexical/vector/hybrid retrieval, deterministic evidence diagnosis, trace debugging, Eval Lab gates, CI-triggered eval runs, API keys, local auth/workspaces, corpus reports, safe runtime config, and a React workbench UI.
 
 ## Repository Layout
 

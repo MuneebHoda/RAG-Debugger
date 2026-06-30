@@ -6,6 +6,7 @@ use time::OffsetDateTime;
 use crate::{
     chunk::ChunkId,
     config::RetrievalWeights,
+    diagnosis::EvidenceDiagnosisSummary,
     embedding::EmbeddingModelInfo,
     model::ModelConfigId,
     project::ProjectId,
@@ -210,6 +211,8 @@ pub struct RetrievalEvalCaseEvaluation {
     pub retrieved_chunk_ids: Vec<ChunkId>,
     pub latency_ms: u64,
     pub failures: Vec<RetrievalEvalFailure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosis: Option<EvidenceDiagnosisSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

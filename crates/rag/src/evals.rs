@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 
 use rag_debugger_core::{
-    EvidenceStrength, RetrievalEmbeddingReadiness, RetrievalEvalCase, RetrievalEvalCaseEvaluation,
-    RetrievalEvalComparison, RetrievalEvalFailure, RetrievalEvalFailureLabel,
-    RetrievalEvalFailureSeverity, RetrievalEvalGate, RetrievalEvalGateStatus,
-    RetrievalEvalModeResult, RetrievalEvalResult, RetrievalMode, RetrievalQualityFlag,
-    RetrievalQueryResponse,
+    DebuggerConfig, EvidenceStrength, RetrievalEmbeddingReadiness, RetrievalEvalCase,
+    RetrievalEvalCaseEvaluation, RetrievalEvalComparison, RetrievalEvalFailure,
+    RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity, RetrievalEvalGate,
+    RetrievalEvalGateStatus, RetrievalEvalModeResult, RetrievalEvalResult, RetrievalMode,
+    RetrievalQualityFlag, RetrievalQueryResponse,
 };
+
+use crate::diagnosis::{diagnose_retrieval, ExpectedEvidence};
 
 const DEFAULT_RECALL_THRESHOLD: f32 = 0.80;
 const DEFAULT_WEAK_EVIDENCE_LIMIT: f32 = 0.20;
@@ -35,6 +37,14 @@ pub fn score_retrieval_eval_case(
 pub fn evaluate_retrieval_eval_case(
     case: &RetrievalEvalCase,
     response: &RetrievalQueryResponse,
+) -> RetrievalEvalCaseEvaluation {
+    evaluate_retrieval_eval_case_with_config(case, response, &DebuggerConfig::default())
+}
+
+pub fn evaluate_retrieval_eval_case_with_config(
+    case: &RetrievalEvalCase,
+    response: &RetrievalQueryResponse,
+    debugger_config: &DebuggerConfig,
 ) -> RetrievalEvalCaseEvaluation {
     let retrieved_chunk_ids = response
         .hits
@@ -207,6 +217,14 @@ pub fn evaluate_retrieval_eval_case(
         retrieved_chunk_ids,
         latency_ms: response.run.latency_ms,
         failures,
+        diagnosis: Some(diagnose_retrieval(
+            response,
+            debugger_config,
+            Some(ExpectedEvidence {
+                chunk_ids: &case.expected_chunk_ids,
+                document_ids: &case.expected_document_ids,
+            }),
+        )),
     }
 }
 
@@ -467,6 +485,7 @@ mod tests {
                 missing_chunks: 0,
                 stale_chunks: 0,
             },
+            diagnosis: None,
         };
 
         let result = score_retrieval_eval_case(&case, &response);
@@ -594,6 +613,7 @@ mod tests {
                 stale_chunks: 0,
             },
             hits,
+            diagnosis: None,
         }
     }
 

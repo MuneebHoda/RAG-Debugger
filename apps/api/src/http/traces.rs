@@ -34,6 +34,9 @@ pub async fn get_trace(
         .await
         .map_err(trace_storage_error)?;
 
+    let trace =
+        rag_debugger_rag::tracing::ensure_trace_diagnosis(trace, &state.config().product.debugger);
+
     Ok(Json(trace))
 }
 
@@ -70,7 +73,7 @@ pub async fn create_trace_from_retrieval_run(
         None => repository.ensure_default_project().await?.id,
     };
 
-    let trace = build_trace_from_retrieval(project_id, response);
+    let trace = build_trace_from_retrieval(project_id, response, &state.config().product.debugger);
     Ok(Json(repository.save_trace(trace).await?))
 }
 
@@ -80,10 +83,12 @@ pub async fn rerun_trace(
     Json(request): Json<RerunTraceRequest>,
 ) -> Result<Json<TraceRerunResponse>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    let mut trace = repository
+    let trace = repository
         .get_trace_detail(rag_debugger_core::TraceId(trace_id))
         .await
         .map_err(trace_storage_error)?;
+    let mut trace =
+        rag_debugger_rag::tracing::ensure_trace_diagnosis(trace, &state.config().product.debugger);
     let original = trace.retrieval.clone().ok_or_else(|| {
         ApiError::BadRequest("trace does not include a retrieval response".to_owned())
     })?;
@@ -102,19 +107,20 @@ pub async fn rerun_trace(
     let retriever = LocalHybridRetriever::new(
         LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone()),
         state.config().product.retrieval.clone(),
-    );
+    )
+    .with_debugger_config(state.config().product.debugger.clone());
     let response = retriever
         .retrieve(query_request.clone(), candidates)
         .map_err(rag_error_to_api_error)?;
     repository.save_retrieval_query(&response).await?;
 
-    let comparison = build_rerun_comparison(&original, query_request, response);
-    trace.reruns.push(comparison.clone());
-    trace.summary = format!(
-        "Reran this trace {} time(s); latest run changed top score by {:+.2}.",
-        trace.reruns.len(),
-        comparison.score_delta
+    let comparison = build_rerun_comparison(
+        &original,
+        query_request,
+        response,
+        &state.config().product.debugger,
     );
+    trace.reruns.push(comparison.clone());
     let trace = repository.save_trace(trace).await?;
 
     Ok(Json(TraceRerunResponse { trace, comparison }))
