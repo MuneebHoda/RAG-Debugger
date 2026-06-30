@@ -27,6 +27,7 @@ Expected coverage in the scaffold:
 - API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
 - API error contract tests for structured 400, 401, 404, and sanitized internal/storage responses.
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
+- ReportRepository contract coverage for snapshot ordering, duplicate IDs, missing reports, and workspace isolation.
 - Domain serialization tests as contracts become public.
 - Audit-report contract tests for source discriminators, privacy-mode wire values, optional evidence metadata, RFC3339 timestamps, and JSON round trips.
 - Audit-report builder tests for deterministic trace/eval/CI output, metadata redaction, bounded snippets, rerun and regression context, recommendation deduplication, and invalid trace sources.
@@ -42,6 +43,7 @@ Run the focused in-memory storage contract with:
 
 ```sh
 cargo test -p rag-debugger-storage --test memory_store_contract
+cargo test -p rag-debugger-storage --test report_store_contract
 cargo test -p rag-debugger-rag --test public_fixtures
 ```
 

@@ -99,6 +99,8 @@ Original uploaded binaries are not stored. The API stores source metadata, docum
 
 When chunking behavior changes, add a migration for any persisted metadata and keep old rows readable with explicit defaults.
 
+Audit report snapshots use the `debug_reports` table. List and detail repository methods require a workspace ID, and the canonical report body is stored as JSON with indexed ownership/source metadata. Run migrations before testing report persistence against Postgres.
+
 ## Retrieval Playground Flow
 
 1. Complete the file ingestion flow so chunks exist in Postgres.

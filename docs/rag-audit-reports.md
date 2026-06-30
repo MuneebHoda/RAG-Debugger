@@ -2,7 +2,7 @@
 
 RAG Audit Reports turn retrieval diagnostics into a reviewable engineering deliverable. A report freezes the evidence, failure signals, configuration context, and recommended fixes from a Trace Debugger run, Eval Lab experiment, CI eval run, or manual investigation.
 
-The current builder layer generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Persistence, APIs, UI integration, and Markdown rendering are delivered in separate reviewed tickets.
+The current builder layer generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories. APIs, UI integration, and Markdown rendering are delivered in separate reviewed tickets.
 
 ## Workflow
 
@@ -79,6 +79,12 @@ Trace builders require a saved retrieval response and include ranked evidence pl
 - Reports retain workspace and project ownership.
 - Logs must never contain report subjects, snippets, query text, credentials, or serialized report bodies.
 - Hosted sync and public report links are outside the MVP.
+
+## Persistence
+
+`ReportRepository` stores complete `DebugReport` snapshots and requires a workspace ID for list and detail reads. Multiple snapshots may be created from the same trace or experiment. Postgres stores the canonical report JSON alongside workspace, project, source, privacy, title, subject, and timestamp columns used for ownership and indexing.
+
+The default generation path is `metadata_only`; reports containing explicitly approved snippets or full local diagnostics remain inside the same configured storage boundary. No report persistence path sends data to an external service.
 
 ## Delivery Stack
 

@@ -259,6 +259,8 @@ The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contract
 
 `crates/rag/src/reports` builds deterministic reports from traces, Eval Lab experiments, and CI eval runs. Build context supplies IDs, ownership, privacy mode, and timestamp. Source builders freeze configuration and comparison metadata, map failure labels to stable findings and remediation categories, deduplicate recommendations, and apply report privacy before evidence enters the report.
 
+`ReportRepository` provides workspace-scoped save, list, and detail operations with MemoryStore/Postgres parity. Postgres stores one append-only `debug_reports` row per snapshot, including indexed workspace/project/source/privacy columns and canonical report JSON. Duplicate report IDs fail; multiple snapshots from the same source are allowed.
+
 ## Privacy And Security Model
 
 Default behavior is local and privacy-first.
