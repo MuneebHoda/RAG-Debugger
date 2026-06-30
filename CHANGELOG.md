@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Deterministic privacy-aware RAG audit report builders for traces, Eval Lab experiments, and CI regression runs.
 - Additive RAG Audit Report domain contracts for trace, Eval Lab, CI, and manual report sources with explicit privacy modes and deterministic evidence links.
 - Privacy-review triggers and a logging/redaction allowlist covering corpus data, queries, traces, credentials, exports, and hosted sync.
 - Documented retrieval, trace, Eval Lab, and privacy invariants with synthetic public regression corpora and deterministic failure-label coverage.

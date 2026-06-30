@@ -29,6 +29,7 @@ Expected coverage in the scaffold:
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
 - Domain serialization tests as contracts become public.
 - Audit-report contract tests for source discriminators, privacy-mode wire values, optional evidence metadata, RFC3339 timestamps, and JSON round trips.
+- Audit-report builder tests for deterministic trace/eval/CI output, metadata redaction, bounded snippets, rerun and regression context, recommendation deduplication, and invalid trace sources.
 
 DB-backed integration checks require local Postgres:
 

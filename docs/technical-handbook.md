@@ -255,7 +255,9 @@ Reports can originate from a trace, Eval Lab experiment, CI eval run, or manual 
 
 Report privacy is distinct from project privacy. `metadata_only` excludes query and document content, `snippets_allowed` permits explicitly approved bounded text, and `full_local_only` cannot be shared or exported without an explicit privacy downgrade. The full workflow and sharing rules are documented in `docs/rag-audit-reports.md`.
 
-The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Ticket 1 adds no report generation, persistence, API, export, or UI behavior.
+The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Audit reports are additive and currently have no persistence, API, export, or UI behavior.
+
+`crates/rag/src/reports` builds deterministic reports from traces, Eval Lab experiments, and CI eval runs. Build context supplies IDs, ownership, privacy mode, and timestamp. Source builders freeze configuration and comparison metadata, map failure labels to stable findings and remediation categories, deduplicate recommendations, and apply report privacy before evidence enters the report.
 
 ## Privacy And Security Model
 
