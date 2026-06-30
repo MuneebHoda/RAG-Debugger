@@ -2,7 +2,7 @@
 
 RAG Audit Reports turn retrieval diagnostics into a reviewable engineering deliverable. A report freezes the evidence, failure signals, configuration context, and recommended fixes from a Trace Debugger run, Eval Lab experiment, CI eval run, or manual investigation.
 
-The current workflow generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories, exposed through authenticated report APIs, and reviewed in the Reports workbench. Final Markdown template polish is delivered separately.
+The current workflow generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories, exposed through authenticated report APIs, reviewed in the Reports workbench, and exported through a professional privacy-aware Markdown template.
 
 ## Workflow
 
@@ -101,6 +101,32 @@ Creation defaults to `metadata_only` when `privacy_mode` is omitted and returns 
 
 Markdown responses use `text/markdown; charset=utf-8` and a stable attachment filename. `full_local_only` export returns `422 Unprocessable Entity`; users must create a redacted metadata or snippet report instead.
 
+## Markdown Export
+
+The renderer in `crates/rag/src/reports/markdown.rs` produces these stable sections:
+
+1. Executive Summary
+2. Report Source and Privacy Classification
+3. System and Configuration Snapshot
+4. Failing Queries or Cases
+5. Evidence Diagnosis
+6. Failure Labels
+7. Rerun, Experiment, and Regression Changes
+8. Prioritized Recommendations
+9. Privacy and Sharing Note
+
+Context metadata is emitted in ordered-map order. Findings, evidence, failure labels, and recommendations preserve contract order, with duplicate failure labels removed by first occurrence. User-controlled Markdown punctuation is escaped and angle brackets cannot become raw HTML.
+
+`metadata_only` export performs defense-in-depth filtering: it omits subject content, document paths, section titles, evidence snippets, and context keys associated with queries, prompts, answers, text, paths, or sections. `snippets_allowed` may include approved content, but evidence snippets are capped at 280 characters both during report construction and again during export. `full_local_only` remains non-exportable.
+
+Checked-in fixtures under `crates/rag/tests/fixtures/reports` lock exact trace, eval, CI, metadata-only, and snippets-allowed output. Maintainers can intentionally regenerate them with:
+
+```sh
+UPDATE_REPORT_FIXTURES=1 cargo test -p rag-debugger-rag --test report_markdown_snapshots
+```
+
+Fixture changes require review as public report-format changes, not routine test churn.
+
 ## Workbench
 
 `/app/reports` leads with saved audit reports and a source-driven creation form. Users select a saved trace or Eval Lab experiment, choose an explicit privacy mode, and open the generated snapshot directly. Existing CI gate failures, weak traces, and corpus warnings remain visible as report candidates.
@@ -121,6 +147,6 @@ The workflow is intentionally split into reviewable tickets:
 4. Authenticated `/api/v1/reports` routes and Markdown endpoint foundation.
 5. Focused Reports list/detail UI. **Implemented.**
 6. Trace, Eval Lab, and CI integration actions. **Implemented.**
-7. Professional Markdown rendering and snapshot tests.
+7. Professional Markdown rendering and snapshot tests. **Implemented.**
 
 PDF export, billing, hosted sync, external LLM calls, and broad Reports-page redesign are not part of this stack.

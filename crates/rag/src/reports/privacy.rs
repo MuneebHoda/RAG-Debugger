@@ -13,18 +13,19 @@ pub(super) fn evidence_text(
 ) -> Option<String> {
     match mode {
         DebugReportPrivacyMode::MetadataOnly => None,
-        DebugReportPrivacyMode::SnippetsAllowed => Some(truncate(snippet)),
+        DebugReportPrivacyMode::SnippetsAllowed => Some(bounded_snippet(snippet)),
         DebugReportPrivacyMode::FullLocalOnly => Some(full_text.to_owned()),
     }
 }
 
-fn truncate(value: &str) -> String {
-    let mut chars = value.chars();
-    let truncated = chars
-        .by_ref()
-        .take(MAX_REPORT_SNIPPET_CHARS)
-        .collect::<String>();
-    if chars.next().is_some() {
+pub(super) fn bounded_snippet(value: &str) -> String {
+    if value.chars().count() <= MAX_REPORT_SNIPPET_CHARS {
+        return value.to_owned();
+    }
+
+    let content_chars = MAX_REPORT_SNIPPET_CHARS.saturating_sub(3);
+    let truncated = value.chars().take(content_chars).collect::<String>();
+    if MAX_REPORT_SNIPPET_CHARS >= 3 {
         format!("{truncated}...")
     } else {
         truncated
@@ -42,7 +43,7 @@ mod tests {
         let snippet = evidence_text(DebugReportPrivacyMode::SnippetsAllowed, &value, &value)
             .expect("snippet is permitted");
 
-        assert_eq!(snippet.chars().count(), MAX_REPORT_SNIPPET_CHARS + 3);
+        assert_eq!(snippet.chars().count(), MAX_REPORT_SNIPPET_CHARS);
         assert!(snippet.ends_with("..."));
     }
 

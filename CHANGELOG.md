@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Professional deterministic Markdown audit exports with escaped user content, privacy enforcement, ordered sections, and checked-in trace/eval/CI snapshot fixtures.
 - Privacy-aware audit-report actions on Trace Detail, Eval experiment detail, and failed CI gates with direct report navigation and duplicate-submit protection.
 - Audit Reports workbench list, source-driven creation, focused report detail, privacy classification, and Markdown copy workflow.
 - Authenticated workspace-scoped audit report creation, list/detail, and privacy-enforced Markdown export APIs.

@@ -265,6 +265,8 @@ Protected `/api/v1/reports` routes create reports from traces, experiments, and 
 
 The Reports feature owns the shared creation action used by Trace Detail, Eval experiment detail, and failed CI gate rows. Every source integration opens a privacy confirmation panel, defaults to metadata-only, guards against duplicate submission, and navigates to the persisted report detail after creation.
 
+`crates/rag/src/reports/markdown.rs` renders paid-audit-quality Markdown with a stable executive summary, source/privacy classification, ordered configuration, failing cases, evidence diagnosis, failure labels, comparison changes, prioritized recommendations, and sharing note. The renderer escapes user-controlled Markdown, blocks raw HTML, re-applies the 280-character snippet cap, omits content-bearing fields in metadata-only mode, and rejects full-local exports. Exact output is protected by checked-in trace, eval, CI, metadata-only, and snippets-allowed fixtures.
+
 ## Privacy And Security Model
 
 Default behavior is local and privacy-first.
