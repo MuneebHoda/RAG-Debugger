@@ -71,7 +71,9 @@ CI run history appears in:
 
 - `/app/evals` under CI Gates.
 - Mission Control as latest gate status and recommended action.
-- `/app/reports` as failed-gate reports.
+- `/app/reports` as failed-gate report candidates with native CI audit-report creation.
+
+Creating a report from a failed CI gate preserves the CI run source, branch, commit, configuration label, regression deltas, newly failed cases, and gate outcome. The action defaults to `metadata_only` and opens the generated report directly after creation.
 
 ## Gate Rule
 

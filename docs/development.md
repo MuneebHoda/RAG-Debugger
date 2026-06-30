@@ -56,11 +56,21 @@ With `just`:
 ```sh
 just db-up
 just db-migrate
+just rust-check
+just web-check
 just check
+just ci-check
+just full-check
 just docs-pdf
 just api
 just web
 ```
+
+- `rust-check`: Rust formatting, clippy, workspace tests, and workspace build.
+- `web-check`: web formatting, typecheck, lint, tests, and production build.
+- `check`: the fast local gate combining `rust-check` and `web-check`.
+- `ci-check`: the release gate adding bundle budgets, Playwright, handbook generation, Postgres, and migrations.
+- `full-check`: backward-compatible alias for `ci-check`.
 
 ## Database Flow
 
@@ -72,6 +82,8 @@ sqlx migrate run
 ```
 
 The API runs migrations automatically at startup for local development. `just db-migrate` exists for explicit migration checks and CI-style workflows. `/readyz` checks database connectivity.
+
+The `just` migration recipes honor `DATABASE_URL` from the environment or `.env`. When neither is present, they use the documented Docker default `postgres://postgres:postgres@localhost:5432/rag_debugger`.
 
 ## File Ingestion Flow
 
@@ -86,6 +98,10 @@ The default strategy is `structured`, which is tuned for general corpora: techni
 Original uploaded binaries are not stored. The API stores source metadata, document profile, extraction quality, warnings, extracted chunk text, byte ranges, token counts, checksums, chunking strategy, section title, split reason, quality flags, duplicate status, text density, and evidence hints in Postgres.
 
 When chunking behavior changes, add a migration for any persisted metadata and keep old rows readable with explicit defaults.
+
+Audit report snapshots use the `debug_reports` table. List and detail repository methods require a workspace ID, and the canonical report body is stored as JSON with indexed ownership/source metadata. Run migrations before testing report persistence against Postgres.
+
+Report APIs require the same HttpOnly session used by the workbench. Generate reports from saved traces, experiments, or CI eval runs; omitted privacy mode defaults to `metadata_only`. Full-local reports remain readable in the workbench but are rejected by the Markdown export endpoint.
 
 ## Retrieval Playground Flow
 
@@ -162,6 +178,8 @@ just docs-pdf
 1. Add or update domain types in `crates/core`.
 2. Add behavior interfaces in `crates/rag` or repository traits in `crates/storage`.
 3. Implement API handlers under `apps/api`.
-4. Add UI routes/components under `apps/web`.
+4. Add thin UI route wrappers under `apps/web/src/pages` and implementation under `apps/web/src/features/workbench/<domain>`.
 5. Add tests at the lowest useful layer.
 6. Update docs or ADRs when the architecture changes.
+
+Read `docs/frontend-architecture.md` before adding or reorganizing frontend code. Route wrappers should compose or re-export feature pages; server state and workflow actions belong in domain hooks when page orchestration becomes complex.

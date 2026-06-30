@@ -5,7 +5,11 @@ use rag_debugger_core::*;
 use sqlx::{postgres::PgPoolOptions, PgPool};
 
 use crate::{
-    repository::{AuthRepository, CiEvalRepository, IngestionRepository},
+    repository::{
+        AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
+        HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
+        SourceRepository, TraceRepository,
+    },
     StorageError,
 };
 
@@ -16,6 +20,7 @@ mod embeddings;
 mod eval_lab;
 mod ingestion;
 mod projects;
+mod reports;
 mod retrieval;
 mod traces;
 
@@ -49,15 +54,21 @@ impl PostgresStore {
 }
 
 #[async_trait]
-impl IngestionRepository for PostgresStore {
+impl HealthRepository for PostgresStore {
     async fn ping(&self) -> Result<(), StorageError> {
         PostgresStore::ping(self).await
     }
+}
 
+#[async_trait]
+impl ProjectRepository for PostgresStore {
     async fn ensure_default_project(&self) -> Result<Project, StorageError> {
         PostgresStore::ensure_default_project(self).await
     }
+}
 
+#[async_trait]
+impl SourceRepository for PostgresStore {
     async fn create_source(&self, source: Source) -> Result<Source, StorageError> {
         PostgresStore::create_source(self, source).await
     }
@@ -75,6 +86,13 @@ impl IngestionRepository for PostgresStore {
         PostgresStore::complete_ingestion_run(self, id, status, totals).await
     }
 
+    async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError> {
+        PostgresStore::list_sources(self).await
+    }
+}
+
+#[async_trait]
+impl DocumentRepository for PostgresStore {
     async fn insert_document_with_chunks(
         &self,
         document: Document,
@@ -83,17 +101,16 @@ impl IngestionRepository for PostgresStore {
         PostgresStore::insert_document_with_chunks(self, document, chunks).await
     }
 
-    async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError> {
-        PostgresStore::list_sources(self).await
-    }
-
     async fn list_document_chunks(
         &self,
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError> {
         PostgresStore::list_document_chunks(self, document_id).await
     }
+}
 
+#[async_trait]
+impl RetrievalRepository for PostgresStore {
     async fn list_searchable_chunks(
         &self,
         request: &RetrievalQueryRequest,
@@ -118,7 +135,10 @@ impl IngestionRepository for PostgresStore {
     async fn latest_retrieval_query(&self) -> Result<RetrievalQueryResponse, StorageError> {
         PostgresStore::latest_retrieval_query(self).await
     }
+}
 
+#[async_trait]
+impl TraceRepository for PostgresStore {
     async fn save_trace(&self, trace: Trace) -> Result<Trace, StorageError> {
         PostgresStore::save_trace(self, trace).await
     }
@@ -130,7 +150,10 @@ impl IngestionRepository for PostgresStore {
     async fn get_trace_detail(&self, id: TraceId) -> Result<Trace, StorageError> {
         PostgresStore::get_trace_detail(self, id).await
     }
+}
 
+#[async_trait]
+impl EmbeddingRepository for PostgresStore {
     async fn embedding_status(
         &self,
         request: &EmbeddingIndexRequest,
@@ -152,7 +175,10 @@ impl IngestionRepository for PostgresStore {
     ) -> Result<(), StorageError> {
         PostgresStore::upsert_chunk_embeddings(self, embeddings).await
     }
+}
 
+#[async_trait]
+impl EvalRepository for PostgresStore {
     async fn create_retrieval_eval_case(
         &self,
         eval_case: RetrievalEvalCase,
@@ -358,5 +384,27 @@ impl CiEvalRepository for PostgresStore {
         config_label: &str,
     ) -> Result<Option<CiEvalRun>, StorageError> {
         PostgresStore::latest_ci_eval_run_for_dataset(self, dataset_id, config_label).await
+    }
+}
+
+#[async_trait]
+impl ReportRepository for PostgresStore {
+    async fn save_debug_report(&self, report: DebugReport) -> Result<DebugReport, StorageError> {
+        PostgresStore::save_debug_report(self, report).await
+    }
+
+    async fn list_debug_reports(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<DebugReport>, StorageError> {
+        PostgresStore::list_debug_reports(self, workspace_id).await
+    }
+
+    async fn get_debug_report(
+        &self,
+        workspace_id: WorkspaceId,
+        report_id: DebugReportId,
+    ) -> Result<DebugReport, StorageError> {
+        PostgresStore::get_debug_report(self, workspace_id, report_id).await
     }
 }

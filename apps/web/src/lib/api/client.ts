@@ -6,6 +6,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly body: string,
+    public readonly code?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -22,6 +23,18 @@ export async function requestJson<T>(
     ...init,
   });
   return readJsonResponse<T>(response, okStatuses);
+}
+
+export async function requestText(
+  path: string,
+  init: RequestInit = {},
+  okStatuses: number[] = [200],
+): Promise<string> {
+  const response = await fetch(apiUrl(path), {
+    credentials: "include",
+    ...init,
+  });
+  return readTextResponse(response, okStatuses);
 }
 
 export function jsonRequest(
@@ -42,15 +55,62 @@ export async function readJsonResponse<T>(
   okStatuses: number[] = [200],
 ): Promise<T> {
   if (!okStatuses.includes(response.status)) {
-    const text = await response.text();
-    throw new ApiError(
-      text || `Request failed with ${response.status}`,
-      response.status,
-      text,
-    );
+    throw await responseError(response);
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function readTextResponse(
+  response: Response,
+  okStatuses: number[] = [200],
+): Promise<string> {
+  if (!okStatuses.includes(response.status)) {
+    throw await responseError(response);
+  }
+
+  return response.text();
+}
+
+type ApiErrorEnvelope = {
+  error?: {
+    code?: unknown;
+    message?: unknown;
+  };
+};
+
+function parseErrorEnvelope(body: string): {
+  code?: string;
+  message?: string;
+} {
+  if (!body) return {};
+
+  try {
+    const envelope = JSON.parse(body) as ApiErrorEnvelope;
+    return {
+      code:
+        typeof envelope.error?.code === "string"
+          ? envelope.error.code
+          : undefined,
+      message:
+        typeof envelope.error?.message === "string"
+          ? envelope.error.message
+          : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function responseError(response: Response): Promise<ApiError> {
+  const body = await response.text();
+  const error = parseErrorEnvelope(body);
+  return new ApiError(
+    error.message ?? `Request failed with ${response.status}`,
+    response.status,
+    body,
+    error.code,
+  );
 }
 
 function apiUrl(path: string): string {

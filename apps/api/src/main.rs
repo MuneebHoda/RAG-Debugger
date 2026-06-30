@@ -9,7 +9,7 @@ use rag_debugger_api::{
 use rag_debugger_storage::{
     memory::MemoryStore,
     postgres::PostgresStore,
-    repository::{AppRepository, IngestionRepository},
+    repository::{AppRepository, ProjectRepository},
 };
 use tracing::info;
 

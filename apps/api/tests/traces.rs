@@ -120,6 +120,12 @@ async fn creating_trace_without_retrieval_run_is_rejected() {
         .expect("create trace response");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(response).await;
+    assert_eq!(body["error"]["code"], "bad_request");
+    assert!(body["error"]["message"]
+        .as_str()
+        .expect("error message")
+        .contains("retrieval query"));
 }
 
 #[tokio::test]
@@ -135,6 +141,9 @@ async fn missing_trace_returns_not_found() {
         .expect("missing trace response");
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = json_body(response).await;
+    assert_eq!(body["error"]["code"], "not_found");
+    assert!(body["error"]["message"].is_string());
 }
 
 async fn upload_text_file(app: &axum::Router, file_name: &str, content: &str) -> Value {

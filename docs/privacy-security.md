@@ -26,11 +26,14 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 ## Engineering Requirements
 
 - Every sync path must check `PrivacyMode`.
-- Logs must avoid raw document text and full prompts.
-- Logs must avoid embedding vectors and chunk checksums except short prefixes used for debugging.
+- Logs must follow [`docs/logging-redaction.md`](logging-redaction.md): raw document/chunk text, queries, prompts, answers, vectors, credentials, headers, and cookies are prohibited.
+- Safe diagnostics use opaque IDs, counts, statuses, durations, failure labels, aggregate metrics, and approved short checksum prefixes.
 - Upload handlers must enforce file count, per-file size, total request size, and supported type limits.
 - Workbench APIs require local authenticated sessions in development.
 - CI automation uses workspace-scoped API keys. Full secrets are shown once, stored only as hashes, and can be revoked.
 - Future hosted APIs should add invitations, SSO/SAML, SCIM, deeper RBAC, audit logging, and per-workspace retention settings.
 - Any export path must preserve project ownership and deletion semantics.
 - Report sharing must support redaction before it becomes a hosted/team feature.
+- Audit report creation defaults to `metadata_only`; `full_local_only` reports cannot use Markdown export.
+
+Changes that move data, add external providers, alter auth/retention/export behavior, or add telemetry must complete the [`Privacy Review Checklist`](privacy-review-checklist.md). Hosted sync and external model-provider boundaries require an ADR.

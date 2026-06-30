@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "expected-evidence-missing",
+      "expected_labels": ["expected_evidence_missing", "low_precision"],
+      "severity": "critical"
+    },
+    {
+      "id": "correct-document-wrong-chunk",
+      "expected_labels": ["correct_document_wrong_chunk"],
+      "severity": "warning"
+    },
+    {
+      "id": "degraded-evidence-signals",
+      "expected_labels": ["missing_embeddings", "weak_evidence", "heading_only_evidence", "duplicate_evidence"],
+      "gate_status": "failed"
+    }
+  ]
+}

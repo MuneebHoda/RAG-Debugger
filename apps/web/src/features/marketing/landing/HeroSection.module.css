@@ -1,0 +1,167 @@
+.hero {
+  position: relative;
+  display: flex;
+  min-height: min(800px, calc(100svh - 7.5rem));
+  align-items: center;
+  overflow: hidden;
+  border-block: 1px solid rgb(216 222 232 / 0.72);
+  background: #e9f3f2;
+  isolation: isolate;
+}
+
+.scene {
+  position: absolute;
+  inset: -3%;
+  z-index: -3;
+}
+
+.scene img {
+  width: 106%;
+  height: 106%;
+  object-fit: cover;
+  object-position: 60% 50%;
+  scale: 1.025;
+}
+
+.scrim {
+  position: absolute;
+  z-index: -2;
+  inset: 0 auto 0 0;
+  width: min(64%, 900px);
+  background: rgb(251 252 248 / 0.91);
+  backdrop-filter: blur(2px);
+}
+
+.copy {
+  display: grid;
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+  gap: 1.15rem;
+  padding-block: 4.5rem 5rem;
+}
+
+.eyebrow,
+.copy h1,
+.lede {
+  margin: 0;
+}
+
+.eyebrow {
+  color: var(--color-teal-700);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.copy h1 {
+  max-width: 690px;
+  color: var(--color-ink-950);
+  font-size: 4.25rem;
+  line-height: 0.98;
+}
+
+.lede {
+  max-width: 590px;
+  color: var(--color-ink-700);
+  font-size: 1.08rem;
+}
+
+.actions,
+.capabilityRail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.capabilityRail {
+  gap: 0;
+  color: var(--color-ink-700);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.capabilityRail span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding-right: 1rem;
+}
+
+.capabilityRail span + span {
+  border-left: 1px solid var(--color-ink-300);
+  padding-left: 1rem;
+}
+
+.capabilityRail svg {
+  color: var(--color-teal-500);
+}
+
+@media (max-width: 960px) {
+  .hero {
+    min-height: 680px;
+  }
+
+  .scrim {
+    width: 75%;
+  }
+
+  .copy h1 {
+    font-size: 3.4rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .hero {
+    min-height: 670px;
+    align-items: end;
+  }
+
+  .scene {
+    inset: 0;
+  }
+
+  .scene img {
+    width: 100%;
+    height: 100%;
+    opacity: 0.65;
+    object-position: 64% center;
+    scale: 1;
+  }
+
+  .scrim {
+    inset: 0;
+    width: 100%;
+    background: rgb(251 252 248 / 0.8);
+    backdrop-filter: blur(1px);
+  }
+
+  .copy {
+    gap: 1rem;
+    padding-block: 3.5rem;
+  }
+
+  .copy h1 {
+    font-size: 2.65rem;
+  }
+
+  .lede {
+    font-size: 1rem;
+  }
+
+  .capabilityRail {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .capabilityRail span,
+  .capabilityRail span + span {
+    border: 0;
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene img {
+    scale: 1;
+  }
+}

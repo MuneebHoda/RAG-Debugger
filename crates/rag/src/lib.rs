@@ -4,6 +4,7 @@ pub mod evals;
 pub mod extraction;
 pub mod ingestion;
 pub mod intelligence;
+pub mod reports;
 pub mod retrieval;
 pub mod tracing;
 

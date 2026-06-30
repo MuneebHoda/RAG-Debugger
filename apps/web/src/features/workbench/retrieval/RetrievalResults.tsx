@@ -1,21 +1,10 @@
-import {
-  CheckCircle2,
-  FileBarChart,
-  FileSearch,
-  FlaskConical,
-  GitBranch,
-  Loader2,
-  Save,
-} from "lucide-react";
+import { FileSearch, GitBranch, Loader2 } from "lucide-react";
 
-import type {
-  RetrievalEvalCase,
-  RetrievalEvalRun,
-} from "../../../lib/api/evalLab";
 import type {
   RetrievalQueryHit,
   RetrievalQueryResponse,
 } from "../../../lib/api/retrieval";
+import styles from "./RetrievalPage.module.css";
 
 const EVIDENCE_LABELS = {
   strong: "Strong",
@@ -36,21 +25,13 @@ const RETRIEVAL_QUALITY_LABELS: Record<string, string> = {
 export function AnswerPanel({
   response,
   isQuerying,
-  isSavingEval,
   isSavingTrace,
-  onSaveEval,
   onSaveTrace,
-  traceMessage,
-  evalMessage,
 }: {
   response: RetrievalQueryResponse | null;
   isQuerying: boolean;
-  isSavingEval: boolean;
   isSavingTrace: boolean;
-  onSaveEval: () => void;
   onSaveTrace: () => void;
-  traceMessage: string | null;
-  evalMessage: string | null;
 }) {
   return (
     <div className="panel answer-panel">
@@ -66,7 +47,7 @@ export function AnswerPanel({
           <button
             className="secondary-button compact"
             disabled={!response || isSavingTrace}
-            title="Save this run as a trace"
+            title="Save and diagnose this run"
             type="button"
             onClick={onSaveTrace}
           >
@@ -75,28 +56,7 @@ export function AnswerPanel({
             ) : (
               <GitBranch aria-hidden="true" size={16} />
             )}
-            Save trace
-          </button>
-          <button
-            className="icon-button"
-            title="Create report from this run"
-            type="button"
-            disabled={!response}
-          >
-            <FileBarChart aria-hidden="true" size={16} />
-          </button>
-          <button
-            className="icon-button"
-            disabled={!response || response.hits.length === 0 || isSavingEval}
-            title="Save top hits as an eval case"
-            type="button"
-            onClick={onSaveEval}
-          >
-            {isSavingEval ? (
-              <Loader2 aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <Save aria-hidden="true" size={16} />
-            )}
+            Debug this run
           </button>
         </div>
       </div>
@@ -106,25 +66,15 @@ export function AnswerPanel({
       ) : response ? (
         <>
           <EmbeddingQueryStatus response={response} />
-          <p className="answer-text">{response.answer.text}</p>
+          <p className={styles.answerText}>{response.answer.text}</p>
           {response.answer.citations.length > 0 ? (
-            <div className="citation-list">
+            <div className={styles.citationList}>
               {response.answer.citations.map((citation) => (
                 <span key={`${citation.label}-${citation.chunk_id}`}>
                   {citation.label} {citation.document_path} · chunk{" "}
                   {citation.chunk_ordinal + 1}
                 </span>
               ))}
-            </div>
-          ) : null}
-          {traceMessage ? (
-            <div className="query-status-row">
-              <span>{traceMessage}</span>
-            </div>
-          ) : null}
-          {evalMessage ? (
-            <div className="query-status-row">
-              <span>{evalMessage}</span>
             </div>
           ) : null}
         </>
@@ -164,82 +114,6 @@ export function HitsPanel({
   );
 }
 
-export function EvalPanel({
-  cases,
-  evalRun,
-  isRunning,
-  onRun,
-}: {
-  cases: RetrievalEvalCase[];
-  evalRun: RetrievalEvalRun | null;
-  isRunning: boolean;
-  onRun: () => void;
-}) {
-  return (
-    <div className="panel eval-panel">
-      <div className="panel-heading">
-        <h2>Retrieval Evals</h2>
-        <div className="panel-actions">
-          <span className="status-pill">{cases.length} cases</span>
-          <button
-            className="secondary-button compact"
-            disabled={cases.length === 0 || isRunning}
-            type="button"
-            onClick={onRun}
-          >
-            {isRunning ? (
-              <Loader2 aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <FlaskConical aria-hidden="true" size={16} />
-            )}
-            Run
-          </button>
-        </div>
-      </div>
-
-      {evalRun ? (
-        <>
-          <div className="eval-summary">
-            <span>
-              <CheckCircle2 aria-hidden="true" size={16} />
-              {evalRun.passed_count}/{evalRun.case_count} passed
-            </span>
-            <span>recall {formatPercent(evalRun.average_recall_at_k)}</span>
-            <span>
-              precision {formatPercent(evalRun.average_precision_at_k)}
-            </span>
-          </div>
-          <div className="eval-result-list">
-            {evalRun.results.map((result) => (
-              <div className="eval-result-row" key={result.case_id}>
-                <strong>{result.query}</strong>
-                <span>{result.passed ? "pass" : "fail"}</span>
-                <small>
-                  recall {formatPercent(result.recall_at_k)} · precision{" "}
-                  {formatPercent(result.precision_at_k)} · top rank{" "}
-                  {result.top_hit_rank ?? "none"}
-                </small>
-              </div>
-            ))}
-          </div>
-        </>
-      ) : cases.length > 0 ? (
-        <div className="eval-result-list">
-          {cases.slice(0, 4).map((evalCase) => (
-            <div className="eval-result-row" key={evalCase.id}>
-              <strong>{evalCase.name}</strong>
-              <span>top {evalCase.top_k}</span>
-              <small>{evalCase.query}</small>
-            </div>
-          ))}
-        </div>
-      ) : (
-        <p>Save a cited result to create the first eval case.</p>
-      )}
-    </div>
-  );
-}
-
 function EmbeddingQueryStatus({
   response,
 }: {
@@ -250,7 +124,7 @@ function EmbeddingQueryStatus({
   }
 
   return (
-    <div className="query-status-row">
+    <div className={styles.queryStatusRow}>
       <span>
         embeddings {response.embedding_status.readiness} ·{" "}
         {response.embedding_status.indexed_chunks}/
@@ -273,9 +147,9 @@ function GroupedHitList({ hits }: { hits: RetrievalQueryHit[] }) {
   );
 
   return (
-    <div className="hit-list">
+    <div className={styles.hitList}>
       {Object.entries(groups).map(([documentId, documentHits]) => (
-        <section className="hit-group" key={documentId}>
+        <section className={styles.hitGroup} key={documentId}>
           <header>
             <strong>{documentHits[0].document.path}</strong>
             <span>{documentHits.length} hits</span>
@@ -291,7 +165,7 @@ function GroupedHitList({ hits }: { hits: RetrievalQueryHit[] }) {
 
 function HitCard({ hit }: { hit: RetrievalQueryHit }) {
   return (
-    <article className="hit-card">
+    <article className={styles.hitCard}>
       <header>
         <strong>
           {hit.citation.label} Rank {hit.rank}
@@ -302,7 +176,7 @@ function HitCard({ hit }: { hit: RetrievalQueryHit }) {
         </span>
       </header>
 
-      <div className="hit-source">
+      <div className={styles.hitSource}>
         <FileSearch aria-hidden="true" size={16} />
         <span>
           {hit.document.path} · chunk {hit.chunk.ordinal + 1}
@@ -312,7 +186,7 @@ function HitCard({ hit }: { hit: RetrievalQueryHit }) {
 
       <p>{hit.snippet}</p>
 
-      <div className="term-row">
+      <div className={styles.termRow}>
         {hit.matched_terms.length > 0 ? (
           hit.matched_terms.map((term) => (
             <span key={term.term}>
@@ -357,9 +231,9 @@ function ScoreBars({ hit }: { hit: RetrievalQueryHit }) {
   ];
 
   return (
-    <div className="score-bars" aria-label="Score breakdown">
+    <div className={styles.scoreBars} aria-label="Score breakdown">
       {rows.map(([label, raw, normalized]) => (
-        <div className="score-row" key={label}>
+        <div className={styles.scoreRow} key={label}>
           <span>{label}</span>
           <div>
             <i style={{ width: `${Math.max(4, normalized * 100)}%` }} />
@@ -404,8 +278,4 @@ function normalizeBreakdown(breakdown: RetrievalQueryHit["score_breakdown"]) {
 
 function formatScore(score: number) {
   return score.toFixed(2);
-}
-
-function formatPercent(score: number) {
-  return `${Math.round(score * 100)}%`;
 }

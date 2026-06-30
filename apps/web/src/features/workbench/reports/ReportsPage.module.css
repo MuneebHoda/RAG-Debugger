@@ -1,0 +1,347 @@
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.header p,
+.header h1,
+.header span,
+.panelHeading h2,
+.panelHeading p,
+.sectionHeading p,
+.sectionHeading h2,
+.sectionHeading span,
+.reportRow p,
+.reportRow small,
+.generatedReport p,
+.generatedReport small,
+.privacyHint,
+.formError {
+  margin: 0;
+}
+
+.header p,
+.sectionHeading > div > p {
+  color: var(--color-teal-900);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--color-ink-950);
+  font-size: 1.8rem;
+}
+
+.header span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.9rem;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  border: 1px solid #e5b7a5;
+  border-radius: var(--radius-sm);
+  background: #fff4ef;
+  color: #7c3925;
+  padding: 0.75rem;
+}
+
+.creationPanel,
+.panel {
+  display: grid;
+  gap: 0.85rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 1rem;
+}
+
+.creationPanel {
+  border-left: 3px solid var(--color-teal-700);
+}
+
+.panelHeading,
+.rowTop,
+.sectionHeading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.panelHeading h2,
+.sectionHeading h2 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.panelHeading p,
+.sectionHeading span {
+  margin-top: 0.2rem;
+  color: var(--color-ink-600);
+  font-size: 0.78rem;
+}
+
+.sectionHeading {
+  align-items: end;
+  border-top: 1px solid var(--color-ink-200);
+  margin-top: 0.4rem;
+  padding-top: 1.15rem;
+}
+
+.sectionHeading span {
+  max-width: 32rem;
+  text-align: right;
+}
+
+.panelTitle {
+  display: flex;
+  align-items: start;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.creationForm {
+  display: grid;
+  grid-template-columns: 0.75fr minmax(13rem, 1.5fr) 1fr auto;
+  align-items: end;
+  gap: 0.7rem;
+}
+
+.formField {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.formField label {
+  color: var(--color-ink-700);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.creationForm select,
+.creationForm button {
+  min-height: 2.4rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  color: var(--color-ink-900);
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+}
+
+.creationForm button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-color: var(--color-teal-800);
+  background: var(--color-teal-900);
+  color: white;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.creationForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.privacyHint {
+  color: var(--color-ink-500);
+  font-size: 0.74rem;
+}
+
+.formError {
+  color: #8e321f;
+  font-size: 0.78rem;
+}
+
+.reportList,
+.list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.generatedReport {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  border-top: 1px solid var(--color-ink-200);
+  color: inherit;
+  padding: 0.8rem 0;
+  text-decoration: none;
+}
+
+.generatedReport:first-child {
+  border-top: 0;
+}
+
+.generatedReport > div {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.generatedReport strong,
+.reportRow strong {
+  color: var(--color-ink-900);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.generatedReport p,
+.reportRow p,
+.reportRow small {
+  color: var(--color-ink-600);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.generatedReport footer {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--color-ink-500);
+}
+
+.sourceLabel {
+  color: var(--color-teal-900);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.privacyBadge,
+.localBadge,
+.failed,
+.risk,
+.count {
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 850;
+  padding: 0.25rem 0.5rem;
+  text-transform: capitalize;
+}
+
+.privacyBadge {
+  background: #edf8ef;
+  color: #315b33;
+}
+
+.localBadge,
+.risk,
+.failed {
+  background: #fff1eb;
+  color: #7c3925;
+}
+
+.count {
+  background: var(--color-ink-100);
+  color: var(--color-ink-700);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.reportRow {
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  padding: 0.75rem;
+  text-decoration: none;
+}
+
+a.reportRow:hover,
+.generatedReport:hover {
+  border-color: var(--color-teal-500);
+  background: color-mix(in srgb, var(--color-teal-500) 4%, white);
+}
+
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-teal-900);
+  font-size: 0.76rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.empty,
+.emptyState {
+  margin: 0;
+  color: var(--color-ink-500);
+  font-size: 0.8rem;
+}
+
+.emptyState {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.75rem 0;
+}
+
+.emptyState span {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.emptyState strong {
+  color: var(--color-ink-800);
+}
+
+@media (max-width: 980px) {
+  .creationForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .creationForm button {
+    width: fit-content;
+  }
+}
+
+@media (max-width: 820px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .creationForm,
+  .generatedReport {
+    grid-template-columns: 1fr;
+  }
+
+  .creationForm button {
+    width: 100%;
+  }
+
+  .generatedReport footer {
+    flex-wrap: wrap;
+  }
+
+  .sectionHeading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .sectionHeading span {
+    text-align: left;
+  }
+}

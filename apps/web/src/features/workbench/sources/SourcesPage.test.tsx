@@ -27,9 +27,10 @@ describe("SourcesPage", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: /sources/i }),
+      await screen.findByRole("heading", { name: /corpus/i }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText(/choose files/i)).toBeInTheDocument();
+    expect(screen.getByText(/advanced chunking/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/chunking strategy/i)).toHaveValue(
       "structured",
     );

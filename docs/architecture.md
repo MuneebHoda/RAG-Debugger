@@ -5,10 +5,11 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 ## Components
 
 - **Web app:** React TypeScript workbench for Overview, Sources, Retrieval, Traces, Evals, Reports, and Settings.
+- **Public experience:** Lazy-loaded React marketing routes with an editorial landing narrative, typed interactive examples, responsive product imagery, and reduced-motion support.
 - **API service:** Axum backend for health checks, runtime config, local auth, workspaces, API keys, ingestion, embedding status/indexing, retrieval, traces, evals, CI gates, and reports.
 - **Core crate:** Shared domain contracts for projects, sources, documents, chunks, traces, retrieval runs, evals, reports, config, models, and privacy mode.
 - **RAG crate:** File text extraction, structured and whitespace chunking, document intelligence, local embedding generation, hybrid retrieval, trace construction, eval scoring, ingestion, and retrieval interfaces. Implementations are intentionally replaceable.
-- **Storage crate:** Repository traits plus Postgres and in-memory adapters.
+- **Storage crate:** Bounded repository traits for health, projects, sources, documents, embeddings, retrieval, traces, evals, auth, CI evals, and audit reports, plus Postgres and in-memory adapters.
 - **Local collector:** Future local process that reads raw documents, builds indexes, runs local traces, and syncs approved summaries.
 - **Workers:** Future local or remote jobs for parsing, embedding, indexing, retrieval, reranking, generation, and eval scoring.
 
@@ -23,6 +24,21 @@ Local embeddings are derived from persisted chunk text and stored in Postgres. T
 ## API Boundary
 
 All product APIs are versioned under `/api/v1`. Public health probes remain at `/healthz` and `/readyz` for deployment compatibility.
+
+`apps/api/src/http/mod.rs` is the handler-module index. `apps/api/src/http/routing.rs` owns public/protected route composition, session middleware, request-size limits, and CORS. Handler implementations remain in bounded HTTP modules, and route paths must not change during routing refactors.
+
+Failed API requests use one stable JSON envelope:
+
+```json
+{
+  "error": {
+    "code": "not_found",
+    "message": "not found: trace"
+  }
+}
+```
+
+Clients may present `error.message` and use `error.code` for typed behavior. Internal and storage failures return generic messages so database or infrastructure details are not exposed; server-side diagnostics remain in telemetry.
 
 Current ingestion APIs:
 
@@ -62,6 +78,12 @@ Current ingestion APIs:
 - `GET /api/v1/traces/:trace_id`
 - `POST /api/v1/traces/from-retrieval-run`
 - `POST /api/v1/traces/:trace_id/rerun`
+- `GET /api/v1/reports`
+- `GET /api/v1/reports/:report_id`
+- `POST /api/v1/reports/from-trace`
+- `POST /api/v1/reports/from-experiment`
+- `POST /api/v1/reports/from-ci-run`
+- `GET /api/v1/reports/:report_id/export.md`
 
 Uploads default to `structured` chunking. The API also accepts `chunking_strategy=smart_sections` as a legacy alias and `chunking_strategy=whitespace` for baseline/debug runs. Chunk responses include the strategy, detected section title, split reason, token count, byte range, checksum, quality flags, duplicate status, text density, and evidence hints so the UI can explain why each chunk exists.
 
@@ -77,7 +99,7 @@ Local auth protects workbench APIs with opaque HttpOnly session cookies. Workspa
 
 ## Storage Direction
 
-Postgres stores organizations, workspaces, users, memberships, sessions, API keys, projects, sources, ingestion runs, documents, chunks, chunking metadata, document profile metadata, chunk quality metadata, local chunk embeddings, retrieval playground runs, retrieval hits, trace debugger records, trace rerun experiments, retrieval eval datasets, eval cases, legacy eval run results, Eval Lab experiments, CI eval runs, reports, and gate outcomes. Existing rows stay readable through migration defaults. The semantic retrieval migration stores vectors as local Postgres arrays for the first debugger loop; vector/index storage can evolve toward pgvector, LanceDB, or GPU-backed services as benchmarks justify it.
+Postgres stores organizations, workspaces, users, memberships, sessions, API keys, projects, sources, ingestion runs, documents, chunks, chunking metadata, document profile metadata, chunk quality metadata, local chunk embeddings, retrieval playground runs, retrieval hits, trace debugger records, trace rerun experiments, retrieval eval datasets, eval cases, legacy eval run results, Eval Lab experiments, CI eval runs, workspace-scoped audit report snapshots, and gate outcomes. Existing rows stay readable through migration defaults. The semantic retrieval migration stores vectors as local Postgres arrays for the first debugger loop; vector/index storage can evolve toward pgvector, LanceDB, or GPU-backed services as benchmarks justify it.
 
 ## Hosted Product Direction
 

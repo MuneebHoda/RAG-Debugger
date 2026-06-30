@@ -1,4 +1,5 @@
 import { QueryClientProvider } from "@tanstack/react-query";
+import { lazy, Suspense } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 import { queryClient } from "./app/queryClient";
@@ -6,25 +7,42 @@ import { LoginPage } from "./features/auth/LoginPage";
 import { RequireAuth } from "./features/auth/RequireAuth";
 import { SignupPage } from "./features/auth/SignupPage";
 import { FeaturesPage } from "./features/marketing/FeaturesPage";
-import { LandingPage } from "./features/marketing/LandingPage";
 import { PricingPage } from "./features/marketing/PricingPage";
 import { AuthLayout } from "./layouts/AuthLayout";
 import { MarketingLayout } from "./layouts/MarketingLayout";
 import { WorkbenchLayout } from "./layouts/WorkbenchLayout";
 import { EvalsPage } from "./pages/EvalsPage";
+import { DocumentDetailPage } from "./pages/DocumentDetailPage";
+import { DatasetDetailPage } from "./pages/DatasetDetailPage";
+import { ExperimentDetailPage } from "./pages/ExperimentDetailPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { ReportDetailPage } from "./pages/ReportDetailPage";
 import { RetrievalPage } from "./pages/RetrievalPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SourcesPage } from "./pages/SourcesPage";
 import { TracesPage } from "./pages/TracesPage";
+import { TraceDetailPage } from "./pages/TraceDetailPage";
+
+const LandingPage = lazy(
+  () => import("./features/marketing/landing/LandingPage"),
+);
 
 export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <Routes>
         <Route element={<MarketingLayout />}>
-          <Route index element={<LandingPage />} />
+          <Route
+            index
+            element={
+              <Suspense
+                fallback={<div aria-label="Loading CorpusLab" role="status" />}
+              >
+                <LandingPage />
+              </Suspense>
+            }
+          />
           <Route path="features" element={<FeaturesPage />} />
           <Route path="pricing" element={<PricingPage />} />
         </Route>
@@ -38,10 +56,24 @@ export function App() {
           <Route element={<WorkbenchLayout />}>
             <Route index element={<OverviewPage />} />
             <Route path="sources" element={<SourcesPage />} />
+            <Route
+              path="sources/:documentId"
+              element={<DocumentDetailPage />}
+            />
             <Route path="retrieval" element={<RetrievalPage />} />
             <Route path="traces" element={<TracesPage />} />
+            <Route path="traces/:traceId" element={<TraceDetailPage />} />
             <Route path="evals" element={<EvalsPage />} />
+            <Route
+              path="evals/datasets/:datasetId"
+              element={<DatasetDetailPage />}
+            />
+            <Route
+              path="evals/experiments/:experimentId"
+              element={<ExperimentDetailPage />}
+            />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="reports/:reportId" element={<ReportDetailPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Route>

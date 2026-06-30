@@ -66,15 +66,22 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Architecture](docs/architecture.md)
 - [Development Guide](docs/development.md)
 - [Engineering Quality](docs/engineering-quality.md)
+- [Frontend Architecture](docs/frontend-architecture.md)
+- [Documentation Maintenance](docs/doc-maintenance.md)
+- [Marketing Experience](docs/marketing-experience.md)
 - [File Ingestion](docs/file-ingestion.md)
 - [Retrieval Playground](docs/retrieval-playground.md)
 - [Trace Debugger](docs/trace-debugger.md)
 - [Eval Lab](docs/eval-lab.md)
+- [RAG Audit Reports](docs/rag-audit-reports.md)
+- [RAG Invariants](docs/rag-invariants.md)
 - [Auth and Workspaces](docs/auth-and-workspaces.md)
 - [CI Eval Workflows](docs/ci-eval-workflows.md)
 - [Technical Handbook](docs/technical-handbook.md)
 - [Testing Guide](docs/testing.md)
 - [Privacy and Security](docs/privacy-security.md)
+- [Privacy Review Checklist](docs/privacy-review-checklist.md)
+- [Logging and Redaction](docs/logging-redaction.md)
 - [Roadmap](docs/roadmap.md)
 - [ADRs](docs/adr)
 - [Changelog](CHANGELOG.md)
@@ -83,10 +90,19 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 
 CorpusLab uses GitHub as the engineering source of truth. Track product work in GitHub Issues, land changes through pull requests into `main`, require CI before merge, and record milestone changes in `CHANGELOG.md`.
 
+AI-agent and agent-assisted contributions must follow [AGENTS.md](AGENTS.md). Frontend ownership and file-placement rules are documented in the [Frontend Architecture Guide](docs/frontend-architecture.md).
+
 Use the fast local gate while developing:
 
 ```sh
 just check
+```
+
+Run one side of the repository when iterating on a focused change:
+
+```sh
+just rust-check
+just web-check
 ```
 
 Use the full release gate before baseline or milestone PRs:
@@ -94,6 +110,8 @@ Use the full release gate before baseline or milestone PRs:
 ```sh
 just full-check
 ```
+
+`just ci-check` is the explicit release-equivalent command behind `just full-check`.
 
 ## Product Direction
 

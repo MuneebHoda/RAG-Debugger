@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RetrievalPage } from "./RetrievalPage";
@@ -7,7 +7,6 @@ import { RetrievalPage } from "./RetrievalPage";
 const sourceId = "018f7a2a-6e2e-7000-a000-000000000101";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000102";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000103";
-const datasetId = "018f7a2a-6e2e-7000-a000-000000000107";
 
 const source = {
   id: sourceId,
@@ -79,36 +78,6 @@ describe("RetrievalPage", () => {
             missing_chunks: 0,
             stale_chunks: 0,
             last_indexed_at: "2026-06-23T00:00:00Z",
-          });
-        }
-        if (url.endsWith("/api/v1/retrieval/evals")) {
-          return responseJson([]);
-        }
-        if (url.endsWith("/api/v1/eval-lab/datasets")) {
-          return responseJson([
-            {
-              id: datasetId,
-              name: "Default retrieval dataset",
-              description: null,
-              case_count: 0,
-              latest_experiment_id: null,
-              latest_gate: null,
-              latest_average_recall_at_k: null,
-              latest_average_precision_at_k: null,
-              updated_at: "2026-06-23T00:00:00Z",
-            },
-          ]);
-        }
-        if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}/cases`)) {
-          return responseJson({
-            id: "018f7a2a-6e2e-7000-a000-000000000108",
-            name: "gpu indexing",
-            query: "gpu indexing",
-            top_k: 5,
-            expected_chunk_ids: [chunkId],
-            expected_document_ids: [documentId],
-            notes: null,
-            created_at: "2026-06-23T00:00:00Z",
           });
         }
         if (url.endsWith("/api/v1/traces/from-retrieval-run")) {
@@ -228,10 +197,13 @@ describe("RetrievalPage", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: /retrieval playground/i }),
+      await screen.findByRole("heading", { name: /test retrieval/i }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText(/question/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/^mode$/i)).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/what should the corpus answer/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/retrieval mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/^advanced$/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /run retrieval/i }),
     ).toBeDisabled();
@@ -244,9 +216,12 @@ describe("RetrievalPage", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.change(await screen.findByLabelText(/question/i), {
-      target: { value: "gpu indexing" },
-    });
+    fireEvent.change(
+      await screen.findByLabelText(/what should the corpus answer/i),
+      {
+        target: { value: "gpu indexing" },
+      },
+    );
     fireEvent.click(screen.getByRole("button", { name: /run retrieval/i }));
 
     await waitFor(() =>
@@ -261,43 +236,30 @@ describe("RetrievalPage", () => {
     expect(screen.getByLabelText(/score breakdown/i)).toBeInTheDocument();
   });
 
-  it("saves the latest retrieval response as a trace", async () => {
+  it("saves the latest retrieval response and opens its debugger", async () => {
     render(
-      <MemoryRouter>
-        <RetrievalPage />
+      <MemoryRouter initialEntries={["/app/retrieval"]}>
+        <Routes>
+          <Route path="/app/retrieval" element={<RetrievalPage />} />
+          <Route
+            path="/app/traces/:traceId"
+            element={<h1>Focused run debugger</h1>}
+          />
+        </Routes>
       </MemoryRouter>,
     );
 
-    fireEvent.change(await screen.findByLabelText(/question/i), {
-      target: { value: "gpu indexing" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /run retrieval/i }));
-
-    await screen.findByText("Built GPU indexing experiments [1]");
-    fireEvent.click(screen.getByRole("button", { name: /save trace/i }));
-
-    expect(
-      await screen.findByText(/saved trace 018f7a2a/i),
-    ).toBeInTheDocument();
-  });
-
-  it("saves top retrieval evidence into Eval Lab", async () => {
-    render(
-      <MemoryRouter>
-        <RetrievalPage />
-      </MemoryRouter>,
+    fireEvent.change(
+      await screen.findByLabelText(/what should the corpus answer/i),
+      { target: { value: "gpu indexing" } },
     );
-
-    fireEvent.change(await screen.findByLabelText(/question/i), {
-      target: { value: "gpu indexing" },
-    });
     fireEvent.click(screen.getByRole("button", { name: /run retrieval/i }));
 
     await screen.findByText("Built GPU indexing experiments [1]");
-    fireEvent.click(screen.getByTitle(/save top hits as an eval case/i));
+    fireEvent.click(screen.getByRole("button", { name: /debug this run/i }));
 
     expect(
-      await screen.findByText(/saved to default retrieval dataset/i),
+      await screen.findByRole("heading", { name: /focused run debugger/i }),
     ).toBeInTheDocument();
   });
 });

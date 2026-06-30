@@ -18,7 +18,9 @@ The current implementation is privacy-first and local by default. Uploaded binar
 
 ## Rust Workspace Architecture
 
-The Rust workspace keeps domain contracts separate from implementation. `crates/core` owns serializable types and IDs. `crates/rag` owns deterministic RAG behavior. `crates/storage` owns persistence boundaries. `apps/api` composes those crates into HTTP routes.
+The Rust workspace keeps domain contracts separate from implementation. `crates/core` owns serializable types and IDs. `crates/rag` owns deterministic RAG behavior. `crates/storage` owns bounded persistence traits and adapters. `apps/api` composes those crates into HTTP routes.
+
+`crates/storage/src/repository.rs` separates health, project, source, document, embedding, retrieval, trace, eval, auth, and CI eval capabilities. `AppRepository` is the application-facing composite. The narrow `IngestionRepository` compatibility boundary contains no methods of its own and composes only the project, source, and document capabilities required by synchronous uploads.
 
 This shape lets future hosted services, local collectors, workers, and GPU/HPC indexing processes reuse the same contracts without coupling them to Axum route code.
 
@@ -28,23 +30,36 @@ The web app lives in `apps/web/src`.
 
 - `App.tsx` maps the public site, auth pages, and workbench routes.
 - `layouts/MarketingLayout.tsx`, `layouts/AuthLayout.tsx`, and `layouts/WorkbenchLayout.tsx` separate public, authentication, and application chrome.
-- `features/marketing` owns the landing page, feature page, pricing page, and launch-state product copy.
+- `features/marketing` owns the public product narrative. The landing route is lazy-loaded and decomposed under `features/marketing/landing` into hero, failure story, retrieval demo, capability story, product tour, enterprise trust, and CTA sections.
 - `features/auth` owns the login and signup entry surfaces.
 - `components/brand` owns the CorpusLab mark and wordmark.
-- `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups.
+- `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups. Landing-specific interaction state remains local to its section instead of expanding shared primitives prematurely.
 - `lib/apiClient.ts` is a compatibility barrel for the API boundary. New code should prefer domain exports under `lib/api`, such as `lib/api/sources`, `lib/api/retrieval`, `lib/api/traces`, and `lib/api/evalLab`.
-- `pages/OverviewPage.tsx` summarizes corpus readiness under `/app`.
-- `pages/SourcesPage.tsx` handles upload, ingestion results, document tables, and chunk preview under `/app/sources`.
-- `pages/RetrievalPage.tsx` handles query, filters, embedding indexing, evidence summary, grouped hits, score bars, save-as-trace, and save-to-eval under `/app/retrieval`.
-- `pages/TracesPage.tsx` handles trace list, timeline spans, ranked evidence, failure labels, rerun comparison, and in-app explainers under `/app/traces`.
-- `pages/EvalsPage.tsx` handles Eval Lab datasets, cases, experiment runs, mode comparison, failure diagnosis, and gates under `/app/evals`.
-- `pages/ReportsPage.tsx` and `pages/SettingsPage.tsx` complete the workbench pages.
+- Domain files under `pages` are thin route wrappers or compatibility re-exports. Product implementation belongs under `features`, following `docs/frontend-architecture.md`.
+- `pages/OverviewPage.tsx` and `SettingsPage.tsx` still own legacy route implementations and should move behind feature boundaries through focused refactors.
+- `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
+- `features/workbench/retrieval` owns the question-first retrieval test. A domain hook coordinates source, embedding, query, and trace mutations; focused panels own query, filter, and embedding controls; result components own evidence summaries, citations, and ranking details.
+- `features/workbench/traces` owns the searchable run list and focused `/app/traces/:traceId` debugger. A domain hook owns trace loading and tab state; separate components own summary, failure labels, evidence metrics, timeline spans, reruns, and Quality-case creation.
+- `features/workbench/eval-lab` owns the Quality overview, focused dataset editing, experiment execution, gate results, and failure diagnosis routes.
+- `features/workbench/reports` owns audit report creation, generated report lists, focused `/app/reports/:reportId` detail, privacy classification, and Markdown copy. Existing CI failures, run diagnoses, and corpus findings remain visible as report candidates. `pages/SettingsPage.tsx` separates Workspace, API keys, Runtime, and Privacy tabs.
 
 The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`, navigation groups destinations by user intent, and route errors remain inside a recoverable workbench boundary.
 
 Generated `apps/web/dist` files should not be edited by hand. Run `cd apps/web && npm run build`.
 
+### Public Marketing Runtime
+
+The `/` route is a separate Vite chunk loaded through `React.lazy`. This keeps Motion and landing-only CSS out of authenticated workbench startup. `LazyMotion` loads `domAnimation`, while `MotionConfig` honors the user's reduced-motion preference. Motion constants live in `features/marketing/landing/motion.ts`; interactive display fixtures and their TypeScript contracts live in `landingData.ts`.
+
+Landing sections use independent CSS modules and stable media aspect ratios. Animations change only opacity and transforms. The hero bitmap is requested eagerly, while product-tour and diagnosis images load lazily. The production gate enforces combined gzip limits of 180 KB for JavaScript and 20 KB for CSS through `npm run size:check`.
+
+See `docs/marketing-experience.md` for interaction ownership, accessibility behavior, screenshot generation, and visual regression checks.
+
 ## API Route Reference
+
+Route composition lives in `apps/api/src/http/routing.rs`; `apps/api/src/http/mod.rs` only declares handler modules and exports the router. Protected workbench routes share session middleware without changing their `/api/v1` paths.
+
+All handler errors serialize as `{ "error": { "code", "message" } }`. Expected client errors retain specific messages, while internal storage failures are sanitized to prevent infrastructure details from crossing the API boundary. The web API client parses this envelope and keeps raw response text only for diagnostics.
 
 - `GET /healthz`: process liveness.
 - `GET /readyz`: readiness; checks database connectivity when storage is configured.
@@ -216,9 +231,11 @@ Current spans are query input, retrieval ranking, evidence summary, eval check, 
 
 Failure labels include missing documents, missing embedding index, bad embedding, weak evidence, bad ranking, duplicate evidence, heading-only evidence, and bad chunking. These labels are deterministic quality signals derived from retrieval response metadata.
 
+The stable guarantees for retrieval responses, trace diagnosis, rerun comparisons, Eval Lab metrics, gates, and local-first behavior are defined in `docs/rag-invariants.md`. Synthetic regression corpora and expected outcomes live under `fixtures/`; typed Rust tests remain the contract-level source of truth while those fixtures provide reviewable scenarios for API, UI, and future SDK tests.
+
 Postgres stores trace summaries in `debug_traces`, full trace timelines in `trace_json`, and rerun comparisons in `trace_rerun_experiments`. The memory store supports the same API for tests and local no-Docker sessions.
 
-The web UI exposes `/app/traces` with a saved trace list, timeline, ranked evidence, rerun lab, and explainer cards. The Retrieval page exposes `Save trace` after a query completes.
+The web UI exposes `/app/traces` as a searchable saved-run list. `/app/traces/:traceId` displays diagnosis, ranked evidence, ordered spans, and rerun comparison without overloading the list view. The Retrieval page exposes `Debug this run`, which saves the current retrieval response and navigates directly to that focused detail route.
 
 ## Eval System
 
@@ -228,17 +245,27 @@ Metrics include recall@k, precision@k, MRR, top hit rank, citation coverage, wea
 
 The default gate passes when average recall@k is at least `0.80`, critical missing-embedding failures are absent, and weak-evidence cases are at or below 20%. Failed gates appear in Mission Control and point users to `/app/evals`.
 
-The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Retrieval and Trace Debugger now save cases directly into Eval Lab datasets.
+The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts
 
-`crates/core/src/report.rs` defines report contracts:
+`crates/core/src/report.rs` defines the additive RAG Audit Report contract. `DebugReport` freezes workspace/project ownership, source identity, a privacy-filtered subject, executive summary, deterministic context metadata, findings, recommendations, evidence references, and an RFC3339 creation timestamp.
 
-- `RetrievalReport`
-- `RetrievalDiagnosis`
-- `EvidenceIssue`
+Reports can originate from a trace, Eval Lab experiment, CI eval run, or manual investigation. Findings link stable failure-label codes to labeled evidence references. Recommendations use typed remediation areas for chunking, embeddings, `top_k`, retrieval mode, reranking, metadata filters, citations, and corpus coverage.
 
-The UI now has a Reports page for corpus diagnostics. A future API route can persist and export full retrieval-run reports using these contracts.
+Report privacy is distinct from project privacy. `metadata_only` excludes query and document content, `snippets_allowed` permits explicitly approved bounded text, and `full_local_only` cannot be shared or exported without an explicit privacy downgrade. The full workflow and sharing rules are documented in `docs/rag-audit-reports.md`.
+
+The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Audit reports are additive and do not replace existing retrieval, trace, Eval Lab, CI, or diagnostic-queue contracts.
+
+`crates/rag/src/reports` builds deterministic reports from traces, Eval Lab experiments, and CI eval runs. Build context supplies IDs, ownership, privacy mode, and timestamp. Source builders freeze configuration and comparison metadata, map failure labels to stable findings and remediation categories, deduplicate recommendations, and apply report privacy before evidence enters the report.
+
+`ReportRepository` provides workspace-scoped save, list, and detail operations with MemoryStore/Postgres parity. Postgres stores one append-only `debug_reports` row per snapshot, including indexed workspace/project/source/privacy columns and canonical report JSON. Duplicate report IDs fail; multiple snapshots from the same source are allowed.
+
+Protected `/api/v1/reports` routes create reports from traces, experiments, and native CI runs, then expose workspace-scoped list/detail and Markdown export. Handlers authenticate the active session to determine report ownership. Metadata-only is the request default, CI ownership is verified, and full-local reports return `422` from export.
+
+The Reports feature owns the shared creation action used by Trace Detail, Eval experiment detail, and failed CI gate rows. Every source integration opens a privacy confirmation panel, defaults to metadata-only, guards against duplicate submission, and navigates to the persisted report detail after creation.
+
+`crates/rag/src/reports/markdown.rs` renders paid-audit-quality Markdown with a stable executive summary, source/privacy classification, ordered configuration, failing cases, evidence diagnosis, failure labels, comparison changes, prioritized recommendations, and sharing note. The renderer escapes user-controlled Markdown, blocks raw HTML, re-applies the 280-character snippet cap, omits content-bearing fields in metadata-only mode, and rejects full-local exports. Exact output is protected by checked-in trace, eval, CI, metadata-only, and snippets-allowed fixtures.
 
 ## Privacy And Security Model
 
@@ -251,6 +278,10 @@ Default behavior is local and privacy-first.
 - `/api/v1/config` exposes safe config only; database URLs and deployment secrets stay server-side.
 
 Local auth now implements the first hosted boundary: signup/login/logout/current-user, organizations, workspaces, workspace memberships, opaque HttpOnly session cookies, and workspace-scoped API keys. API key secrets use a `clab_...` prefix, are shown once, and are stored only as SHA-256 hashes. Workbench APIs require a session; CI eval routes require a key with the `ci_eval_runs` scope.
+
+`docs/privacy-review-checklist.md` defines the mandatory review gate for data movement, external providers, hosted features, auth, retention, sharing, exports, and telemetry. `docs/logging-redaction.md` defines an allowlist for safe structured metadata and prohibits raw corpus/query content, vectors, credentials, headers, cookies, and secret hashes. Queries are sensitive by default, and future hosted sync must show and redact its payload before crossing the local boundary.
+
+The current logging audit found one API startup event containing bind address, environment, and storage backend kind. Request bodies and sensitive RAG/auth data are not logged. Adding request tracing requires route-template logging and explicit sensitive-header handling.
 
 Hosted mode will still need tenant isolation hardening, invitations, SSO/SAML, SCIM, audit events, upload scanning, and configurable data retention.
 
@@ -276,9 +307,10 @@ All major defaults should be changed through `.env.example` values rather than h
 Rust:
 
 ```bash
-cargo fmt --check
+cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo build --workspace
 ```
 
 Web:
@@ -296,6 +328,23 @@ Full local check:
 
 ```bash
 just check
+```
+
+Focused and release-equivalent gates:
+
+```bash
+just rust-check
+just web-check
+just ci-check
+```
+
+`just full-check` remains a backward-compatible alias for `just ci-check`. Documentation ownership, ADR triggers, and changelog expectations are defined in `docs/doc-maintenance.md`. Generated output is excluded unless intentionally versioned; the handbook PDF and curated product assets are explicit exceptions.
+
+Focused RAG invariant validation:
+
+```bash
+cargo test -p rag-debugger-rag
+cargo test -p rag-debugger-rag --test public_fixtures
 ```
 
 Handbook PDF:
