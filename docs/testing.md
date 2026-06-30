@@ -32,6 +32,7 @@ Expected coverage in the scaffold:
 - Domain serialization tests as contracts become public.
 - Audit-report contract tests for source discriminators, privacy-mode wire values, optional evidence metadata, RFC3339 timestamps, and JSON round trips.
 - Audit-report builder tests for deterministic trace/eval/CI output, metadata redaction, bounded snippets, rerun and regression context, recommendation deduplication, and invalid trace sources.
+- Audit-report Markdown snapshot tests for exact trace/eval/CI structure, metadata-only redaction, snippets-allowed escaping and bounds, deterministic ordering, and full-local export rejection.
 
 DB-backed integration checks require local Postgres:
 
@@ -45,6 +46,7 @@ Run the focused in-memory storage contract with:
 ```sh
 cargo test -p rag-debugger-storage --test memory_store_contract
 cargo test -p rag-debugger-storage --test report_store_contract
+cargo test -p rag-debugger-rag --test report_markdown_snapshots
 cargo test -p rag-debugger-rag --test public_fixtures
 ```
 
