@@ -17,6 +17,7 @@ import { DatasetDetailPage } from "./pages/DatasetDetailPage";
 import { ExperimentDetailPage } from "./pages/ExperimentDetailPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReportsPage } from "./pages/ReportsPage";
+import { ReportDetailPage } from "./pages/ReportDetailPage";
 import { RetrievalPage } from "./pages/RetrievalPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SourcesPage } from "./pages/SourcesPage";
@@ -72,6 +73,7 @@ export function App() {
               element={<ExperimentDetailPage />}
             />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="reports/:reportId" element={<ReportDetailPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Route>

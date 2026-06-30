@@ -73,7 +73,8 @@ Expected coverage in the scaffold:
 - Auth tests for backend login/signup integration and session validation.
 - Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.
 - CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.
-- Overview, Reports, and Settings page tests should grow as those workflows deepen.
+- Overview and Settings page tests should grow as those workflows deepen.
+- Audit Reports feature tests cover generated-list and candidate rendering, source-driven creation, detail rendering, privacy states, structured errors, and clipboard export behavior.
 - Playwright tests for upload, focused chunk inspection, cited retrieval evidence, run reruns, responsive workbench layouts, and a real memory-backed login → upload → index → retrieve → debug → compare → Quality workflow.
 - Marketing tests for failure-stage tabs, retrieval-mode fixtures, product-tour tabs, mobile navigation, keyboard traversal, reduced motion, CLS, horizontal overflow, and responsive screenshot generation.
 - Frontend API client tests for structured JSON, plain-text, and empty error responses.

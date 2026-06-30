@@ -1,0 +1,369 @@
+.page {
+  display: grid;
+  gap: 1rem;
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: fit-content;
+  color: var(--color-teal-900);
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+.header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header p,
+.header h1,
+.header span,
+.privacyBanner p,
+.summary p,
+.summary h2,
+.summary span,
+.section h2,
+.finding p,
+.recommendations p,
+.recommendations b {
+  margin: 0;
+}
+
+.header p,
+.summary > p {
+  color: var(--color-teal-900);
+  font-size: 0.7rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.header h1 {
+  color: var(--color-ink-950);
+  font-size: 1.65rem;
+  overflow-wrap: anywhere;
+}
+
+.header span {
+  color: var(--color-ink-500);
+  font-size: 0.75rem;
+}
+
+.copyButton,
+.errorState button,
+.errorState a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid var(--color-teal-800);
+  border-radius: var(--radius-sm);
+  background: var(--color-teal-900);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 0.55rem 0.75rem;
+  text-decoration: none;
+}
+
+.copyButton:disabled {
+  border-color: var(--color-ink-200);
+  background: var(--color-ink-100);
+  color: var(--color-ink-500);
+  cursor: not-allowed;
+}
+
+.privacyBanner {
+  display: flex;
+  align-items: start;
+  gap: 0.65rem;
+  border-left: 3px solid var(--color-citron-500);
+  background: color-mix(in srgb, var(--color-citron-500) 9%, white);
+  padding: 0.75rem 0.9rem;
+}
+
+.privacyBanner div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.privacyBanner strong {
+  color: var(--color-ink-900);
+  font-size: 0.78rem;
+  text-transform: capitalize;
+}
+
+.privacyBanner p {
+  color: var(--color-ink-600);
+  font-size: 0.75rem;
+}
+
+.summary {
+  display: grid;
+  gap: 0.35rem;
+  border-top: 1px solid var(--color-ink-200);
+  border-bottom: 1px solid var(--color-ink-200);
+  padding: 1.1rem 0;
+}
+
+.summary h2 {
+  max-width: 62rem;
+  color: var(--color-ink-950);
+  font-size: 1.2rem;
+  line-height: 1.35;
+}
+
+.summary span {
+  color: var(--color-ink-600);
+  font-size: 0.82rem;
+}
+
+.twoColumn {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: 1rem;
+}
+
+.section {
+  display: grid;
+  align-content: start;
+  gap: 0.75rem;
+  min-width: 0;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+  padding: 1rem;
+}
+
+.section > h2 {
+  color: var(--color-ink-950);
+  font-size: 0.95rem;
+}
+
+.contextList,
+.evidence dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.contextList div,
+.evidence dl div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 1.3fr);
+  gap: 0.7rem;
+  border-top: 1px solid var(--color-ink-100);
+  padding: 0.5rem 0;
+}
+
+.contextList div:first-child,
+.evidence dl div:first-child {
+  border-top: 0;
+}
+
+.contextList dt,
+.evidence dt {
+  color: var(--color-ink-500);
+  font-size: 0.7rem;
+  text-transform: capitalize;
+}
+
+.contextList dd,
+.evidence dd {
+  margin: 0;
+  color: var(--color-ink-800);
+  font-size: 0.74rem;
+  overflow-wrap: anywhere;
+}
+
+.stack,
+.evidenceGrid {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.evidenceGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.finding,
+.evidence {
+  display: grid;
+  gap: 0.4rem;
+  min-width: 0;
+  border-top: 1px solid var(--color-ink-200);
+  padding-top: 0.65rem;
+}
+
+.finding:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.finding header,
+.evidence header,
+.finding footer,
+.evidence footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.finding header,
+.evidence header {
+  justify-content: space-between;
+}
+
+.finding strong,
+.evidence strong {
+  color: var(--color-ink-900);
+  font-size: 0.8rem;
+}
+
+.finding p,
+.evidence blockquote {
+  color: var(--color-ink-600);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.evidence blockquote {
+  margin: 0;
+  border-left: 2px solid var(--color-teal-400);
+  padding-left: 0.65rem;
+}
+
+.finding code,
+.finding footer span,
+.evidence header span,
+.evidence footer span,
+.priority,
+.info,
+.warning,
+.critical {
+  border-radius: 999px;
+  background: var(--color-ink-100);
+  color: var(--color-ink-700);
+  font-size: 0.64rem;
+  font-weight: 800;
+  padding: 0.2rem 0.45rem;
+  text-transform: capitalize;
+}
+
+.warning,
+.priority {
+  background: #fff5d8;
+  color: #6f5514;
+}
+
+.critical {
+  background: #fff1eb;
+  color: #7c3925;
+}
+
+.info {
+  background: #e9f6f3;
+  color: var(--color-teal-900);
+}
+
+.recommendations {
+  display: grid;
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recommendations li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.75rem;
+  border-top: 1px solid var(--color-ink-200);
+  padding-top: 0.8rem;
+}
+
+.recommendations li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.recommendations div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.recommendations small {
+  color: var(--color-teal-900);
+  font-size: 0.68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.recommendations strong {
+  color: var(--color-ink-900);
+  font-size: 0.82rem;
+}
+
+.recommendations p,
+.recommendations b {
+  color: var(--color-ink-600);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.recommendations b {
+  color: var(--color-ink-800);
+}
+
+.state,
+.empty {
+  margin: 0;
+  color: var(--color-ink-500);
+  font-size: 0.8rem;
+}
+
+.inlineError {
+  margin: 0;
+  color: #8e321f;
+  font-size: 0.78rem;
+}
+
+.errorState {
+  display: grid;
+  justify-items: start;
+  gap: 0.65rem;
+  color: var(--color-ink-700);
+}
+
+@media (max-width: 820px) {
+  .twoColumn,
+  .evidenceGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .copyButton {
+    width: 100%;
+  }
+
+  .contextList div,
+  .evidence dl div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}

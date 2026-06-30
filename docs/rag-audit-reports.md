@@ -2,7 +2,7 @@
 
 RAG Audit Reports turn retrieval diagnostics into a reviewable engineering deliverable. A report freezes the evidence, failure signals, configuration context, and recommended fixes from a Trace Debugger run, Eval Lab experiment, CI eval run, or manual investigation.
 
-The current builder layer generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories and exposed through authenticated report APIs. Workbench integration and final Markdown polish are delivered separately.
+The current workflow generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories, exposed through authenticated report APIs, and reviewed in the Reports workbench. Final Markdown template polish is delivered separately.
 
 ## Workflow
 
@@ -101,6 +101,14 @@ Creation defaults to `metadata_only` when `privacy_mode` is omitted and returns 
 
 Markdown responses use `text/markdown; charset=utf-8` and a stable attachment filename. `full_local_only` export returns `422 Unprocessable Entity`; users must create a redacted metadata or snippet report instead.
 
+## Workbench
+
+`/app/reports` leads with saved audit reports and a source-driven creation form. Users select a saved trace or Eval Lab experiment, choose an explicit privacy mode, and open the generated snapshot directly. Existing CI gate failures, weak traces, and corpus warnings remain visible as report candidates.
+
+`/app/reports/:reportId` presents the executive summary, source and configuration context, findings, failure labels, evidence references, recommendations, and privacy classification. Shareable reports can copy the Markdown export through the authenticated API. The copy action is disabled for `full_local_only` reports and explains that redaction is required.
+
+Frontend ownership lives in `apps/web/src/features/workbench/reports`; route files under `apps/web/src/pages` remain thin compatibility exports. The typed API boundary is `apps/web/src/lib/api/reports.ts`, and TanStack Query hooks own report loading, creation, caching, and mutation invalidation.
+
 ## Delivery Stack
 
 The workflow is intentionally split into reviewable tickets:
@@ -109,7 +117,7 @@ The workflow is intentionally split into reviewable tickets:
 2. Pure deterministic builders for traces and Eval Lab experiments.
 3. Memory and Postgres persistence.
 4. Authenticated `/api/v1/reports` routes and Markdown endpoint foundation.
-5. Focused Reports list/detail UI.
+5. Focused Reports list/detail UI. **Implemented.**
 6. Trace, Eval Lab, and CI integration actions.
 7. Professional Markdown rendering and snapshot tests.
 

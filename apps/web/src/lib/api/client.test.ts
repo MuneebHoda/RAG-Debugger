@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiError, readJsonResponse } from "./client";
+import { ApiError, readJsonResponse, readTextResponse } from "./client";
 
 describe("API client errors", () => {
   it("parses the structured backend error envelope", async () => {
@@ -36,6 +36,29 @@ describe("API client errors", () => {
 
     expect(error.message).toBe("Request failed with 500");
     expect(error.body).toBe("");
+  });
+
+  it("reads successful text responses without JSON parsing", async () => {
+    const markdown = "# Audit report\n";
+
+    await expect(
+      readTextResponse(new Response(markdown, { status: 200 })),
+    ).resolves.toBe(markdown);
+  });
+
+  it("uses the same structured errors for text responses", async () => {
+    const body = JSON.stringify({
+      error: { code: "validation_error", message: "export is blocked" },
+    });
+
+    await expect(
+      readTextResponse(new Response(body, { status: 422 })),
+    ).rejects.toMatchObject({
+      message: "export is blocked",
+      status: 422,
+      code: "validation_error",
+      body,
+    });
   });
 });
 

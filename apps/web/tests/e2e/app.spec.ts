@@ -756,6 +756,112 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   await expect(page.getByText("-0.40", { exact: false })).toBeVisible();
 });
 
+test("creates and opens a privacy-classified audit report", async ({
+  page,
+}) => {
+  await seedDemoSession(page);
+  const reportId = "018f7a2a-6e2e-7000-a000-000000000801";
+  const traceId = "018f7a2a-6e2e-7000-a000-000000000802";
+  const report = {
+    id: reportId,
+    workspace_id: authResponse.user.workspace.id,
+    project_id: "018f7a2a-6e2e-7000-a000-000000000803",
+    title: "Retrieval audit",
+    subject: "",
+    source: { type: "trace", trace_id: traceId },
+    privacy_mode: "metadata_only",
+    executive_summary: "The run returned weak evidence.",
+    context: { retrieval_mode: "hybrid", top_k: "5" },
+    findings: [
+      {
+        code: "weak-evidence",
+        severity: "warning",
+        title: "Weak evidence",
+        summary: "The strongest result did not clear the evidence threshold.",
+        failure_labels: ["weak_evidence"],
+        evidence_refs: ["E1"],
+      },
+    ],
+    evidence: [],
+    recommendations: [
+      {
+        code: "increase-top-k",
+        priority: "high",
+        area: "top_k",
+        title: "Increase retrieval depth",
+        rationale: "Relevant evidence may rank below the cutoff.",
+        action: "Rerun with a higher top_k.",
+        finding_codes: ["weak-evidence"],
+      },
+    ],
+    created_at: "2026-06-30T12:00:00Z",
+  };
+
+  await page.route("**/api/v1/reports/from-trace", (route) =>
+    route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      json: report,
+    }),
+  );
+  await page.route(`**/api/v1/reports/${reportId}`, (route) =>
+    route.fulfill({ contentType: "application/json", json: report }),
+  );
+  await page.route("**/api/v1/reports", (route) =>
+    route.fulfill({ contentType: "application/json", json: [] }),
+  );
+  await page.route("**/api/v1/traces", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: [
+        {
+          id: traceId,
+          query: "How are GPU workers configured?",
+          retrieval_mode: "hybrid",
+          latency_ms: 8,
+          evidence_strength: "weak",
+          failure_labels: ["weak_evidence"],
+          span_count: 4,
+          rerun_count: 0,
+          created_at: "2026-06-30T11:00:00Z",
+        },
+      ],
+    }),
+  );
+  await page.route("**/api/v1/eval-lab/experiments", (route) =>
+    route.fulfill({ contentType: "application/json", json: [] }),
+  );
+  await page.route("**/api/v1/eval-lab/ci/runs", (route) =>
+    route.fulfill({ contentType: "application/json", json: [] }),
+  );
+  await page.route("**/api/v1/sources", (route) =>
+    route.fulfill({ contentType: "application/json", json: [] }),
+  );
+
+  await page.setViewportSize({ width: 1024, height: 900 });
+  await page.goto("/app/reports");
+  await expect(
+    page.getByRole("heading", { name: "Audit reports" }),
+  ).toBeVisible();
+  const runSelect = page.getByLabel("Run", { exact: true });
+  await expect(runSelect).toBeEnabled();
+  await runSelect.focus();
+  await expect(runSelect).toBeFocused();
+  await runSelect.selectOption(traceId);
+  await page.getByRole("button", { name: "Create report" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/app/reports/${reportId}$`));
+  await expect(page.getByText(report.executive_summary)).toBeVisible();
+  await expect(page.getByText("Increase retrieval depth")).toBeVisible();
+  await assertNoHorizontalOverflow(page);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await assertNoHorizontalOverflow(page);
+  await expect(
+    page.getByRole("button", { name: "Copy Markdown" }),
+  ).toBeVisible();
+});
+
 test("workbench stays readable without horizontal overflow", async ({
   page,
 }) => {
