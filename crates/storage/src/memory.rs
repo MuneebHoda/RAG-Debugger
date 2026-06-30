@@ -7,14 +7,14 @@ use std::{
 use async_trait::async_trait;
 use rag_debugger_core::{
     ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
-    ChunkId, CiEvalRun, CiEvalRunId, Document, DocumentId, DocumentSummary,
-    EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus,
-    IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals, Organization, PrivacyMode,
-    Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset,
-    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
-    RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse,
-    RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary,
-    User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
+    ChunkId, CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
+    DocumentSummary, EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo,
+    EmbeddingStatus, IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals,
+    Organization, PrivacyMode, Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId,
+    RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
+    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
+    RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
+    TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -22,8 +22,8 @@ use uuid::Uuid;
 use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
-        HealthRepository, ProjectRepository, RetrievalRepository, SourceRepository,
-        TraceRepository,
+        HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
+        SourceRepository, TraceRepository,
     },
     StorageError,
 };
@@ -56,6 +56,7 @@ struct MemoryStoreInner {
     auth_sessions: HashMap<String, AuthSessionRecord>,
     api_keys: HashMap<ApiKeyId, ApiKeyRecord>,
     ci_eval_runs: HashMap<CiEvalRunId, CiEvalRun>,
+    debug_reports: HashMap<DebugReportId, DebugReport>,
 }
 
 #[async_trait]
@@ -748,6 +749,50 @@ impl CiEvalRepository for MemoryStore {
             .filter(|run| run.dataset_id == dataset_id && run.config_label == config_label)
             .max_by_key(|run| run.created_at)
             .cloned())
+    }
+}
+
+#[async_trait]
+impl ReportRepository for MemoryStore {
+    async fn save_debug_report(&self, report: DebugReport) -> Result<DebugReport, StorageError> {
+        let mut inner = self.lock()?;
+        if inner.debug_reports.contains_key(&report.id) {
+            return Err(StorageError::Conflict(format!(
+                "debug report {}",
+                report.id.0
+            )));
+        }
+        inner.debug_reports.insert(report.id, report.clone());
+        Ok(report)
+    }
+
+    async fn list_debug_reports(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<DebugReport>, StorageError> {
+        let inner = self.lock()?;
+        let mut reports = inner
+            .debug_reports
+            .values()
+            .filter(|report| report.workspace_id == workspace_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        reports.sort_by_key(|report| (Reverse(report.created_at), Reverse(report.id.0)));
+        Ok(reports)
+    }
+
+    async fn get_debug_report(
+        &self,
+        workspace_id: WorkspaceId,
+        report_id: DebugReportId,
+    ) -> Result<DebugReport, StorageError> {
+        let inner = self.lock()?;
+        inner
+            .debug_reports
+            .get(&report_id)
+            .filter(|report| report.workspace_id == workspace_id)
+            .cloned()
+            .ok_or(StorageError::NotFound)
     }
 }
 

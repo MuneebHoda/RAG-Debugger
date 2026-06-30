@@ -1,13 +1,14 @@
 use async_trait::async_trait;
 use rag_debugger_core::{
     ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
-    CiEvalRun, CiEvalRunId, Document, DocumentId, EmbeddingIndexCandidate, EmbeddingIndexRequest,
-    EmbeddingModelInfo, EmbeddingStatus, IngestionRun, IngestionRunId, IngestionRunStatus,
-    IngestionTotals, Organization, Project, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
-    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
-    RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
-    TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
+    CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
+    EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus,
+    IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals, Organization, Project,
+    RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId,
+    RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
+    RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse, RetrievalQueryRunId,
+    SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary, User, UserId,
+    UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
 };
 
 use crate::StorageError;
@@ -200,6 +201,20 @@ pub trait CiEvalRepository: Send + Sync {
     ) -> Result<Option<CiEvalRun>, StorageError>;
 }
 
+#[async_trait]
+pub trait ReportRepository: Send + Sync {
+    async fn save_debug_report(&self, report: DebugReport) -> Result<DebugReport, StorageError>;
+    async fn list_debug_reports(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<DebugReport>, StorageError>;
+    async fn get_debug_report(
+        &self,
+        workspace_id: WorkspaceId,
+        report_id: DebugReportId,
+    ) -> Result<DebugReport, StorageError>;
+}
+
 /// Compatibility boundary for the synchronous upload workflow.
 pub trait IngestionRepository:
     ProjectRepository + SourceRepository + DocumentRepository + Send + Sync
@@ -220,6 +235,7 @@ pub trait AppRepository:
     + EvalRepository
     + AuthRepository
     + CiEvalRepository
+    + ReportRepository
 {
 }
 
@@ -232,5 +248,6 @@ impl<T> AppRepository for T where
         + EvalRepository
         + AuthRepository
         + CiEvalRepository
+        + ReportRepository
 {
 }

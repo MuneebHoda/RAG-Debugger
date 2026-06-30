@@ -7,8 +7,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
-        HealthRepository, ProjectRepository, RetrievalRepository, SourceRepository,
-        TraceRepository,
+        HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
+        SourceRepository, TraceRepository,
     },
     StorageError,
 };
@@ -20,6 +20,7 @@ mod embeddings;
 mod eval_lab;
 mod ingestion;
 mod projects;
+mod reports;
 mod retrieval;
 mod traces;
 
@@ -383,5 +384,27 @@ impl CiEvalRepository for PostgresStore {
         config_label: &str,
     ) -> Result<Option<CiEvalRun>, StorageError> {
         PostgresStore::latest_ci_eval_run_for_dataset(self, dataset_id, config_label).await
+    }
+}
+
+#[async_trait]
+impl ReportRepository for PostgresStore {
+    async fn save_debug_report(&self, report: DebugReport) -> Result<DebugReport, StorageError> {
+        PostgresStore::save_debug_report(self, report).await
+    }
+
+    async fn list_debug_reports(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<DebugReport>, StorageError> {
+        PostgresStore::list_debug_reports(self, workspace_id).await
+    }
+
+    async fn get_debug_report(
+        &self,
+        workspace_id: WorkspaceId,
+        report_id: DebugReportId,
+    ) -> Result<DebugReport, StorageError> {
+        PostgresStore::get_debug_report(self, workspace_id, report_id).await
     }
 }
