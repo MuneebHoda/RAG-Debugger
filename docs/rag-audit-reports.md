@@ -2,7 +2,7 @@
 
 RAG Audit Reports turn retrieval diagnostics into a reviewable engineering deliverable. A report freezes the evidence, failure signals, configuration context, and recommended fixes from a Trace Debugger run, Eval Lab experiment, CI eval run, or manual investigation.
 
-Ticket 1 establishes shared contracts and documentation only. Report generation, persistence, APIs, UI integration, and Markdown rendering are delivered in separate reviewed tickets.
+The current builder layer generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Persistence, APIs, UI integration, and Markdown rendering are delivered in separate reviewed tickets.
 
 ## Workflow
 
@@ -65,6 +65,10 @@ Allows complete local diagnostic detail for investigation. It is not shareable o
 Reports do not use an LLM. Given the same stored source, privacy mode, and report-builder version, findings, evidence ordering, failure-label ordering, and recommendations must be stable. Generated IDs and timestamps are excluded from deterministic equality.
 
 Configuration context uses an ordered map so Markdown and API output remain stable. Report builders must derive recommendations from explicit failure labels and metrics rather than open-ended text generation.
+
+`crates/rag/src/reports` separates source builders, privacy filtering, and recommendation mapping. Callers supply `DebugReportBuildContext` with fixed ownership, ID, privacy mode, and timestamp so tests and later storage/API layers control non-deterministic values.
+
+Trace builders require a saved retrieval response and include ranked evidence plus the latest rerun comparison. Eval builders include gate outcomes, mode metrics, expected/retrieved/missing evidence IDs, and failed cases. CI builders add branch, commit, config label, regression deltas, and newly failing case counts.
 
 ## Safe Sharing Rules
 
