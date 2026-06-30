@@ -83,6 +83,9 @@ describe("guided run workflow", () => {
     expect(
       screen.getByText(/too weak for a confident answer/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create audit report" }),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
     expect(screen.getByText(/gpu workers speed up/i)).toBeInTheDocument();

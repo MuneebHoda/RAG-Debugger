@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import { TraceEvidencePanel } from "./components/TraceEvidencePanel";
 import { TraceRerunPanel } from "./components/TraceRerunPanel";
 import { TraceSummaryPanel } from "./components/TraceSummaryPanel";
@@ -72,6 +73,10 @@ export function TraceDetailPage() {
           </span>
         </div>
       </header>
+
+      <CreateAuditReportAction
+        source={{ sourceType: "trace", sourceId: trace.id }}
+      />
 
       <div className={styles.tabs} role="tablist" aria-label="Run details">
         {tabs.map((tab) => (

@@ -109,6 +109,8 @@ Markdown responses use `text/markdown; charset=utf-8` and a stable attachment fi
 
 Frontend ownership lives in `apps/web/src/features/workbench/reports`; route files under `apps/web/src/pages` remain thin compatibility exports. The typed API boundary is `apps/web/src/lib/api/reports.ts`, and TanStack Query hooks own report loading, creation, caching, and mutation invalidation.
 
+Trace Detail, Eval experiment detail, and failed CI gate rows expose the same Reports-owned `Create audit report` action. The action always opens a confirmation panel, defaults to `metadata_only`, and requires an explicit privacy selection before generation. Successful creation opens the new report directly. Submission is synchronously guarded so rapid repeated clicks cannot create duplicate snapshots.
+
 ## Delivery Stack
 
 The workflow is intentionally split into reviewable tickets:
@@ -118,7 +120,7 @@ The workflow is intentionally split into reviewable tickets:
 3. Memory and Postgres persistence.
 4. Authenticated `/api/v1/reports` routes and Markdown endpoint foundation.
 5. Focused Reports list/detail UI. **Implemented.**
-6. Trace, Eval Lab, and CI integration actions.
+6. Trace, Eval Lab, and CI integration actions. **Implemented.**
 7. Professional Markdown rendering and snapshot tests.
 
 PDF export, billing, hosted sync, external LLM calls, and broad Reports-page redesign are not part of this stack.

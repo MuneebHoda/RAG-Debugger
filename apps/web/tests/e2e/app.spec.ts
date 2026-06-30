@@ -657,6 +657,22 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     retrieval,
     reruns: [],
   };
+  const reportId = "018f7a2a-6e2e-7000-a000-000000000310";
+  const report = {
+    id: reportId,
+    workspace_id: authResponse.user.workspace.id,
+    project_id: source.project_id,
+    title: "Trace retrieval audit",
+    subject: "",
+    source: { type: "trace", trace_id: traceId },
+    privacy_mode: "metadata_only",
+    executive_summary: "The trace contains one retrieval quality signal.",
+    context: { retrieval_mode: "hybrid", top_k: "5" },
+    findings: [],
+    recommendations: [],
+    evidence: [],
+    created_at: "2026-06-23T00:00:03Z",
+  };
 
   await page.route("**/api/v1/traces", async (route) => {
     await route.fulfill({
@@ -732,6 +748,13 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
       json: trace,
     });
   });
+  await page.route("**/api/v1/reports/from-trace", async (route) => {
+    await route.fulfill({
+      status: 201,
+      contentType: "application/json",
+      json: report,
+    });
+  });
 
   await page.goto("/app/traces");
   await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
@@ -754,6 +777,12 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
 
   await expect(page.getByText("Top-score change")).toBeVisible();
   await expect(page.getByText("-0.40", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Create audit report" }).click();
+  await expect(page.getByLabel("Privacy")).toHaveValue("metadata_only");
+  await page.getByRole("button", { name: "Create report" }).click();
+  await expect(page).toHaveURL(new RegExp(`/app/reports/${reportId}$`));
+  await expect(page.getByText(report.executive_summary)).toBeVisible();
 });
 
 test("creates and opens a privacy-classified audit report", async ({

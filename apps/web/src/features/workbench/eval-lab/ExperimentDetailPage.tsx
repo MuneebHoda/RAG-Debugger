@@ -10,6 +10,7 @@ import { Link, useParams } from "react-router-dom";
 
 import { getEvalLabExperiment } from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
+import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import styles from "./QualityPage.module.css";
 
 export function ExperimentDetailPage() {
@@ -59,6 +60,10 @@ export function ExperimentDetailPage() {
           </span>
         </div>
       </header>
+
+      <CreateAuditReportAction
+        source={{ sourceType: "experiment", sourceId: experiment.id }}
+      />
 
       <section className={`${styles.gate} ${styles[experiment.gate.status]}`}>
         <div className={styles.gateIcon}>

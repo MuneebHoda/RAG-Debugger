@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   createDebugReportFromExperiment,
+  createDebugReportFromCiRun,
   createDebugReportFromTrace,
   exportDebugReportMarkdown,
   getDebugReport,
@@ -22,6 +23,11 @@ export type CreateReportInput =
     }
   | {
       sourceType: "experiment";
+      sourceId: string;
+      privacyMode: DebugReportPrivacyMode;
+    }
+  | {
+      sourceType: "ci_run";
       sourceId: string;
       privacyMode: DebugReportPrivacyMode;
     };
@@ -46,9 +52,14 @@ export function useCreateDebugReport() {
   return useMutation({
     mutationFn: (input: CreateReportInput) => {
       const request = { privacy_mode: input.privacyMode };
-      return input.sourceType === "trace"
-        ? createDebugReportFromTrace(input.sourceId, request)
-        : createDebugReportFromExperiment(input.sourceId, request);
+      switch (input.sourceType) {
+        case "trace":
+          return createDebugReportFromTrace(input.sourceId, request);
+        case "experiment":
+          return createDebugReportFromExperiment(input.sourceId, request);
+        case "ci_run":
+          return createDebugReportFromCiRun(input.sourceId, request);
+      }
     },
     onSuccess: (report) => {
       queryClient.setQueryData(reportKeys.detail(report.id), report);

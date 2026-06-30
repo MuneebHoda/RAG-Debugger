@@ -106,6 +106,9 @@ describe("guided Quality workflow", () => {
     expect(
       screen.getByRole("heading", { name: /mode comparison/i }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create audit report" }),
+    ).toBeInTheDocument();
   });
 });
 

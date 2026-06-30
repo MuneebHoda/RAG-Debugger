@@ -18,6 +18,7 @@ The implementation is deterministic and local in this pass. It does not call a h
 5. Read the Summary diagnosis and recommended next action.
 6. Inspect ranked evidence and ordered spans in the Evidence and Timeline tabs.
 7. Rerun the trace with `lexical`, `vector`, or `hybrid` mode and compare score delta, latency delta, ranking movement, and overlap.
+8. Create a privacy-classified audit report when the run diagnosis is ready to review or share.
 
 ## API Routes
 
@@ -128,6 +129,8 @@ This helps users see whether lexical, vector, or hybrid retrieval is improving e
 
 Summary also exposes **Add to Quality**. It requires an explicit dataset and expected chunk selection; CorpusLab never silently treats the first hit or first dataset as correct.
 
+Trace Detail also exposes **Create audit report** above the debugger tabs. The action defaults to metadata-only output, requires privacy confirmation, and opens the generated report at `/app/reports/:reportId`.
+
 ## Privacy
 
 Traces are local in this pass. A trace stores retrieval query text, extracted chunk evidence, citations, metadata, and diagnostics. Original uploaded binaries are not stored. Hosted sync should later honor `PrivacyMode` and sync only approved metadata, redacted traces, or explicit snippets.
@@ -135,7 +138,7 @@ Traces are local in this pass. A trace stores retrieval query text, extracted ch
 ## Next Steps
 
 - Link traces to eval cases so the Eval Check span can show pass/fail status.
-- Let Reports reference saved traces as evidence sources.
+- Add reviewer comments and approval state to generated trace audit reports.
 - Add comments and reviewer notes on traces for team workflows.
 - Store trace filters directly in `RetrievalQueryRun` so query-input spans can show exact source/document filters.
 - Add prompt and generation spans when generation is implemented.
