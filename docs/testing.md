@@ -28,6 +28,7 @@ Expected coverage in the scaffold:
 - API error contract tests for structured 400, 401, 404, and sanitized internal/storage responses.
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
 - Domain serialization tests as contracts become public.
+- Audit-report contract tests for source discriminators, privacy-mode wire values, optional evidence metadata, RFC3339 timestamps, and JSON round trips.
 
 DB-backed integration checks require local Postgres:
 
@@ -99,6 +100,7 @@ When changing commands, paths, or architecture, update:
 - `docs/auth-and-workspaces.md`
 - `docs/ci-eval-workflows.md`
 - `docs/trace-debugger.md`
+- `docs/rag-audit-reports.md`
 - `docs/rag-invariants.md`
 - `docs/privacy-review-checklist.md`
 - `docs/logging-redaction.md`
