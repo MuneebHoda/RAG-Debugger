@@ -9,7 +9,7 @@ use axum::{
 use tower_http::cors::CorsLayer;
 
 use super::{
-    api_keys, auth_routes, ci_eval, config, embeddings, eval_lab, evals, health, overview,
+    api_keys, auth_routes, ci_eval, config, embeddings, eval_lab, evals, health, overview, reports,
     retrieval, sources, traces,
 };
 use crate::{auth, config::RuntimeEnvironment, error::ApiError, state::AppState};
@@ -93,6 +93,24 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         )
         .route("/traces/:trace_id", get(traces::get_trace))
         .route("/traces/:trace_id/rerun", post(traces::rerun_trace))
+        .route("/reports", get(reports::list_reports))
+        .route(
+            "/reports/from-trace",
+            post(reports::create_report_from_trace),
+        )
+        .route(
+            "/reports/from-experiment",
+            post(reports::create_report_from_experiment),
+        )
+        .route(
+            "/reports/from-ci-run",
+            post(reports::create_report_from_ci_run),
+        )
+        .route("/reports/:report_id", get(reports::get_report))
+        .route(
+            "/reports/:report_id/export.md",
+            get(reports::export_report_markdown),
+        )
         .route("/sources", get(sources::list_sources))
         .route("/sources/files", post(sources::ingest_files))
         .route(

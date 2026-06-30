@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Authenticated workspace-scoped audit report creation, list/detail, and privacy-enforced Markdown export APIs.
 - Workspace-scoped MemoryStore and Postgres persistence for append-only RAG audit report snapshots.
 - Deterministic privacy-aware RAG audit report builders for traces, Eval Lab experiments, and CI regression runs.
 - Additive RAG Audit Report domain contracts for trace, Eval Lab, CI, and manual report sources with explicit privacy modes and deterministic evidence links.

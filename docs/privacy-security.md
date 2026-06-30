@@ -34,5 +34,6 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 - Future hosted APIs should add invitations, SSO/SAML, SCIM, deeper RBAC, audit logging, and per-workspace retention settings.
 - Any export path must preserve project ownership and deletion semantics.
 - Report sharing must support redaction before it becomes a hosted/team feature.
+- Audit report creation defaults to `metadata_only`; `full_local_only` reports cannot use Markdown export.
 
 Changes that move data, add external providers, alter auth/retention/export behavior, or add telemetry must complete the [`Privacy Review Checklist`](privacy-review-checklist.md). Hosted sync and external model-provider boundaries require an ADR.

@@ -101,6 +101,8 @@ When chunking behavior changes, add a migration for any persisted metadata and k
 
 Audit report snapshots use the `debug_reports` table. List and detail repository methods require a workspace ID, and the canonical report body is stored as JSON with indexed ownership/source metadata. Run migrations before testing report persistence against Postgres.
 
+Report APIs require the same HttpOnly session used by the workbench. Generate reports from saved traces, experiments, or CI eval runs; omitted privacy mode defaults to `metadata_only`. Full-local reports remain readable in the workbench but are rejected by the Markdown export endpoint.
+
 ## Retrieval Playground Flow
 
 1. Complete the file ingestion flow so chunks exist in Postgres.

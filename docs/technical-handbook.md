@@ -261,6 +261,8 @@ The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contract
 
 `ReportRepository` provides workspace-scoped save, list, and detail operations with MemoryStore/Postgres parity. Postgres stores one append-only `debug_reports` row per snapshot, including indexed workspace/project/source/privacy columns and canonical report JSON. Duplicate report IDs fail; multiple snapshots from the same source are allowed.
 
+Protected `/api/v1/reports` routes create reports from traces, experiments, and native CI runs, then expose workspace-scoped list/detail and Markdown export. Handlers authenticate the active session to determine report ownership. Metadata-only is the request default, CI ownership is verified, and full-local reports return `422` from export.
+
 ## Privacy And Security Model
 
 Default behavior is local and privacy-first.

@@ -60,12 +60,34 @@ pub enum DebugReportSource {
     },
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum DebugReportPrivacyMode {
+    #[default]
     MetadataOnly,
     SnippetsAllowed,
     FullLocalOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct CreateDebugReportFromTraceRequest {
+    pub trace_id: TraceId,
+    #[serde(default)]
+    pub privacy_mode: DebugReportPrivacyMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct CreateDebugReportFromExperimentRequest {
+    pub experiment_id: RetrievalEvalExperimentId,
+    #[serde(default)]
+    pub privacy_mode: DebugReportPrivacyMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct CreateDebugReportFromCiRunRequest {
+    pub run_id: CiEvalRunId,
+    #[serde(default)]
+    pub privacy_mode: DebugReportPrivacyMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
