@@ -255,13 +255,15 @@ Reports can originate from a trace, Eval Lab experiment, CI eval run, or manual 
 
 Report privacy is distinct from project privacy. `metadata_only` excludes query and document content, `snippets_allowed` permits explicitly approved bounded text, and `full_local_only` cannot be shared or exported without an explicit privacy downgrade. The full workflow and sharing rules are documented in `docs/rag-audit-reports.md`.
 
-The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Audit reports are additive and currently have no persistence, API, export, or UI behavior.
+The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Audit reports are additive and do not replace existing retrieval, trace, Eval Lab, CI, or diagnostic-queue contracts.
 
 `crates/rag/src/reports` builds deterministic reports from traces, Eval Lab experiments, and CI eval runs. Build context supplies IDs, ownership, privacy mode, and timestamp. Source builders freeze configuration and comparison metadata, map failure labels to stable findings and remediation categories, deduplicate recommendations, and apply report privacy before evidence enters the report.
 
 `ReportRepository` provides workspace-scoped save, list, and detail operations with MemoryStore/Postgres parity. Postgres stores one append-only `debug_reports` row per snapshot, including indexed workspace/project/source/privacy columns and canonical report JSON. Duplicate report IDs fail; multiple snapshots from the same source are allowed.
 
 Protected `/api/v1/reports` routes create reports from traces, experiments, and native CI runs, then expose workspace-scoped list/detail and Markdown export. Handlers authenticate the active session to determine report ownership. Metadata-only is the request default, CI ownership is verified, and full-local reports return `422` from export.
+
+The Reports feature owns the shared creation action used by Trace Detail, Eval experiment detail, and failed CI gate rows. Every source integration opens a privacy confirmation panel, defaults to metadata-only, guards against duplicate submission, and navigates to the persisted report detail after creation.
 
 ## Privacy And Security Model
 

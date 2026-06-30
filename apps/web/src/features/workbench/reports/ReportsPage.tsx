@@ -17,6 +17,7 @@ import { listSources } from "../../../lib/api/sources";
 import { listTraces } from "../../../lib/api/traces";
 import { formatDateTime } from "../../../lib/dateTime";
 import { ReportCreationPanel } from "./components/ReportCreationPanel";
+import { CreateAuditReportAction } from "./components/CreateAuditReportAction";
 import { ReportList } from "./components/ReportList";
 import { useDebugReports } from "./hooks/useReports";
 import styles from "./ReportsPage.module.css";
@@ -147,6 +148,10 @@ export function ReportsPage() {
                 {run.commit_sha?.slice(0, 8) ?? "no commit"} ·{" "}
                 {formatDateTime(run.created_at)}
               </small>
+              <CreateAuditReportAction
+                compact
+                source={{ sourceType: "ci_run", sourceId: run.id }}
+              />
             </article>
           ))}
           {failedGates.length === 0 && !candidateLoading ? (

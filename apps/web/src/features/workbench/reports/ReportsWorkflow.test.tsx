@@ -10,9 +10,11 @@ import { ReportsPage } from "./ReportsPage";
 const reportId = "018f7a2a-6e2e-7000-a000-000000000801";
 const traceId = "018f7a2a-6e2e-7000-a000-000000000802";
 const experimentId = "018f7a2a-6e2e-7000-a000-000000000803";
+let ciRuns: unknown[] = [];
 
 describe("audit reports workbench", () => {
   beforeEach(() => {
+    ciRuns = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -37,7 +39,7 @@ describe("audit reports workbench", () => {
           return responseJson([experimentSummary]);
         }
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
-          return responseJson([]);
+          return responseJson(ciRuns);
         }
         if (url.endsWith("/api/v1/sources")) {
           return responseJson([]);
@@ -146,6 +148,20 @@ describe("audit reports workbench", () => {
       screen.getByText(/export is blocked until it is redacted/i),
     ).toBeInTheDocument();
   });
+
+  it("offers native audit reports for failed CI gates", async () => {
+    ciRuns = [ciRun];
+    renderWithClient(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(ciRun.report.title)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create audit report" }),
+    ).toBeInTheDocument();
+  });
 });
 
 function renderWithClient(children: React.ReactNode) {
@@ -244,4 +260,28 @@ const experimentSummary = {
   gate: { status: "failed" },
   failures: [],
   created_at: "2026-06-30T10:00:00Z",
+};
+
+const ciRun = {
+  id: "018f7a2a-6e2e-7000-a000-000000000830",
+  workspace_id: "workspace-1",
+  dataset_id: "dataset-1",
+  dataset_name: "Release questions",
+  experiment_id: experimentId,
+  status: "failed",
+  gate_status: "failed",
+  branch: "feature/indexing",
+  commit_sha: "abcdef123456",
+  base_ref: "main",
+  head_ref: "feature/indexing",
+  config_label: "default",
+  regression: null,
+  report: {
+    title: "CI retrieval gate failed",
+    summary: "Recall regressed below the release threshold.",
+    gate: { status: "failed" },
+    experiment: experimentSummary,
+    failed_cases: [],
+  },
+  created_at: "2026-06-30T09:00:00Z",
 };

@@ -75,8 +75,11 @@ Quality starts at `/app/evals` and uses focused detail routes.
 5. Run an experiment.
 6. Open `/app/evals/experiments/:experimentId`. Inspect the gate result and failed cases first, then expand detailed metrics.
 7. Use failed cases to improve documents, chunking, indexing, or retrieval config.
+8. Create a privacy-classified audit report from the experiment detail when the gate decision is ready for review.
 
 The Trace Debugger saves evidence into Quality with a note pointing back to the run. The user must choose both the target dataset and expected evidence. This prevents accidental labels and turns observed behavior into deliberate regression coverage.
+
+Experiment Detail uses the same Reports-owned creation action as Trace Debugger. Metadata-only is the default; snippets or unrestricted local diagnostics require an explicit privacy selection before the report is generated.
 
 ## Storage Model
 
