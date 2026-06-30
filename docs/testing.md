@@ -26,6 +26,7 @@ Expected coverage in the scaffold:
 - Auth and workspace tests for signup, login, logout, current-user, session cookies, duplicate email behavior, membership role, and protected workbench routes.
 - API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
 - API error contract tests for structured 400, 401, 404, and sanitized internal/storage responses.
+- Report API tests for session auth, trace/experiment/CI creation, default privacy, workspace-scoped list/detail, Markdown headers, missing reports, and full-local export rejection.
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
 - ReportRepository contract coverage for snapshot ordering, duplicate IDs, missing reports, and workspace isolation.
 - Domain serialization tests as contracts become public.

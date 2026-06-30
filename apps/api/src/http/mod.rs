@@ -7,6 +7,7 @@ mod eval_lab;
 mod evals;
 mod health;
 mod overview;
+mod reports;
 mod retrieval;
 mod routing;
 mod sources;

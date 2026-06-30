@@ -78,6 +78,12 @@ Current ingestion APIs:
 - `GET /api/v1/traces/:trace_id`
 - `POST /api/v1/traces/from-retrieval-run`
 - `POST /api/v1/traces/:trace_id/rerun`
+- `GET /api/v1/reports`
+- `GET /api/v1/reports/:report_id`
+- `POST /api/v1/reports/from-trace`
+- `POST /api/v1/reports/from-experiment`
+- `POST /api/v1/reports/from-ci-run`
+- `GET /api/v1/reports/:report_id/export.md`
 
 Uploads default to `structured` chunking. The API also accepts `chunking_strategy=smart_sections` as a legacy alias and `chunking_strategy=whitespace` for baseline/debug runs. Chunk responses include the strategy, detected section title, split reason, token count, byte range, checksum, quality flags, duplicate status, text density, and evidence hints so the UI can explain why each chunk exists.
 

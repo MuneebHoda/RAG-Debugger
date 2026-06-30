@@ -2,7 +2,7 @@
 
 RAG Audit Reports turn retrieval diagnostics into a reviewable engineering deliverable. A report freezes the evidence, failure signals, configuration context, and recommended fixes from a Trace Debugger run, Eval Lab experiment, CI eval run, or manual investigation.
 
-The current builder layer generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories. APIs, UI integration, and Markdown rendering are delivered in separate reviewed tickets.
+The current builder layer generates deterministic reports from saved traces, Eval Lab experiments, and CI eval runs. Reports are persisted through workspace-scoped memory and Postgres repositories and exposed through authenticated report APIs. Workbench integration and final Markdown polish are delivered separately.
 
 ## Workflow
 
@@ -85,6 +85,21 @@ Trace builders require a saved retrieval response and include ranked evidence pl
 `ReportRepository` stores complete `DebugReport` snapshots and requires a workspace ID for list and detail reads. Multiple snapshots may be created from the same trace or experiment. Postgres stores the canonical report JSON alongside workspace, project, source, privacy, title, subject, and timestamp columns used for ownership and indexing.
 
 The default generation path is `metadata_only`; reports containing explicitly approved snippets or full local diagnostics remain inside the same configured storage boundary. No report persistence path sends data to an external service.
+
+## API
+
+Authenticated workbench routes provide report list/detail, source-specific creation, and Markdown export:
+
+- `GET /api/v1/reports`
+- `GET /api/v1/reports/:report_id`
+- `POST /api/v1/reports/from-trace`
+- `POST /api/v1/reports/from-experiment`
+- `POST /api/v1/reports/from-ci-run`
+- `GET /api/v1/reports/:report_id/export.md`
+
+Creation defaults to `metadata_only` when `privacy_mode` is omitted and returns `201 Created`. List, detail, and export reads are scoped to the authenticated workspace. CI creation also verifies that the CI run belongs to the active workspace.
+
+Markdown responses use `text/markdown; charset=utf-8` and a stable attachment filename. `full_local_only` export returns `422 Unprocessable Entity`; users must create a redacted metadata or snippet report instead.
 
 ## Delivery Stack
 
