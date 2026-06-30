@@ -249,13 +249,13 @@ The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows
 
 ## Report Contracts
 
-`crates/core/src/report.rs` defines report contracts:
+`crates/core/src/report.rs` defines the additive RAG Audit Report contract. `DebugReport` freezes workspace/project ownership, source identity, a privacy-filtered subject, executive summary, deterministic context metadata, findings, recommendations, evidence references, and an RFC3339 creation timestamp.
 
-- `RetrievalReport`
-- `RetrievalDiagnosis`
-- `EvidenceIssue`
+Reports can originate from a trace, Eval Lab experiment, CI eval run, or manual investigation. Findings link stable failure-label codes to labeled evidence references. Recommendations use typed remediation areas for chunking, embeddings, `top_k`, retrieval mode, reranking, metadata filters, citations, and corpus coverage.
 
-The UI now has a Reports page for corpus diagnostics. A future API route can persist and export full retrieval-run reports using these contracts.
+Report privacy is distinct from project privacy. `metadata_only` excludes query and document content, `snippets_allowed` permits explicitly approved bounded text, and `full_local_only` cannot be shared or exported without an explicit privacy downgrade. The full workflow and sharing rules are documented in `docs/rag-audit-reports.md`.
+
+The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Ticket 1 adds no report generation, persistence, API, export, or UI behavior.
 
 ## Privacy And Security Model
 

@@ -73,6 +73,7 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Retrieval Playground](docs/retrieval-playground.md)
 - [Trace Debugger](docs/trace-debugger.md)
 - [Eval Lab](docs/eval-lab.md)
+- [RAG Audit Reports](docs/rag-audit-reports.md)
 - [RAG Invariants](docs/rag-invariants.md)
 - [Auth and Workspaces](docs/auth-and-workspaces.md)
 - [CI Eval Workflows](docs/ci-eval-workflows.md)
