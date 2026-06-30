@@ -18,7 +18,9 @@ The current implementation is privacy-first and local by default. Uploaded binar
 
 ## Rust Workspace Architecture
 
-The Rust workspace keeps domain contracts separate from implementation. `crates/core` owns serializable types and IDs. `crates/rag` owns deterministic RAG behavior. `crates/storage` owns persistence boundaries. `apps/api` composes those crates into HTTP routes.
+The Rust workspace keeps domain contracts separate from implementation. `crates/core` owns serializable types and IDs. `crates/rag` owns deterministic RAG behavior. `crates/storage` owns bounded persistence traits and adapters. `apps/api` composes those crates into HTTP routes.
+
+`crates/storage/src/repository.rs` separates health, project, source, document, embedding, retrieval, trace, eval, auth, and CI eval capabilities. `AppRepository` is the application-facing composite. The narrow `IngestionRepository` compatibility boundary contains no methods of its own and composes only the project, source, and document capabilities required by synchronous uploads.
 
 This shape lets future hosted services, local collectors, workers, and GPU/HPC indexing processes reuse the same contracts without coupling them to Axum route code.
 
@@ -37,7 +39,7 @@ The web app lives in `apps/web/src`.
 - `pages/OverviewPage.tsx`, `ReportsPage.tsx`, and `SettingsPage.tsx` still own legacy route implementations and should move behind feature boundaries through focused refactors.
 - `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
 - `features/workbench/retrieval` owns the question-first retrieval test. A domain hook coordinates source, embedding, query, and trace mutations; focused panels own query, filter, and embedding controls; result components own evidence summaries, citations, and ranking details.
-- `features/workbench/traces` owns the searchable run list and focused `/app/traces/:traceId` debugger with Summary, Evidence, Timeline, and Compare tabs.
+- `features/workbench/traces` owns the searchable run list and focused `/app/traces/:traceId` debugger. A domain hook owns trace loading and tab state; separate components own summary, failure labels, evidence metrics, timeline spans, reruns, and Quality-case creation.
 - `features/workbench/eval-lab` owns the Quality overview, focused dataset editing, experiment execution, gate results, and failure diagnosis routes.
 - `pages/ReportsPage.tsx` prioritizes shareable CI failures, run diagnoses, and corpus findings. `pages/SettingsPage.tsx` separates Workspace, API keys, Runtime, and Privacy tabs.
 

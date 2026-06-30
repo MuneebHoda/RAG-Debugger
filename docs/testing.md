@@ -24,6 +24,7 @@ Expected coverage in the scaffold:
 - Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, gate evaluation, and failure diagnosis.
 - Auth and workspace tests for signup, login, logout, current-user, session cookies, duplicate email behavior, membership role, and protected workbench routes.
 - API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
+- MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
 - Domain serialization tests as contracts become public.
 
 DB-backed integration checks require local Postgres:
@@ -31,6 +32,12 @@ DB-backed integration checks require local Postgres:
 ```sh
 docker compose up -d postgres
 sqlx migrate run
+```
+
+Run the focused in-memory storage contract with:
+
+```sh
+cargo test -p rag-debugger-storage --test memory_store_contract
 ```
 
 ## Web

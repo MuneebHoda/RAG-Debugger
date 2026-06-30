@@ -64,9 +64,11 @@ The response includes the updated trace and the latest rerun comparison.
 - `crates/storage/src/memory.rs`: in-memory trace storage for tests and no-Docker development.
 - `crates/storage/src/postgres/traces.rs`: Postgres trace storage with summary columns plus full JSON timeline.
 - `apps/api/src/http/traces.rs`: Axum handlers for trace list, detail, create-from-retrieval, and rerun.
-- `apps/web/src/features/workbench/traces/RunsPage.tsx`: searchable run list.
-- `apps/web/src/features/workbench/traces/TraceDetailPage.tsx`: focused debugger route and tabs.
-- `apps/web/src/features/workbench/traces/TraceDetailPanels.tsx`: diagnosis, evidence, timeline, comparison, and explicit Quality-case workflows.
+- `apps/web/src/features/workbench/traces/RunsPage.tsx`: searchable run-list orchestration.
+- `apps/web/src/features/workbench/traces/TraceDetailPage.tsx`: focused debugger route composition.
+- `apps/web/src/features/workbench/traces/hooks/useTraceDebugger.ts`: trace query lifecycle and URL-backed tab selection.
+- `apps/web/src/features/workbench/traces/components`: run list, diagnosis, failure labels, evidence metrics, timeline, rerun, and explicit Quality-case workflows.
+- `apps/web/src/features/workbench/traces/utils`: pure run filtering, failure-label recommendations, and comparison formatting.
 - `apps/web/src/features/workbench/retrieval/RetrievalPage.tsx`: `Debug this run` action after a retrieval query.
 
 ## Storage Model

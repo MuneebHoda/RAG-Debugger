@@ -6,16 +6,13 @@ import {
   ListTree,
   ScanSearch,
 } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link } from "react-router-dom";
 
-import { getTrace } from "../../../lib/api/traces";
-import {
-  TraceComparePanel,
-  TraceEvidencePanel,
-  TraceSummaryPanel,
-  TraceTimelinePanel,
-} from "./TraceDetailPanels";
+import { TraceEvidencePanel } from "./components/TraceEvidencePanel";
+import { TraceRerunPanel } from "./components/TraceRerunPanel";
+import { TraceSummaryPanel } from "./components/TraceSummaryPanel";
+import { TraceTimeline } from "./components/TraceTimeline";
+import { useTraceDebugger } from "./hooks/useTraceDebugger";
 import styles from "./TraceDetailPage.module.css";
 
 const tabs = [
@@ -25,20 +22,8 @@ const tabs = [
   { id: "compare", label: "Compare", icon: GitCompare },
 ] as const;
 
-type TraceTab = (typeof tabs)[number]["id"];
-
 export function TraceDetailPage() {
-  const { traceId } = useParams<{ traceId: string }>();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get("tab");
-  const activeTab: TraceTab = tabs.some((tab) => tab.id === tabParam)
-    ? (tabParam as TraceTab)
-    : "summary";
-  const traceQuery = useQuery({
-    queryKey: ["trace", traceId],
-    queryFn: ({ signal }) => getTrace(traceId!, signal),
-    enabled: Boolean(traceId),
-  });
+  const { activeTab, selectTab, traceQuery } = useTraceDebugger();
 
   if (traceQuery.isLoading) {
     return <div className={styles.loading}>Loading run diagnosis…</div>;
@@ -96,7 +81,7 @@ export function TraceDetailPage() {
             key={tab.id}
             role="tab"
             type="button"
-            onClick={() => setSearchParams({ tab: tab.id })}
+            onClick={() => selectTab(tab.id)}
           >
             <tab.icon aria-hidden="true" size={16} /> {tab.label}
           </button>
@@ -105,8 +90,8 @@ export function TraceDetailPage() {
 
       {activeTab === "summary" ? <TraceSummaryPanel trace={trace} /> : null}
       {activeTab === "evidence" ? <TraceEvidencePanel trace={trace} /> : null}
-      {activeTab === "timeline" ? <TraceTimelinePanel trace={trace} /> : null}
-      {activeTab === "compare" ? <TraceComparePanel trace={trace} /> : null}
+      {activeTab === "timeline" ? <TraceTimeline trace={trace} /> : null}
+      {activeTab === "compare" ? <TraceRerunPanel trace={trace} /> : null}
     </section>
   );
 }

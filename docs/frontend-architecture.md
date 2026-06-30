@@ -41,7 +41,7 @@ Current workbench implementations live in:
 
 - `features/workbench/sources`: corpus upload, document library, and chunk inspection.
 - `features/workbench/retrieval`: a thin retrieval page, `useRetrievalWorkbench` orchestration, focused query/filter/embedding panels, pure filter utilities, evidence results, and debugger handoff.
-- `features/workbench/traces`: run list, trace detail, evidence, timeline, and comparison.
+- `features/workbench/traces`: a focused run list, trace query/tab orchestration hook, and separate summary, failure, evidence, metrics, timeline, rerun, and Quality components.
 - `features/workbench/eval-lab`: datasets, cases, experiments, gates, and CI quality runs.
 - `features/workbench/home`: guided setup and next actions.
 
