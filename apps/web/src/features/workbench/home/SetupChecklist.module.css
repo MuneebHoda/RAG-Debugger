@@ -42,7 +42,7 @@
 
 .steps {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 0.5rem;
   margin: 0;
   padding: 0;
@@ -119,7 +119,8 @@
   line-height: 1.45;
 }
 
-.actionRow a {
+.actionRow a,
+.actionButton {
   display: inline-flex;
   min-height: 2.5rem;
   flex: 0 0 auto;
@@ -132,6 +133,17 @@
   font-weight: 850;
   padding: 0 0.9rem;
   text-decoration: none;
+}
+
+.actionButton {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+.actionButton:disabled {
+  cursor: wait;
+  opacity: 0.68;
 }
 
 .completeCard {
@@ -178,7 +190,8 @@
     flex-direction: column;
   }
 
-  .actionRow a {
+  .actionRow a,
+  .actionButton {
     justify-content: center;
   }
 }

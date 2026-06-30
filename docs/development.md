@@ -42,6 +42,34 @@ Web:
 cd apps/web && npm run dev
 ```
 
+## Run The Local Demo
+
+From the repository root:
+
+```sh
+just db-up
+just db-migrate
+just api
+just web
+```
+
+Open `http://127.0.0.1:5173/login`. The API is at `http://127.0.0.1:8080`. Unless overridden in `.env`, sign in with:
+
+```text
+demo@corpuslab.ai
+CorpusLab#2026
+```
+
+Home guides you through loading the versioned sample corpus, indexing only that source, running a suggested query, saving a trace, generating a metadata-only report, and copying or downloading Markdown. Loading is additive and idempotent.
+
+Troubleshooting:
+
+- Start Docker Desktop if `just db-up` cannot reach the daemon.
+- Check `DATABASE_URL` if `just db-migrate` cannot connect.
+- Stop an older API or Vite process if port `8080` or `5173` is occupied.
+- Run `just db-migrate` before treating persisted data as incompatible.
+- `docker compose down -v` is destructive: it deletes the Postgres volume and all local CorpusLab data. Do not use it as a routine reset.
+
 ## Commands
 
 ```sh

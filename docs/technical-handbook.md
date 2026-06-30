@@ -285,6 +285,18 @@ The current logging audit found one API startup event containing bind address, e
 
 Hosted mode will still need tenant isolation hardening, invitations, SSO/SAML, SCIM, audit events, upload scanning, and configurable data retention.
 
+## Guided Demo Workflow
+
+The guided demo is a sellable-workflow proof that exercises the complete local product path without resetting a workspace. `GET /api/v1/demo` returns persisted progress and a typed suggested-query catalog; `POST /api/v1/demo/load` idempotently creates or repairs three synthetic documents.
+
+`apps/api/src/ingestion.rs` is shared by browser uploads and compiled fixtures, so extraction, document intelligence, structured chunking, checksums, duplicate detection, and quality flags cannot drift between demo and production ingestion. The demo uses 128 target tokens, 16 overlap tokens, and the version marker `corpuslab-guided-demo-v1`.
+
+`DemoRepository` extends both storage adapters with workspace-scoped deterministic project/source/document/chunk upserts and source-specific latest retrieval/trace lookup. IDs use SHA-256-derived UUIDs. Progress is reconstructed from normal persisted data: expected documents, chunks, embeddings, a source-matching retrieval run, its trace, and a trace-sourced audit report.
+
+The web Home route is implemented under `features/workbench/home` and exposes one next action at a time. Retrieval receives only `demo_query=<stable-id>`, resolves question text through the authenticated demo contract, and automatically selects the demo source. Report Markdown can be copied or downloaded unless privacy is `full_local_only`.
+
+See `docs/guided-demo.md` for the exact walkthrough, versioning policy, privacy analysis, and operational troubleshooting.
+
 ## Configuration Model
 
 `crates/core/src/config.rs` defines:

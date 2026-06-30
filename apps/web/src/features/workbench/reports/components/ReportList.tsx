@@ -15,6 +15,7 @@ export function ReportList({ reports }: { reports: DebugReport[] }) {
           Create one from a saved run or experiment to establish a shareable
           diagnosis.
         </span>
+        <Link to="/app">Continue the guided demo</Link>
       </div>
     );
   }

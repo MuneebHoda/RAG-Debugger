@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
+import {
+  getDemoStatus,
+  type DemoQueryId,
+  type DemoStatus,
+} from "../../../../lib/api/demo";
 import {
   getEmbeddingStatus,
   indexEmbeddings,
@@ -24,6 +29,7 @@ const DEFAULT_TOP_K = 5;
 
 export function useRetrievalWorkbench() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [sources, setSources] = useState<SourceSummary[]>([]);
   const [query, setQuery] = useState("");
   const [topK, setTopK] = useState(DEFAULT_TOP_K);
@@ -33,6 +39,7 @@ export function useRetrievalWorkbench() {
   const [response, setResponse] = useState<RetrievalQueryResponse | null>(null);
   const [embeddingStatus, setEmbeddingStatus] =
     useState<EmbeddingStatus | null>(null);
+  const [demoStatus, setDemoStatus] = useState<DemoStatus | null>(null);
   const [isLoadingSources, setIsLoadingSources] = useState(true);
   const [isQuerying, setIsQuerying] = useState(false);
   const [isIndexing, setIsIndexing] = useState(false);
@@ -44,10 +51,20 @@ export function useRetrievalWorkbench() {
     Promise.all([
       listSources(controller.signal),
       getEmbeddingStatus(controller.signal),
+      getDemoStatus(controller.signal),
     ])
-      .then(([nextSources, nextEmbeddingStatus]) => {
+      .then(([nextSources, nextEmbeddingStatus, nextDemoStatus]) => {
         setSources(nextSources);
         setEmbeddingStatus(nextEmbeddingStatus);
+        setDemoStatus(nextDemoStatus);
+        const demoQueryId = searchParams.get("demo_query");
+        const suggestedQuery = nextDemoStatus.suggested_queries.find(
+          (item) => item.id === demoQueryId,
+        );
+        if (suggestedQuery && nextDemoStatus.source_id) {
+          setQuery(suggestedQuery.question);
+          setSelectedSourceIds([nextDemoStatus.source_id]);
+        }
       })
       .catch((cause: unknown) => {
         if (!controller.signal.aborted) setError(errorMessage(cause));
@@ -57,7 +74,7 @@ export function useRetrievalWorkbench() {
       });
 
     return () => controller.abort();
-  }, []);
+  }, [searchParams]);
 
   const allDocuments = useMemo(() => collectDocuments(sources), [sources]);
   const visibleDocuments = useMemo(
@@ -97,7 +114,10 @@ export function useRetrievalWorkbench() {
     setIsIndexing(true);
     setError(null);
     try {
-      const result = await indexEmbeddings();
+      const result = await indexEmbeddings({
+        source_ids: selectedSourceIds,
+        document_ids: activeSelectedDocumentIds,
+      });
       setEmbeddingStatus(result.status);
     } catch (cause) {
       setError(errorMessage(cause));
@@ -133,10 +153,22 @@ export function useRetrievalWorkbench() {
     );
   }
 
+  function selectSuggestedQuery(queryId: DemoQueryId) {
+    const suggestion = demoStatus?.suggested_queries.find(
+      (item) => item.id === queryId,
+    );
+    if (!suggestion || !demoStatus?.source_id) return;
+    setQuery(suggestion.question);
+    setSelectedSourceIds([demoStatus.source_id]);
+    setSelectedDocumentIds([]);
+    navigate(`/app/retrieval?demo_query=${queryId}`, { replace: true });
+  }
+
   return {
     activeSelectedDocumentIds,
     allDocuments,
     embeddingStatus,
+    demoStatus,
     error,
     isIndexing,
     isLoadingSources,
@@ -151,6 +183,7 @@ export function useRetrievalWorkbench() {
     visibleDocuments,
     refreshEmbeddings,
     saveTrace,
+    selectSuggestedQuery,
     setQuery,
     setRetrievalMode,
     setTopK,

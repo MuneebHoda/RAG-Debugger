@@ -80,6 +80,32 @@ describe("RetrievalPage", () => {
             last_indexed_at: "2026-06-23T00:00:00Z",
           });
         }
+        if (url.endsWith("/api/v1/demo")) {
+          return responseJson({
+            version: "corpuslab-guided-demo-v1",
+            project_id: source.project_id,
+            source_id: sourceId,
+            progress: {
+              sample_corpus_loaded: true,
+              chunks_created: true,
+              embeddings_indexed: true,
+              document_count: 3,
+              chunk_count: 12,
+              indexed_chunk_count: 12,
+              retrieval_run_id: null,
+              trace_id: null,
+              report_id: null,
+            },
+            suggested_queries: [
+              {
+                id: "account_recovery",
+                question: "How long is the password reset link valid?",
+                description: "Diagnose duplicated support evidence.",
+                recommended: true,
+              },
+            ],
+          });
+        }
         if (url.endsWith("/api/v1/traces/from-retrieval-run")) {
           return responseJson({
             id: "018f7a2a-6e2e-7000-a000-000000000106",
@@ -207,6 +233,26 @@ describe("RetrievalPage", () => {
     expect(
       screen.getByRole("button", { name: /run retrieval/i }),
     ).toBeDisabled();
+  });
+
+  it("resolves a guided query id and preselects the demo source", async () => {
+    render(
+      <MemoryRouter
+        initialEntries={["/app/retrieval?demo_query=account_recovery"]}
+      >
+        <RetrievalPage />
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByDisplayValue(
+        "How long is the password reset link valid?",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Advanced"));
+    expect(
+      screen.getByRole("checkbox", { name: /corpus upload/i }),
+    ).toBeChecked();
   });
 
   it("submits a query and renders cited evidence", async () => {

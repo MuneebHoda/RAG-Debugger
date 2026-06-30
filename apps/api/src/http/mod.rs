@@ -2,6 +2,7 @@ mod api_keys;
 mod auth_routes;
 mod ci_eval;
 mod config;
+mod demo;
 mod embeddings;
 mod eval_lab;
 mod evals;

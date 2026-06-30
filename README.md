@@ -61,6 +61,21 @@ cargo test --workspace
 cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 ```
 
+## Run The Local Demo
+
+From the repository root, use four terminals or run the commands in sequence:
+
+```sh
+just db-up
+just db-migrate
+just api
+just web
+```
+
+Open `http://127.0.0.1:5173/login`, sign in with `demo@corpuslab.ai` / `CorpusLab#2026`, and follow the six-step checklist on Home. The API is available at `http://127.0.0.1:8080`.
+
+The demo adds three versioned Markdown documents to the active workspace. It never resets existing data. See [Guided Demo](docs/guided-demo.md) for architecture, privacy, troubleshooting, and the complete walkthrough.
+
 ## Documentation
 
 - [Architecture](docs/architecture.md)
@@ -74,6 +89,7 @@ cd apps/web && npm run typecheck && npm run lint && npm test && npm run build
 - [Trace Debugger](docs/trace-debugger.md)
 - [Eval Lab](docs/eval-lab.md)
 - [RAG Audit Reports](docs/rag-audit-reports.md)
+- [Guided Demo](docs/guided-demo.md)
 - [RAG Invariants](docs/rag-invariants.md)
 - [Auth and Workspaces](docs/auth-and-workspaces.md)
 - [CI Eval Workflows](docs/ci-eval-workflows.md)

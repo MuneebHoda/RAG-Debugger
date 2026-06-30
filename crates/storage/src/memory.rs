@@ -21,8 +21,8 @@ use uuid::Uuid;
 
 use crate::{
     repository::{
-        AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
-        HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
+        AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
+        EvalRepository, HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
         SourceRepository, TraceRepository,
     },
     StorageError,
@@ -36,6 +36,7 @@ pub struct MemoryStore {
 #[derive(Debug, Default)]
 struct MemoryStoreInner {
     projects: HashMap<ProjectId, Project>,
+    project_workspaces: HashMap<ProjectId, WorkspaceId>,
     sources: HashMap<rag_debugger_core::SourceId, Source>,
     runs: HashMap<IngestionRunId, IngestionRun>,
     documents: HashMap<DocumentId, Document>,
@@ -796,6 +797,106 @@ impl ReportRepository for MemoryStore {
     }
 }
 
+#[async_trait]
+impl DemoRepository for MemoryStore {
+    async fn ensure_demo_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project: Project,
+    ) -> Result<Project, StorageError> {
+        let mut inner = self.lock()?;
+        if let Some(existing_workspace) = inner.project_workspaces.get(&project.id) {
+            if *existing_workspace != workspace_id {
+                return Err(StorageError::NotFound);
+            }
+        }
+        inner
+            .projects
+            .entry(project.id)
+            .or_insert_with(|| project.clone());
+        inner.project_workspaces.insert(project.id, workspace_id);
+        Ok(inner.projects[&project.id].clone())
+    }
+
+    async fn ensure_demo_source(&self, source: Source) -> Result<Source, StorageError> {
+        let mut inner = self.lock()?;
+        if !inner.projects.contains_key(&source.project_id) {
+            return Err(StorageError::NotFound);
+        }
+        inner
+            .sources
+            .entry(source.id)
+            .or_insert_with(|| source.clone());
+        Ok(inner.sources[&source.id].clone())
+    }
+
+    async fn upsert_demo_document_with_chunks(
+        &self,
+        document: Document,
+        chunks: Vec<Chunk>,
+    ) -> Result<bool, StorageError> {
+        let mut inner = self.lock()?;
+        if !inner.sources.contains_key(&document.source_id) {
+            return Err(StorageError::NotFound);
+        }
+        let created = !inner.documents.contains_key(&document.id);
+        inner.documents.insert(document.id, document.clone());
+        let stored = inner.chunks.entry(document.id).or_default();
+        for chunk in chunks {
+            if let Some(existing) = stored.iter_mut().find(|item| item.id == chunk.id) {
+                *existing = chunk;
+            } else {
+                stored.push(chunk);
+            }
+        }
+        stored.sort_by_key(|chunk| chunk.ordinal);
+        Ok(created)
+    }
+
+    async fn get_demo_source(
+        &self,
+        workspace_id: WorkspaceId,
+        version_marker: &str,
+    ) -> Result<Option<SourceSummary>, StorageError> {
+        let inner = self.lock()?;
+        let source = inner.sources.values().find(|source| {
+            inner.project_workspaces.get(&source.project_id) == Some(&workspace_id)
+                && matches!(&source.kind, rag_debugger_core::SourceKind::FileSet { root_hint } if root_hint == version_marker)
+        });
+        Ok(source.map(|source| source_summary(&inner, source)))
+    }
+
+    async fn latest_retrieval_query_for_source(
+        &self,
+        source_id: rag_debugger_core::SourceId,
+    ) -> Result<Option<RetrievalQueryResponse>, StorageError> {
+        let inner = self.lock()?;
+        Ok(inner
+            .retrieval_runs
+            .values()
+            .filter(|response| response.hits.iter().any(|hit| hit.source.id == source_id))
+            .max_by_key(|response| response.run.created_at)
+            .cloned())
+    }
+
+    async fn latest_trace_for_source(
+        &self,
+        source_id: rag_debugger_core::SourceId,
+    ) -> Result<Option<Trace>, StorageError> {
+        let inner = self.lock()?;
+        Ok(inner
+            .traces
+            .values()
+            .filter(|trace| {
+                trace.retrieval.as_ref().is_some_and(|response| {
+                    response.hits.iter().any(|hit| hit.source.id == source_id)
+                })
+            })
+            .max_by_key(|trace| trace.started_at)
+            .cloned())
+    }
+}
+
 impl MemoryStore {
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, MemoryStoreInner>, StorageError> {
         self.inner
@@ -830,6 +931,27 @@ fn filtered_chunks(inner: &MemoryStoreInner, request: &EmbeddingIndexRequest) ->
             .then_with(|| left.ordinal.cmp(&right.ordinal))
     });
     chunks
+}
+
+fn source_summary(inner: &MemoryStoreInner, source: &Source) -> SourceSummary {
+    let documents = inner
+        .documents
+        .values()
+        .filter(|document| document.source_id == source.id)
+        .map(|document| DocumentSummary {
+            document: document.clone(),
+            chunk_count: inner
+                .chunks
+                .get(&document.id)
+                .map_or(0, |chunks| chunks.len() as u32),
+        })
+        .collect::<Vec<_>>();
+    SourceSummary {
+        source: source.clone(),
+        document_count: documents.len() as u32,
+        chunk_count: documents.iter().map(|document| document.chunk_count).sum(),
+        documents,
+    }
 }
 
 fn default_eval_dataset_id() -> RetrievalEvalDatasetId {

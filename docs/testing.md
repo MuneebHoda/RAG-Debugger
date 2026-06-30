@@ -81,6 +81,10 @@ Expected coverage in the scaffold:
 - Playwright tests for upload, focused chunk inspection, cited retrieval evidence, run reruns, responsive workbench layouts, and a real memory-backed login → upload → index → retrieve → debug → compare → Quality workflow.
 - Marketing tests for failure-stage tabs, retrieval-mode fixtures, product-tour tabs, mobile navigation, keyboard traversal, reduced motion, CLS, horizontal overflow, and responsive screenshot generation.
 - Frontend API client tests for structured JSON, plain-text, and empty error responses.
+- Guided-demo contract and service tests for stable query IDs, compiled fixture preparation, deterministic IDs, partial-load repair, repeat-load idempotency, and workspace isolation.
+- Guided-demo API tests for authentication, `201` first load, `200` repeat load, exactly three documents, and stable chunk counts.
+- Guided-demo UI tests for each checklist transition, source-scoped indexing, query-ID resolution, demo-source preselection, and Markdown copy/download privacy behavior.
+- The real Playwright demo flow covers login → load sample → index → suggested query → debug run → metadata-only report → copy/download Markdown.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 
@@ -109,6 +113,7 @@ When changing commands, paths, or architecture, update:
 - `docs/ci-eval-workflows.md`
 - `docs/trace-debugger.md`
 - `docs/rag-audit-reports.md`
+- `docs/guided-demo.md`
 - `docs/rag-invariants.md`
 - `docs/privacy-review-checklist.md`
 - `docs/logging-redaction.md`

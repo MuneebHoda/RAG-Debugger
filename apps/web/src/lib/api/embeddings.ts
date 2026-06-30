@@ -36,6 +36,11 @@ export interface EmbeddingIndexResponse {
   indexed_chunks: number;
 }
 
+export interface EmbeddingIndexRequest {
+  source_ids?: string[];
+  document_ids?: string[];
+}
+
 export function getEmbeddingStatus(
   signal?: AbortSignal,
 ): Promise<EmbeddingStatus> {
@@ -43,10 +48,11 @@ export function getEmbeddingStatus(
 }
 
 export function indexEmbeddings(
+  request: EmbeddingIndexRequest = {},
   signal?: AbortSignal,
 ): Promise<EmbeddingIndexResponse> {
   return requestJson<EmbeddingIndexResponse>(
     "/api/v1/embeddings/index",
-    jsonRequest("POST", {}, signal),
+    jsonRequest("POST", request, signal),
   );
 }

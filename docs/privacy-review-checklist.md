@@ -50,3 +50,7 @@ A pull request needs privacy review if it:
 - [ ] `CHANGELOG.md` records user-visible privacy or security behavior.
 
 Use `N/A` with a short reason in the pull request for checks that do not apply. A checked box means the author verified the behavior; it does not mean the feature has no privacy impact.
+
+## Guided Demo Review Note
+
+The guided demo uses only checked-in synthetic Markdown fixtures and local processing. Loading is an explicit authenticated action scoped to the active workspace. It persists ordinary extracted chunks and embeddings, never separate fixture binaries, and makes no external calls. Suggested query text is returned only to the authenticated client and is not placed in URLs. Audit reports default to `metadata_only`; `full_local_only` export remains blocked. Loading does not delete or reset customer data.

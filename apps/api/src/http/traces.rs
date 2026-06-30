@@ -42,7 +42,6 @@ pub async fn create_trace_from_retrieval_run(
     Json(request): Json<CreateTraceFromRetrievalRunRequest>,
 ) -> Result<Json<Trace>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    let project = repository.ensure_default_project().await?;
     let response = match request.run_id {
         Some(run_id) => repository
             .get_retrieval_query(run_id)
@@ -56,8 +55,22 @@ pub async fn create_trace_from_retrieval_run(
             }
         })?,
     };
+    let project_id = response
+        .hits
+        .first()
+        .map(|hit| hit.source.project_id)
+        .filter(|project_id| {
+            response
+                .hits
+                .iter()
+                .all(|hit| hit.source.project_id == *project_id)
+        });
+    let project_id = match project_id {
+        Some(project_id) => project_id,
+        None => repository.ensure_default_project().await?.id,
+    };
 
-    let trace = build_trace_from_retrieval(project.id, response);
+    let trace = build_trace_from_retrieval(project_id, response);
     Ok(Json(repository.save_trace(trace).await?))
 }
 

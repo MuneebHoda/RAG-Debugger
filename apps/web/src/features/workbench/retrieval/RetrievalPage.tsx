@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 import { EmbeddingPanel } from "./components/EmbeddingPanel";
 import { RetrievalFiltersPanel } from "./components/RetrievalFiltersPanel";
 import { RetrievalQueryPanel } from "./components/RetrievalQueryPanel";
@@ -21,6 +23,14 @@ export function RetrievalPage() {
 
       <RetrievalStatusAlert error={workbench.error} />
 
+      {!workbench.isLoadingSources && workbench.allDocuments.length === 0 ? (
+        <div className={styles.emptyNotice}>
+          Retrieval needs a corpus.{" "}
+          <Link to="/app">Load the guided sample corpus</Link> or add documents
+          in Corpus.
+        </div>
+      ) : null}
+
       <section className={styles.layout}>
         <RetrievalQueryPanel
           advancedControls={
@@ -41,6 +51,7 @@ export function RetrievalPage() {
             </>
           }
           documentCount={workbench.allDocuments.length}
+          demoStatus={workbench.demoStatus}
           isLoadingSources={workbench.isLoadingSources}
           isQuerying={workbench.isQuerying}
           query={workbench.query}
@@ -48,6 +59,7 @@ export function RetrievalPage() {
           topK={workbench.topK}
           onQueryChange={workbench.setQuery}
           onRetrievalModeChange={workbench.setRetrievalMode}
+          onSelectSuggestedQuery={workbench.selectSuggestedQuery}
           onSubmit={() => void workbench.submitQuery()}
           onTopKChange={workbench.setTopK}
         />

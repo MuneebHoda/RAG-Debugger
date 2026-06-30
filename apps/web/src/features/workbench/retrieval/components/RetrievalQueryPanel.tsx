@@ -1,6 +1,7 @@
 import { Loader2, Search, SlidersHorizontal } from "lucide-react";
 import type { ReactNode } from "react";
 
+import type { DemoQueryId, DemoStatus } from "../../../../lib/api/demo";
 import type { RetrievalMode } from "../../../../lib/api/retrieval";
 import styles from "../RetrievalPage.module.css";
 
@@ -9,6 +10,7 @@ const RETRIEVAL_MODES: RetrievalMode[] = ["hybrid", "vector", "lexical"];
 export function RetrievalQueryPanel({
   advancedControls,
   documentCount,
+  demoStatus,
   isLoadingSources,
   isQuerying,
   query,
@@ -16,11 +18,13 @@ export function RetrievalQueryPanel({
   topK,
   onQueryChange,
   onRetrievalModeChange,
+  onSelectSuggestedQuery,
   onSubmit,
   onTopKChange,
 }: {
   advancedControls: ReactNode;
   documentCount: number;
+  demoStatus: DemoStatus | null;
   isLoadingSources: boolean;
   isQuerying: boolean;
   query: string;
@@ -28,6 +32,7 @@ export function RetrievalQueryPanel({
   topK: number;
   onQueryChange: (value: string) => void;
   onRetrievalModeChange: (mode: RetrievalMode) => void;
+  onSelectSuggestedQuery: (queryId: DemoQueryId) => void;
   onSubmit: () => void;
   onTopKChange: (value: number) => void;
 }) {
@@ -39,6 +44,27 @@ export function RetrievalQueryPanel({
           {isLoadingSources ? "Loading" : `${documentCount} documents`}
         </span>
       </div>
+
+      {demoStatus?.progress.sample_corpus_loaded ? (
+        <div
+          className={styles.suggestedQueries}
+          aria-label="Suggested demo questions"
+        >
+          <span>Suggested questions</span>
+          <div>
+            {demoStatus.suggested_queries.map((suggestion) => (
+              <button
+                key={suggestion.id}
+                type="button"
+                onClick={() => onSelectSuggestedQuery(suggestion.id)}
+              >
+                {suggestion.id.replaceAll("_", " ")}
+                {suggestion.recommended ? <small>Recommended</small> : null}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <label className={styles.queryField}>
         What should the corpus answer?

@@ -183,7 +183,10 @@ export function QualityPage() {
               </Link>
             ))}
             {experiments.length === 0 ? (
-              <p className={styles.empty}>No experiments have run yet.</p>
+              <p className={styles.empty}>
+                No experiments have run yet. Start with retrieved evidence, save
+                the run, then add its expected chunk as a quality case.
+              </p>
             ) : null}
           </div>
         </section>

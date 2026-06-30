@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
   use: {
-    baseURL: "http://127.0.0.1:5173",
+    baseURL: "http://127.0.0.1:15173",
     trace: "on-first-retry",
   },
   projects: [
@@ -16,7 +16,7 @@ export default defineConfig({
   webServer: [
     {
       command:
-        "RAG_DEBUGGER_STORAGE_BACKEND=memory RAG_DEBUGGER_API_PORT=18080 RAG_DEBUGGER_PUBLIC_API_BASE_URL=http://127.0.0.1:18080 RAG_DEBUGGER_WEB_ORIGIN=http://127.0.0.1:5173 cargo run -p rag-debugger-api",
+        "RAG_DEBUGGER_STORAGE_BACKEND=memory RAG_DEBUGGER_API_PORT=18080 RAG_DEBUGGER_PUBLIC_API_BASE_URL=http://127.0.0.1:18080 RAG_DEBUGGER_WEB_ORIGIN=http://127.0.0.1:15173 cargo run -p rag-debugger-api",
       cwd: "../..",
       url: "http://127.0.0.1:18080/healthz",
       reuseExistingServer: true,
@@ -24,8 +24,8 @@ export default defineConfig({
     },
     {
       command:
-        "VITE_API_BASE_URL=http://127.0.0.1:18080 npm run dev -- --port 5173",
-      url: "http://127.0.0.1:5173",
+        "VITE_API_BASE_URL=http://127.0.0.1:18080 npm run dev -- --port 15173",
+      url: "http://127.0.0.1:15173",
       reuseExistingServer: true,
     },
   ],
