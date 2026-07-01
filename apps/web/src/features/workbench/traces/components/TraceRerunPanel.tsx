@@ -123,6 +123,29 @@ function ComparisonResult({
           </div>
         ))}
       </div>
+      {comparison.diagnosis ? (
+        <div className={styles.rerunDiagnosis}>
+          <strong>{comparison.diagnosis.summary}</strong>
+          <div>
+            <span>
+              Resolved:{" "}
+              {comparison.diagnosis.resolved_failures.join(", ") || "none"}
+            </span>
+            <span>
+              Introduced:{" "}
+              {comparison.diagnosis.introduced_failures.join(", ") || "none"}
+            </span>
+            <span>
+              Evidence: +{comparison.diagnosis.gained_evidence.length} / -
+              {comparison.diagnosis.lost_evidence.length}
+            </span>
+            <span>
+              Citations: +{comparison.diagnosis.gained_citations.length} / -
+              {comparison.diagnosis.lost_citations.length}
+            </span>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

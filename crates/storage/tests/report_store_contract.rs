@@ -88,6 +88,7 @@ fn report(workspace_id: WorkspaceId, created_at: OffsetDateTime, title: &str) ->
         findings: Vec::new(),
         recommendations: Vec::new(),
         evidence: Vec::new(),
+        diagnosis: None,
         created_at,
     }
 }

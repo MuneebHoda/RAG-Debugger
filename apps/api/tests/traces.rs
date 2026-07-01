@@ -59,6 +59,8 @@ async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
     assert_eq!(trace_body["spans"].as_array().expect("spans").len(), 4);
     assert!(trace_body["started_at"].is_string());
     assert!(trace_body["retrieval"]["run"]["created_at"].is_string());
+    assert!(trace_body["diagnosis"]["outcome"].is_string());
+    assert!(trace_body["diagnosis"]["recommendations"].is_array());
 
     let list_response = app
         .clone()
@@ -82,6 +84,7 @@ async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
     assert_eq!(detail_response.status(), StatusCode::OK);
     let detail_body = json_body(detail_response).await;
     assert_eq!(detail_body["retrieval"]["run"]["id"], run_id);
+    assert!(detail_body["diagnosis"]["score_explanations"].is_array());
 
     let rerun_response = app
         .oneshot(json_request(
@@ -104,6 +107,7 @@ async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
             .len(),
         1
     );
+    assert!(rerun_body["comparison"]["diagnosis"]["summary"].is_string());
 }
 
 #[tokio::test]

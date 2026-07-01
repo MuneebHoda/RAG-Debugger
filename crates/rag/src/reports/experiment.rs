@@ -2,14 +2,17 @@ use std::collections::BTreeMap;
 
 use rag_debugger_core::{
     DebugReport, DebugReportFinding, DebugReportSeverity, DebugReportSource,
-    RetrievalEvalExperiment, RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity,
-    RetrievalEvalGateStatus,
+    DiagnosisRecommendation, EvidenceDiagnosisSummary, RetrievalEvalExperiment,
+    RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity, RetrievalEvalGateStatus,
 };
 
 use super::{
     evidence::experiment_evidence,
     privacy::permits_content,
-    recommendations::{recommendations_for_failure_codes, retrieval_mode_recommendation},
+    recommendations::{
+        debug_report_recommendations, recommendations_for_failure_codes,
+        retrieval_mode_recommendation,
+    },
     retrieval_mode_label, DebugReportBuildContext,
 };
 
@@ -18,6 +21,7 @@ pub fn build_eval_experiment_debug_report(
     experiment: &RetrievalEvalExperiment,
 ) -> DebugReport {
     let (evidence, case_evidence) = experiment_evidence(experiment);
+    let diagnosis = experiment_diagnosis(experiment);
     let mut findings = Vec::new();
     let mut failure_codes = Vec::new();
 
@@ -70,7 +74,10 @@ pub fn build_eval_experiment_debug_report(
         });
     }
 
-    let mut recommendations = recommendations_for_failure_codes(&failure_codes);
+    let mut recommendations = diagnosis.as_ref().map_or_else(
+        || recommendations_for_failure_codes(&failure_codes),
+        |diagnosis| debug_report_recommendations(&diagnosis.recommendations),
+    );
     if experiment.comparison.recall_delta > 0.0 {
         if let Some(best_mode) = experiment.comparison.best_mode {
             recommendations.push(retrieval_mode_recommendation(retrieval_mode_label(
@@ -98,8 +105,57 @@ pub fn build_eval_experiment_debug_report(
         findings,
         recommendations,
         evidence,
+        diagnosis,
         created_at: context.created_at,
     }
+}
+
+fn experiment_diagnosis(experiment: &RetrievalEvalExperiment) -> Option<EvidenceDiagnosisSummary> {
+    let mut failures = Vec::new();
+    let mut recommendations = Vec::<DiagnosisRecommendation>::new();
+    for diagnosis in experiment
+        .mode_results
+        .iter()
+        .flat_map(|mode| &mode.case_results)
+        .filter_map(|result| result.diagnosis.as_ref())
+    {
+        for failure in &diagnosis.failures {
+            if !failures
+                .iter()
+                .any(|existing: &rag_debugger_core::DiagnosisFailure| existing.code == failure.code)
+            {
+                let mut failure = failure.clone();
+                failure.evidence_refs.clear();
+                failures.push(failure);
+            }
+        }
+        for recommendation in &diagnosis.recommendations {
+            if !recommendations
+                .iter()
+                .any(|existing| existing.code == recommendation.code)
+            {
+                let mut recommendation = recommendation.clone();
+                recommendation.evidence_refs.clear();
+                recommendations.push(recommendation);
+            }
+        }
+    }
+    if failures.is_empty() && recommendations.is_empty() {
+        return None;
+    }
+
+    let outcome = match experiment.gate.status {
+        RetrievalEvalGateStatus::Failed => rag_debugger_core::DiagnosisOutcome::Failing,
+        RetrievalEvalGateStatus::Passed => rag_debugger_core::DiagnosisOutcome::Mixed,
+    };
+    Some(EvidenceDiagnosisSummary {
+        outcome,
+        summary: eval_summary(experiment),
+        primary_issue: failures.first().cloned(),
+        failures,
+        score_explanations: Vec::new(),
+        recommendations,
+    })
 }
 
 fn experiment_context(experiment: &RetrievalEvalExperiment) -> BTreeMap<String, String> {

@@ -3,7 +3,8 @@ use std::{collections::HashSet, fmt::Write};
 use rag_debugger_core::{
     ChunkQualityFlag, DebugReport, DebugReportEvidenceRef, DebugReportEvidenceRole,
     DebugReportPrivacyMode, DebugReportRecommendationArea, DebugReportRecommendationPriority,
-    DebugReportSeverity, DebugReportSource, EvidenceStrength, RetrievalQualityFlag,
+    DebugReportSeverity, DebugReportSource, DiagnosisSeverity, EvidenceStrength,
+    RetrievalQualityFlag,
 };
 use thiserror::Error;
 use time::format_description::well_known::Rfc3339;
@@ -24,6 +25,9 @@ pub fn render_debug_report_markdown(report: &DebugReport) -> Result<String, Repo
     let mut output = String::new();
     write_title(&mut output, report);
     write_executive_summary(&mut output, report);
+    if report.diagnosis.is_some() {
+        write_deterministic_diagnosis(&mut output, report);
+    }
     write_source_and_privacy(&mut output, report);
     write_configuration(&mut output, report);
     write_failing_cases(&mut output, report);
@@ -33,6 +37,47 @@ pub fn render_debug_report_markdown(report: &DebugReport) -> Result<String, Repo
     write_recommendations(&mut output, report);
     write_privacy_note(&mut output, report.privacy_mode);
     Ok(output)
+}
+
+fn write_deterministic_diagnosis(output: &mut String, report: &DebugReport) {
+    section(output, "Deterministic Diagnosis");
+    let Some(diagnosis) = &report.diagnosis else {
+        writeln!(output, "No structured diagnosis snapshot was recorded.\n")
+            .expect("String writes cannot fail");
+        return;
+    };
+
+    table_header(output, "Diagnosis field", "Value");
+    table_row(output, "Outcome", diagnosis.outcome.as_str());
+    if let Some(primary) = &diagnosis.primary_issue {
+        table_row(output, "Primary issue", primary.code.as_str());
+        table_row(
+            output,
+            "Severity",
+            diagnosis_severity_label(primary.severity),
+        );
+    }
+    writeln!(output).expect("String writes cannot fail");
+    writeln!(output, "{}\n", escape_markdown(&diagnosis.summary))
+        .expect("String writes cannot fail");
+
+    if !diagnosis.score_explanations.is_empty() {
+        writeln!(output, "### Ranking explanations\n").expect("String writes cannot fail");
+        table_header(output, "Evidence", "Explanation");
+        for explanation in &diagnosis.score_explanations {
+            table_row(
+                output,
+                &explanation.evidence_ref,
+                &format!(
+                    "rank {} · score {:.3} · {}",
+                    explanation.rank,
+                    explanation.final_score,
+                    explanation.dominant_signal.label()
+                ),
+            );
+        }
+        writeln!(output).expect("String writes cannot fail");
+    }
 }
 
 fn write_title(output: &mut String, report: &DebugReport) {
@@ -340,6 +385,14 @@ fn write_recommendations(output: &mut String, report: &DebugReport) {
             )
             .expect("String writes cannot fail");
         }
+        if !recommendation.evidence_refs.is_empty() {
+            writeln!(
+                output,
+                "- **Affected evidence:** {}",
+                escaped_join(&recommendation.evidence_refs)
+            )
+            .expect("String writes cannot fail");
+        }
         writeln!(
             output,
             "\n**Rationale:** {}\n\n**Recommended action:** {}\n",
@@ -488,6 +541,14 @@ fn severity_label(severity: DebugReportSeverity) -> &'static str {
         DebugReportSeverity::Info => "info",
         DebugReportSeverity::Warning => "warning",
         DebugReportSeverity::Critical => "critical",
+    }
+}
+
+fn diagnosis_severity_label(severity: DiagnosisSeverity) -> &'static str {
+    match severity {
+        DiagnosisSeverity::Info => "info",
+        DiagnosisSeverity::Warning => "warning",
+        DiagnosisSeverity::Critical => "critical",
     }
 }
 

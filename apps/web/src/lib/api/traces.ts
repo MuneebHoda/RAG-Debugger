@@ -1,7 +1,10 @@
 import { jsonRequest, requestJson } from "./client";
 import type { RetrievalEmbeddingReadiness } from "./embeddings";
 import type {
+  DiagnosisFailureCode,
+  DiagnosisOutcome,
   EvidenceStrength,
+  EvidenceDiagnosisSummary,
   ExtractiveAnswerStatus,
   RetrievalMode,
   RetrievalQueryRequest,
@@ -96,6 +99,17 @@ export interface TraceRerunComparison {
   latency_delta_ms: number;
   overlap_count: number;
   changed_rank_count: number;
+  diagnosis?: {
+    before_outcome: DiagnosisOutcome;
+    after_outcome: DiagnosisOutcome;
+    summary: string;
+    resolved_failures: DiagnosisFailureCode[];
+    introduced_failures: DiagnosisFailureCode[];
+    gained_evidence: string[];
+    lost_evidence: string[];
+    gained_citations: string[];
+    lost_citations: string[];
+  } | null;
   created_at: string;
 }
 
@@ -114,6 +128,7 @@ export interface Trace {
   spans: TraceSpan[];
   retrieval: RetrievalQueryResponse | null;
   reruns: TraceRerunComparison[];
+  diagnosis?: EvidenceDiagnosisSummary | null;
 }
 
 export interface CreateTraceFromRetrievalRunRequest {

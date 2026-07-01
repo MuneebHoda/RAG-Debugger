@@ -79,16 +79,18 @@ describe("guided run workflow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/likely causes/i)).toBeInTheDocument();
+    expect(await screen.findByText(/primary diagnosis/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/too weak for a confident answer/i),
+      screen.getByRole("heading", { name: /evidence is too weak/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/broaden the candidate pool/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
     expect(screen.getByText(/gpu workers speed up/i)).toBeInTheDocument();
+    expect(screen.getByText(/strongest scoring signal/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /compare/i }));
     fireEvent.change(screen.getByLabelText(/retrieval mode/i), {
@@ -96,6 +98,9 @@ describe("guided run workflow", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /run comparison/i }));
     expect(await screen.findByText("Top-score change")).toBeInTheDocument();
+    expect(
+      screen.getByText(/changed diagnosis from weak to mixed/i),
+    ).toBeInTheDocument();
   });
 
   it("requires an explicit dataset and evidence selection for Quality", async () => {
@@ -107,7 +112,7 @@ describe("guided run workflow", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText(/likely causes/i);
+    await screen.findByText(/primary diagnosis/i);
     fireEvent.click(screen.getByRole("button", { name: /choose evidence/i }));
     const datasetSelect = await screen.findByLabelText(/quality dataset/i);
     await screen.findByRole("option", { name: "Critical questions" });
@@ -154,7 +159,7 @@ describe("guided run workflow", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText(/likely causes/i);
+    await screen.findByText(/primary diagnosis/i);
     fireEvent.click(screen.getByRole("link", { name: /open second run/i }));
     expect(
       await screen.findByText(/loading run diagnosis/i),
@@ -173,6 +178,26 @@ describe("guided run workflow", () => {
       await screen.findByRole("heading", {
         name: "second retrieval question",
       }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps legacy traces readable when structured diagnosis is absent", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => responseJson({ ...trace, diagnosis: undefined })),
+    );
+
+    renderWithClient(
+      <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>
+        <Routes>
+          <Route path="/app/traces/:traceId" element={<TraceDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText(/legacy diagnosis/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/too weak for a confident answer/i),
     ).toBeInTheDocument();
   });
 });
@@ -297,6 +322,67 @@ const retrieval = {
     missing_chunks: 0,
     stale_chunks: 0,
   },
+  diagnosis: {
+    outcome: "weak",
+    summary: "This run looks weak. Primary issue: Evidence is too weak",
+    primary_issue: {
+      code: "weak_evidence",
+      severity: "critical",
+      title: "Evidence is too weak",
+      summary: "The returned evidence cannot support a defensible answer.",
+      evidence_refs: ["E1"],
+    },
+    failures: [
+      {
+        code: "weak_evidence",
+        severity: "critical",
+        title: "Evidence is too weak",
+        summary: "The returned evidence cannot support a defensible answer.",
+        evidence_refs: ["E1"],
+      },
+    ],
+    score_explanations: [
+      {
+        evidence_ref: "E1",
+        chunk_id: chunkId,
+        rank: 1,
+        final_score: 3.4,
+        score_delta_from_previous: null,
+        score_delta_to_next: null,
+        dominant_signal: "lexical",
+        score_breakdown: {
+          semantic: 0.9,
+          lexical: 1.8,
+          phrase: 0.4,
+          section: 0.1,
+          path: 0,
+          metadata: 0.1,
+        },
+        normalized_score_breakdown: {
+          semantic: 0.5,
+          lexical: 1,
+          phrase: 0.2,
+          section: 0.05,
+          path: 0,
+          metadata: 0.05,
+        },
+        summary:
+          "Ranked #1 with lexical overlap as the strongest scoring signal.",
+      },
+    ],
+    recommendations: [
+      {
+        code: "broaden_candidate_pool",
+        priority: "high",
+        area: "top_k",
+        title: "Broaden the candidate pool",
+        rationale: "Evidence is weak.",
+        action: "Increase top_k and inspect whether stronger evidence appears.",
+        failure_codes: ["weak_evidence"],
+        evidence_refs: ["E1"],
+      },
+    ],
+  },
 };
 
 const trace = {
@@ -332,6 +418,7 @@ const trace = {
   ],
   retrieval,
   reruns: [],
+  diagnosis: retrieval.diagnosis,
 };
 
 const comparison = {
@@ -351,6 +438,18 @@ const comparison = {
   latency_delta_ms: 2,
   overlap_count: 1,
   changed_rank_count: 0,
+  diagnosis: {
+    before_outcome: "weak",
+    after_outcome: "mixed",
+    summary:
+      "The rerun changed diagnosis from weak to mixed, resolving 1 signal(s) and introducing 0 signal(s).",
+    resolved_failures: ["weak_evidence"],
+    introduced_failures: [],
+    gained_evidence: [],
+    lost_evidence: [],
+    gained_citations: [],
+    lost_citations: [],
+  },
   created_at: "2026-06-27T10:46:20Z",
 };
 

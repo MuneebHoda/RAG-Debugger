@@ -87,6 +87,7 @@ pub fn build_ci_eval_debug_report(
                 action: "Compare the baseline and head configuration, then block release until the new failures are resolved."
                     .to_owned(),
                 finding_codes: vec!["ci_regression".to_owned()],
+                evidence_refs: Vec::new(),
             });
         }
     }

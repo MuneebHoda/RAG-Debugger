@@ -123,6 +123,13 @@ fn trace_report(privacy_mode: DebugReportPrivacyMode) -> DebugReport {
             "finding_codes": ["duplicate_evidence"]
         }],
         "evidence": [evidence_json("Index publication requires checksum validation.")],
+        "diagnosis": diagnosis_json(
+            "mixed",
+            "duplicate_evidence",
+            "warning",
+            "Duplicate evidence crowded the ranking",
+            &["E1"]
+        ),
         "created_at": "2026-06-30T08:15:30Z"
     }))
 }
@@ -191,6 +198,13 @@ fn eval_report() -> DebugReport {
             "chunk_quality_flags": [],
             "retrieval_quality_flags": []
         }],
+        "diagnosis": diagnosis_json(
+            "failing",
+            "missing_expected_evidence",
+            "critical",
+            "Expected evidence was not retrieved",
+            &["M1"]
+        ),
         "created_at": "2026-06-30T08:15:30Z"
     }))
 }
@@ -236,6 +250,13 @@ fn ci_report() -> DebugReport {
             "finding_codes": ["ci_regression"]
         }],
         "evidence": [],
+        "diagnosis": diagnosis_json(
+            "failing",
+            "missing_expected_evidence",
+            "critical",
+            "Expected evidence was not retrieved",
+            &[]
+        ),
         "created_at": "2026-06-30T08:15:30Z"
     }))
 }
@@ -290,6 +311,35 @@ fn evidence_json(snippet: &str) -> Value {
         "evidence_strength": "medium",
         "chunk_quality_flags": ["duplicate"],
         "retrieval_quality_flags": ["weak_evidence"]
+    })
+}
+
+fn diagnosis_json(
+    outcome: &str,
+    code: &str,
+    severity: &str,
+    title: &str,
+    evidence_refs: &[&str],
+) -> Value {
+    json!({
+        "outcome": outcome,
+        "summary": format!("This report looks {outcome}. Primary issue: {title}"),
+        "primary_issue": {
+            "code": code,
+            "severity": severity,
+            "title": title,
+            "summary": "CorpusLab detected this issue from persisted retrieval metadata.",
+            "evidence_refs": evidence_refs
+        },
+        "failures": [{
+            "code": code,
+            "severity": severity,
+            "title": title,
+            "summary": "CorpusLab detected this issue from persisted retrieval metadata.",
+            "evidence_refs": evidence_refs
+        }],
+        "score_explanations": [],
+        "recommendations": []
     })
 }
 

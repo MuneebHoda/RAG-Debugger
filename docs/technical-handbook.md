@@ -229,7 +229,9 @@ Trace records include:
 
 Current spans are query input, retrieval ranking, evidence summary, eval check, and optional generation metadata. The Eval Check span is present even before eval linkage so the product can teach users where regression checks fit in the workflow.
 
-Failure labels include missing documents, missing embedding index, bad embedding, weak evidence, bad ranking, duplicate evidence, heading-only evidence, and bad chunking. These labels are deterministic quality signals derived from retrieval response metadata.
+`crates/rag/src/diagnosis.rs` is the single deterministic analysis boundary. It classifies each run as strong, mixed, weak, or failing; records typed failures and affected evidence; explains every score from persisted components; and maps failures to prioritized remediation areas. It detects weak and duplicate evidence, heading-only chunks, missing or partial embeddings, low top-two score margin, semantic/lexical disagreement, citation grounding problems, and Eval Lab expected-evidence gaps. The low-margin ratio defaults to `0.10` and is exposed through validated debugger configuration.
+
+New retrieval responses, traces, eval case results, rerun comparisons, and audit reports snapshot this diagnosis. Existing JSON remains readable through optional serde defaults. Legacy trace labels remain populated from the structured diagnosis for `/api/v1` compatibility.
 
 The stable guarantees for retrieval responses, trace diagnosis, rerun comparisons, Eval Lab metrics, gates, and local-first behavior are defined in `docs/rag-invariants.md`. Synthetic regression corpora and expected outcomes live under `fixtures/`; typed Rust tests remain the contract-level source of truth while those fixtures provide reviewable scenarios for API, UI, and future SDK tests.
 
@@ -265,7 +267,7 @@ Protected `/api/v1/reports` routes create reports from traces, experiments, and 
 
 The Reports feature owns the shared creation action used by Trace Detail, Eval experiment detail, and failed CI gate rows. Every source integration opens a privacy confirmation panel, defaults to metadata-only, guards against duplicate submission, and navigates to the persisted report detail after creation.
 
-`crates/rag/src/reports/markdown.rs` renders paid-audit-quality Markdown with a stable executive summary, source/privacy classification, ordered configuration, failing cases, evidence diagnosis, failure labels, comparison changes, prioritized recommendations, and sharing note. The renderer escapes user-controlled Markdown, blocks raw HTML, re-applies the 280-character snippet cap, omits content-bearing fields in metadata-only mode, and rejects full-local exports. Exact output is protected by checked-in trace, eval, CI, metadata-only, and snippets-allowed fixtures.
+`crates/rag/src/reports/markdown.rs` renders paid-audit-quality Markdown with a stable executive summary, structured diagnosis, source/privacy classification, ordered configuration, failing cases, evidence diagnosis, failure labels, comparison changes, prioritized recommendations, and sharing note. The renderer escapes user-controlled Markdown, blocks raw HTML, re-applies the 280-character snippet cap, omits content-bearing fields in metadata-only mode, and rejects full-local exports. Exact output is protected by checked-in trace, eval, CI, metadata-only, and snippets-allowed fixtures.
 
 ## Privacy And Security Model
 

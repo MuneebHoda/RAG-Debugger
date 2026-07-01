@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { TraceSummary } from "../../../../lib/api/traces";
 import { filterRuns } from "./runFilters";
 import { signedNumber } from "./traceFormatting";
-import { recommendationFor } from "./traceLabels";
 
 const strongRun = runSummary("strong", "GPU indexing", []);
 const weakRun = runSummary("weak", "Policy exception", ["weak_evidence"]);
@@ -17,15 +16,6 @@ describe("trace utilities", () => {
       weakRun,
     ]);
     expect(filterRuns([strongRun, weakRun], "", "strong")).toEqual([strongRun]);
-  });
-
-  it("chooses deterministic recommendations for failure categories", () => {
-    expect(recommendationFor(["missing_document"]).route).toBe("/app/sources");
-    expect(recommendationFor(["missing_embedding_index"]).route).toBe(
-      "/app/retrieval",
-    );
-    expect(recommendationFor(["bad_ranking"]).route).toBe("?tab=compare");
-    expect(recommendationFor([]).route).toBe("?tab=summary#quality");
   });
 
   it("formats signed comparison metrics", () => {

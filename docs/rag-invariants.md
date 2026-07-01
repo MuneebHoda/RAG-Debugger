@@ -15,6 +15,7 @@ Every successful retrieval response must:
 - suppress repeated chunks, checksums, and normalized text from independent evidence positions;
 - avoid promoting heading-only or duplicate chunks as strong answer evidence; and
 - report insufficient local evidence rather than manufacture an answer.
+- snapshot a deterministic diagnosis with outcome, failure codes, score explanations, and recommendations.
 
 Lexical mode does not require embeddings. Vector and hybrid modes must report missing or partial embeddings explicitly; they must not silently present a lexical-only result as vector-ready.
 
@@ -30,9 +31,11 @@ A saved trace must preserve:
 - deterministic failure labels derived from response metadata; and
 - a status and plain-language summary consistent with those labels.
 
-A rerun must preserve the original trace and store the changed request and new response as a comparison. The comparison currently guarantees top-score delta, latency delta, evidence overlap count, and changed-rank count. Added and removed evidence can be derived from the two stored responses; explicit added/removed fields require a versioned contract change.
+A rerun must preserve the original trace and store the changed request and new response as a comparison. The comparison guarantees top-score delta, latency delta, evidence overlap count, changed-rank count, outcome before/after, resolved/introduced failures, and gained/lost evidence and citations.
 
 Trace diagnosis uses a stable label order. A condition may imply more than one label: duplicate or heading-only evidence also indicates bad chunking, and missing indexes also indicate bad embeddings. Labels are deduplicated without reordering.
+
+The structured diagnosis is the source of truth. Legacy trace labels are derived from it for compatibility. A low score margin is detected only when two results exist and `(top_score - second_score) / top_score` is at or below the configured ratio. Hybrid disagreement is detected only when non-zero semantic and lexical-family signals select different leading chunks. Diagnosis snapshots contain no raw query, path, section, snippet, or chunk content.
 
 ## Eval Lab
 

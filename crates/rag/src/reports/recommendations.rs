@@ -2,7 +2,30 @@ use std::collections::HashSet;
 
 use rag_debugger_core::{
     DebugReportRecommendation, DebugReportRecommendationArea, DebugReportRecommendationPriority,
+    DiagnosisRecommendation, DiagnosisRecommendationPriority, DiagnosisRemediationArea,
 };
+
+pub(super) fn debug_report_recommendations(
+    recommendations: &[DiagnosisRecommendation],
+) -> Vec<DebugReportRecommendation> {
+    recommendations
+        .iter()
+        .map(|recommendation| DebugReportRecommendation {
+            code: recommendation.code.clone(),
+            priority: map_priority(recommendation.priority),
+            area: map_area(recommendation.area),
+            title: recommendation.title.clone(),
+            rationale: recommendation.rationale.clone(),
+            action: recommendation.action.clone(),
+            finding_codes: recommendation
+                .failure_codes
+                .iter()
+                .map(|code| code.as_str().to_owned())
+                .collect(),
+            evidence_refs: recommendation.evidence_refs.clone(),
+        })
+        .collect()
+}
 
 pub(super) fn recommendations_for_failure_codes(
     failure_codes: &[String],
@@ -27,6 +50,7 @@ pub(super) fn retrieval_mode_recommendation(best_mode: &str) -> DebugReportRecom
             "Rerun the dataset with {best_mode} and confirm the improvement against release gates."
         ),
         finding_codes: vec!["retrieval_mode_comparison".to_owned()],
+        evidence_refs: Vec::new(),
     }
 }
 
@@ -118,6 +142,30 @@ fn recommendation(
         rationale: rationale.to_owned(),
         action: action.to_owned(),
         finding_codes: vec![finding_code.to_owned()],
+        evidence_refs: Vec::new(),
+    }
+}
+
+fn map_priority(priority: DiagnosisRecommendationPriority) -> DebugReportRecommendationPriority {
+    match priority {
+        DiagnosisRecommendationPriority::Critical => DebugReportRecommendationPriority::Critical,
+        DiagnosisRecommendationPriority::High => DebugReportRecommendationPriority::High,
+        DiagnosisRecommendationPriority::Medium => DebugReportRecommendationPriority::Medium,
+        DiagnosisRecommendationPriority::Low => DebugReportRecommendationPriority::Low,
+    }
+}
+
+fn map_area(area: DiagnosisRemediationArea) -> DebugReportRecommendationArea {
+    match area {
+        DiagnosisRemediationArea::Chunking => DebugReportRecommendationArea::Chunking,
+        DiagnosisRemediationArea::Embeddings => DebugReportRecommendationArea::Embeddings,
+        DiagnosisRemediationArea::TopK => DebugReportRecommendationArea::TopK,
+        DiagnosisRemediationArea::RetrievalMode => DebugReportRecommendationArea::RetrievalMode,
+        DiagnosisRemediationArea::Reranking => DebugReportRecommendationArea::Reranking,
+        DiagnosisRemediationArea::MetadataFilters => DebugReportRecommendationArea::MetadataFilters,
+        DiagnosisRemediationArea::Citations => DebugReportRecommendationArea::Citations,
+        DiagnosisRemediationArea::CorpusCoverage => DebugReportRecommendationArea::CorpusCoverage,
+        DiagnosisRemediationArea::Other => DebugReportRecommendationArea::Other,
     }
 }
 

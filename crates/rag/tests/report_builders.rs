@@ -26,6 +26,11 @@ fn trace_report_is_deterministic_and_metadata_only_redacts_content() {
     assert_eq!(first.evidence[0].document_path, None);
     assert_eq!(first.evidence[0].section_title, None);
     assert_eq!(first.evidence[0].snippet, None);
+    let diagnosis_json = serde_json::to_string(&first.diagnosis).expect("serialize diagnosis");
+    assert!(!diagnosis_json.contains(&trace.input));
+    assert!(!diagnosis_json.contains("technical/gpu.md"));
+    assert!(!diagnosis_json.contains("Index publication requires checksum validation"));
+    assert!(first.diagnosis.is_some());
     assert!(first
         .recommendations
         .iter()
@@ -50,6 +55,7 @@ fn trace_report_records_latest_rerun_comparison() {
         latency_delta_ms: -4,
         overlap_count: 1,
         changed_rank_count: 1,
+        diagnosis: None,
         created_at: timestamp(),
     });
 

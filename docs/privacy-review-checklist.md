@@ -54,3 +54,7 @@ Use `N/A` with a short reason in the pull request for checks that do not apply. 
 ## Guided Demo Review Note
 
 The guided demo uses only checked-in synthetic Markdown fixtures and local processing. Loading is an explicit authenticated action scoped to the active workspace. It persists ordinary extracted chunks and embeddings, never separate fixture binaries, and makes no external calls. Suggested query text is returned only to the authenticated client and is not placed in URLs. Audit reports default to `metadata_only`; `full_local_only` export remains blocked. Loading does not delete or reset customer data.
+
+## Debugger Intelligence v2 Review Note
+
+Structured diagnosis is derived locally from already persisted retrieval metadata. The diagnosis snapshot contains opaque IDs, ranks, scores, failure codes, counts, and deterministic remediation text; it does not copy raw queries, paths, section titles, snippets, chunk text, credentials, headers, cookies, or report bodies. No external call, new telemetry, sharing path, retention class, or authorization boundary is introduced. Metadata-only report tests verify that private source content cannot enter the diagnosis export, and full-local-only export remains blocked.

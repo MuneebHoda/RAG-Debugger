@@ -80,7 +80,8 @@ pub async fn run_retrieval_evals(
     let retriever = LocalHybridRetriever::new(
         LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone()),
         state.config().product.retrieval.clone(),
-    );
+    )
+    .with_debugger_config(state.config().product.debugger.clone());
     let mut results = Vec::with_capacity(cases.len());
 
     for eval_case in &cases {

@@ -113,6 +113,7 @@ async fn reports_are_created_listed_opened_and_exported() {
     )
     .await;
     assert_eq!(trace_report["privacy_mode"], "metadata_only");
+    assert!(trace_report["diagnosis"]["outcome"].is_string());
     let experiment_report = create_report(
         &context,
         "/api/v1/reports/from-experiment",
@@ -164,6 +165,8 @@ async fn reports_are_created_listed_opened_and_exported() {
     )
     .expect("Markdown text");
     assert!(markdown.contains("# RAG trace audit"));
+    assert!(markdown.contains("## Deterministic Diagnosis"));
+    assert!(!markdown.contains(trace["input"].as_str().expect("trace input")));
 
     let local_report = create_report(
         &context,

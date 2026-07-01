@@ -1,4 +1,5 @@
 import { API_BASE_URL, jsonRequest, requestJson, requestText } from "./client";
+import type { EvidenceDiagnosisSummary } from "./retrieval";
 
 export type DebugReportPrivacyMode =
   | "metadata_only"
@@ -46,6 +47,7 @@ export interface DebugReportRecommendation {
   rationale: string;
   action: string;
   finding_codes: string[];
+  evidence_refs: string[];
 }
 
 export interface DebugReportEvidenceRef {
@@ -78,6 +80,7 @@ export interface DebugReport {
   findings: DebugReportFinding[];
   recommendations: DebugReportRecommendation[];
   evidence: DebugReportEvidenceRef[];
+  diagnosis?: EvidenceDiagnosisSummary | null;
   created_at: string;
 }
 

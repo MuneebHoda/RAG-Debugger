@@ -5,6 +5,7 @@ use time::OffsetDateTime;
 
 use crate::{
     chunk::ChunkId,
+    diagnosis::EvidenceDiagnosisSummary,
     embedding::{ChunkEmbedding, EmbeddingModelInfo},
     ingestion::ChunkPreview,
     model::ModelConfigId,
@@ -63,6 +64,8 @@ pub struct RetrievalQueryResponse {
     pub answer: ExtractiveAnswer,
     pub hits: Vec<RetrievalQueryHit>,
     pub embedding_status: RetrievalEmbeddingStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub diagnosis: Option<EvidenceDiagnosisSummary>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -1,9 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use rag_debugger_core::{
-    ChunkingConfig, ChunkingStrategy, DeploymentMode, EmbeddingConfig, EmbeddingModelInfo,
-    EmbeddingProviderKind, IngestionConfig, ProductConfig, ProductInfo, RetrievalConfig,
-    RetrievalMode, RetrievalWeights, UiConfig,
+    ChunkingConfig, ChunkingStrategy, DebuggerConfig, DeploymentMode, EmbeddingConfig,
+    EmbeddingModelInfo, EmbeddingProviderKind, IngestionConfig, ProductConfig, ProductInfo,
+    RetrievalConfig, RetrievalMode, RetrievalWeights, UiConfig,
 };
 use thiserror::Error;
 
@@ -76,6 +76,8 @@ pub enum ConfigError {
     InvalidStorageBackend(String),
     #[error("invalid {name} value: {value}")]
     InvalidNumber { name: &'static str, value: String },
+    #[error("{name} must be a finite number between 0 and 1, got: {value}")]
+    InvalidRatio { name: &'static str, value: String },
 }
 
 impl ApiConfig {
@@ -150,6 +152,9 @@ impl ApiConfig {
                     path: env_f32("RAG_DEBUGGER_WEIGHT_PATH", 0.5)?,
                     metadata: env_f32("RAG_DEBUGGER_WEIGHT_METADATA", 1.0)?,
                 },
+            },
+            debugger: DebuggerConfig {
+                low_score_margin_ratio: env_ratio("RAG_DEBUGGER_LOW_SCORE_MARGIN_RATIO", 0.10)?,
             },
             embedding: EmbeddingConfig {
                 model: EmbeddingModelInfo {
@@ -295,6 +300,30 @@ fn env_f32(name: &'static str, default: f32) -> Result<f32, ConfigError> {
         .unwrap_or(Ok(default))
 }
 
+fn env_ratio(name: &'static str, default: f32) -> Result<f32, ConfigError> {
+    match std::env::var(name) {
+        Ok(value) => parse_ratio(name, &value),
+        Err(_) => Ok(default),
+    }
+}
+
+fn parse_ratio(name: &'static str, value: &str) -> Result<f32, ConfigError> {
+    let parsed = value
+        .parse::<f32>()
+        .map_err(|_| ConfigError::InvalidNumber {
+            name,
+            value: value.to_owned(),
+        })?;
+    if parsed.is_finite() && (0.0..=1.0).contains(&parsed) {
+        Ok(parsed)
+    } else {
+        Err(ConfigError::InvalidRatio {
+            name,
+            value: value.to_owned(),
+        })
+    }
+}
+
 fn env_chunking_strategy(name: &str) -> ChunkingStrategy {
     match std::env::var(name)
         .unwrap_or_else(|_| "structured".to_owned())
@@ -345,5 +374,18 @@ mod tests {
 
         assert_eq!(config.environment, RuntimeEnvironment::Local);
         assert_eq!(config.bind_addr.port(), 8080);
+    }
+
+    #[test]
+    fn debugger_margin_ratio_is_validated() {
+        assert_eq!(parse_ratio("TEST_RATIO", "0.1").ok(), Some(0.1));
+        assert!(matches!(
+            parse_ratio("TEST_RATIO", "1.1"),
+            Err(ConfigError::InvalidRatio { .. })
+        ));
+        assert!(matches!(
+            parse_ratio("TEST_RATIO", "NaN"),
+            Err(ConfigError::InvalidRatio { .. })
+        ));
     }
 }

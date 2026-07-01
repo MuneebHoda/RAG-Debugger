@@ -239,6 +239,7 @@ const report: DebugReport = {
       rationale: "Relevant evidence may be ranked below the current cutoff.",
       action: "Rerun with a higher top_k and compare precision.",
       finding_codes: ["weak-evidence"],
+      evidence_refs: ["E1"],
     },
   ],
   created_at: "2026-06-30T12:00:00Z",

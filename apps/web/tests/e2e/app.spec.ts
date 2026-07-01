@@ -628,6 +628,39 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
       missing_chunks: 0,
       stale_chunks: 0,
     },
+    diagnosis: {
+      outcome: "mixed",
+      summary: "This run looks mixed. Primary issue: Evidence needs review",
+      primary_issue: {
+        code: "weak_evidence",
+        severity: "warning",
+        title: "Evidence needs review",
+        summary: "The saved run contains a retrieval quality signal.",
+        evidence_refs: ["E1"],
+      },
+      failures: [
+        {
+          code: "weak_evidence",
+          severity: "warning",
+          title: "Evidence needs review",
+          summary: "The saved run contains a retrieval quality signal.",
+          evidence_refs: ["E1"],
+        },
+      ],
+      score_explanations: [],
+      recommendations: [
+        {
+          code: "broaden_candidate_pool",
+          priority: "high",
+          area: "top_k",
+          title: "Broaden the candidate pool",
+          rationale: "Evidence needs review.",
+          action: "Increase top_k and compare the resulting evidence.",
+          failure_codes: ["weak_evidence"],
+          evidence_refs: ["E1"],
+        },
+      ],
+    },
   };
   const trace = {
     id: traceId,
@@ -678,6 +711,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     ],
     retrieval,
     reruns: [],
+    diagnosis: retrieval.diagnosis,
   };
   const reportId = "018f7a2a-6e2e-7000-a000-000000000310";
   const report = {
@@ -782,7 +816,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
   await page.getByRole("link", { name: /gpu embedding workers/i }).click();
   await expect(page).toHaveURL(new RegExp(`/app/traces/${traceId}$`));
-  await expect(page.getByText("What happened")).toBeVisible();
+  await expect(page.getByText("Primary diagnosis")).toBeVisible();
 
   await page.getByRole("tab", { name: "Evidence" }).click();
   await expect(
@@ -1058,7 +1092,7 @@ test("completes the real guided workflow against the memory API", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Debug this run" }).click();
   await expect(page).toHaveURL(/\/app\/traces\/[0-9a-f-]+$/);
-  await expect(page.getByText("What happened")).toBeVisible();
+  await expect(page.getByText("Primary diagnosis")).toBeVisible();
 
   await page.getByRole("tab", { name: "Compare" }).click();
   await page.getByLabel("Retrieval mode").selectOption("lexical");

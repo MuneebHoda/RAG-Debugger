@@ -1,4 +1,5 @@
 pub mod chunking;
+pub mod diagnosis;
 pub mod embedding;
 pub mod evals;
 pub mod extraction;

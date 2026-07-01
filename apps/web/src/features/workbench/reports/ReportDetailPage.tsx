@@ -106,6 +106,30 @@ export function ReportDetailPage() {
         {report.subject ? <span>{report.subject}</span> : null}
       </section>
 
+      {report.diagnosis ? (
+        <ReportSection title="Deterministic diagnosis">
+          <article className={styles.finding}>
+            <header>
+              <span
+                className={
+                  styles[report.diagnosis.primary_issue?.severity ?? "info"]
+                }
+              >
+                {report.diagnosis.outcome}
+              </span>
+              {report.diagnosis.primary_issue ? (
+                <code>{report.diagnosis.primary_issue.code}</code>
+              ) : null}
+            </header>
+            <strong>
+              {report.diagnosis.primary_issue?.title ??
+                "No failure signal detected"}
+            </strong>
+            <p>{report.diagnosis.summary}</p>
+          </article>
+        </ReportSection>
+      ) : null}
+
       <div className={styles.twoColumn}>
         <ReportSection title="System and configuration">
           <dl className={styles.contextList}>

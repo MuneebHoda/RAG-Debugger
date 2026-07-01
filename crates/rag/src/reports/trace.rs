@@ -2,13 +2,16 @@ use std::collections::BTreeMap;
 
 use rag_debugger_core::{
     DebugReport, DebugReportEvidenceRef, DebugReportEvidenceRole, DebugReportFinding,
-    DebugReportSeverity, DebugReportSource, FailureLabel, Trace,
+    DebugReportSeverity, DebugReportSource, DebuggerConfig, DiagnosisFailure, DiagnosisSeverity,
+    Trace,
 };
+
+use crate::diagnosis::diagnose_retrieval;
 
 use super::{
     embedding_readiness_label,
     privacy::{evidence_text, permits_content},
-    recommendations::recommendations_for_failure_codes,
+    recommendations::debug_report_recommendations,
     retrieval_mode_label, DebugReportBuildContext, ReportBuildError,
 };
 
@@ -45,46 +48,35 @@ pub fn build_trace_debug_report(
             retrieval_quality_flags: hit.quality_flags.clone(),
         })
         .collect::<Vec<_>>();
+    let diagnosis = trace
+        .diagnosis
+        .clone()
+        .or_else(|| retrieval.diagnosis.clone())
+        .unwrap_or_else(|| diagnose_retrieval(retrieval, &DebuggerConfig::default(), None));
     let evidence_labels = evidence
         .iter()
         .map(|evidence| evidence.label.clone())
         .collect::<Vec<_>>();
-    let mut findings = trace
-        .failure_labels
+    let mut findings = diagnosis
+        .failures
         .iter()
-        .map(|label| trace_finding(label, &evidence_labels))
+        .map(diagnosis_finding)
         .collect::<Vec<_>>();
-    let mut failure_codes = trace
-        .failure_labels
-        .iter()
-        .map(trace_failure_code)
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
-
-    if !retrieval.hits.is_empty() && retrieval.answer.citations.is_empty() {
-        failure_codes.push("missing_citations".to_owned());
-        findings.push(DebugReportFinding {
-            code: "missing_citations".to_owned(),
-            severity: DebugReportSeverity::Critical,
-            title: "Retrieved evidence was not cited".to_owned(),
-            summary: "The retrieval run returned evidence but the evidence summary contained no citations."
-                .to_owned(),
-            failure_labels: vec!["missing_citations".to_owned()],
-            evidence_refs: evidence_labels.clone(),
-        });
-    }
 
     if let Some(rerun) = trace.reruns.last() {
         findings.push(DebugReportFinding {
             code: "rerun_comparison".to_owned(),
             severity: DebugReportSeverity::Info,
             title: "Latest rerun changed retrieval behavior".to_owned(),
-            summary: format!(
-                "Top score changed by {:+.3}, latency by {:+} ms, with {} overlapping chunks and {} rank changes.",
-                rerun.score_delta,
-                rerun.latency_delta_ms,
-                rerun.overlap_count,
-                rerun.changed_rank_count
+            summary: rerun.diagnosis.as_ref().map_or_else(
+                || format!(
+                    "Top score changed by {:+.3}, latency by {:+} ms, with {} overlapping chunks and {} rank changes.",
+                    rerun.score_delta,
+                    rerun.latency_delta_ms,
+                    rerun.overlap_count,
+                    rerun.changed_rank_count
+                ),
+                |comparison| comparison.summary.clone(),
             ),
             failure_labels: Vec::new(),
             evidence_refs: evidence_labels.clone(),
@@ -114,11 +106,12 @@ pub fn build_trace_debug_report(
         },
         source: DebugReportSource::Trace { trace_id: trace.id },
         privacy_mode: context.privacy_mode,
-        executive_summary: trace.summary.clone(),
+        executive_summary: diagnosis.summary.clone(),
         context: trace_context(trace),
         findings,
-        recommendations: recommendations_for_failure_codes(&failure_codes),
+        recommendations: debug_report_recommendations(&diagnosis.recommendations),
         evidence,
+        diagnosis: Some(diagnosis),
         created_at: context.created_at,
     })
 }
@@ -171,69 +164,18 @@ fn trace_context(trace: &Trace) -> BTreeMap<String, String> {
     context
 }
 
-fn trace_finding(label: &FailureLabel, evidence_refs: &[String]) -> DebugReportFinding {
-    let code = trace_failure_code(label);
-    let (severity, title, summary) = match label {
-        FailureLabel::MissingDocument => (
-            DebugReportSeverity::Critical,
-            "No evidence was retrieved",
-            "The query produced no ranked document evidence.",
-        ),
-        FailureLabel::MissingEmbeddingIndex | FailureLabel::BadEmbedding => (
-            DebugReportSeverity::Critical,
-            "Embedding coverage is incomplete",
-            "Vector retrieval could not rely on a complete embedding index.",
-        ),
-        FailureLabel::DuplicateEvidence
-        | FailureLabel::HeadingOnlyEvidence
-        | FailureLabel::BadChunking => (
-            DebugReportSeverity::Warning,
-            "Chunk quality weakened the result",
-            "Duplicate, heading-only, or poorly bounded chunks affected ranked evidence.",
-        ),
-        FailureLabel::BadRanking => (
-            DebugReportSeverity::Warning,
-            "Weak evidence ranked too highly",
-            "The ranking stage promoted evidence marked as weak.",
-        ),
-        FailureLabel::WeakEvidence => (
-            DebugReportSeverity::Warning,
-            "Evidence was insufficient",
-            "The evidence summary could not support a defensible answer.",
-        ),
-        FailureLabel::HallucinatedAnswer => (
-            DebugReportSeverity::Critical,
-            "Answer grounding failed",
-            "The answer was not supported by retrieved evidence.",
-        ),
-        FailureLabel::BadPrompt | FailureLabel::UnsupportedQuestion => (
-            DebugReportSeverity::Warning,
-            "The query contract needs review",
-            "The query or prompt did not align with the available evidence.",
-        ),
-    };
+fn diagnosis_finding(failure: &DiagnosisFailure) -> DebugReportFinding {
+    let code = failure.code.as_str();
     DebugReportFinding {
         code: code.to_owned(),
-        severity,
-        title: title.to_owned(),
-        summary: summary.to_owned(),
+        severity: match failure.severity {
+            DiagnosisSeverity::Info => DebugReportSeverity::Info,
+            DiagnosisSeverity::Warning => DebugReportSeverity::Warning,
+            DiagnosisSeverity::Critical => DebugReportSeverity::Critical,
+        },
+        title: failure.title.clone(),
+        summary: failure.summary.clone(),
         failure_labels: vec![code.to_owned()],
-        evidence_refs: evidence_refs.to_vec(),
-    }
-}
-
-fn trace_failure_code(label: &FailureLabel) -> &'static str {
-    match label {
-        FailureLabel::MissingDocument => "missing_document",
-        FailureLabel::BadChunking => "bad_chunking",
-        FailureLabel::BadEmbedding => "bad_embedding",
-        FailureLabel::BadRanking => "bad_ranking",
-        FailureLabel::BadPrompt => "bad_prompt",
-        FailureLabel::UnsupportedQuestion => "unsupported_question",
-        FailureLabel::HallucinatedAnswer => "hallucinated_answer",
-        FailureLabel::WeakEvidence => "weak_evidence",
-        FailureLabel::MissingEmbeddingIndex => "missing_embedding_index",
-        FailureLabel::DuplicateEvidence => "duplicate_evidence",
-        FailureLabel::HeadingOnlyEvidence => "heading_only_evidence",
+        evidence_refs: failure.evidence_refs.clone(),
     }
 }

@@ -19,6 +19,84 @@ export type RetrievalQualityFlag =
   | "semantic_match"
   | "exact_term_match"
   | "section_only_match";
+export type DiagnosisOutcome = "strong" | "mixed" | "weak" | "failing";
+export type DiagnosisSeverity = "info" | "warning" | "critical";
+export type DiagnosisFailureCode =
+  | "missing_document"
+  | "missing_embedding_index"
+  | "partial_embedding_index"
+  | "weak_evidence"
+  | "duplicate_evidence"
+  | "heading_only_evidence"
+  | "low_score_margin"
+  | "vector_lexical_disagreement"
+  | "citation_missing"
+  | "top_result_not_cited"
+  | "missing_expected_evidence";
+export type DiagnosisRemediationArea =
+  | "chunking"
+  | "embeddings"
+  | "top_k"
+  | "retrieval_mode"
+  | "reranking"
+  | "metadata_filters"
+  | "citations"
+  | "corpus_coverage"
+  | "other";
+export type DiagnosisRecommendationPriority =
+  | "critical"
+  | "high"
+  | "medium"
+  | "low";
+export type DiagnosisScoreSignal =
+  | "semantic"
+  | "lexical"
+  | "phrase"
+  | "section"
+  | "path"
+  | "metadata"
+  | "none";
+
+export interface DiagnosisFailure {
+  code: DiagnosisFailureCode;
+  severity: DiagnosisSeverity;
+  title: string;
+  summary: string;
+  evidence_refs: string[];
+}
+
+export interface EvidenceScoreExplanation {
+  evidence_ref: string;
+  chunk_id: string;
+  rank: number;
+  final_score: number;
+  score_delta_from_previous: number | null;
+  score_delta_to_next: number | null;
+  dominant_signal: DiagnosisScoreSignal;
+  score_breakdown: RetrievalScoreBreakdown;
+  normalized_score_breakdown: RetrievalScoreBreakdown;
+  summary: string;
+}
+
+export interface DiagnosisRecommendation {
+  code: string;
+  priority: DiagnosisRecommendationPriority;
+  area: DiagnosisRemediationArea;
+  title: string;
+  rationale: string;
+  action: string;
+  failure_codes: DiagnosisFailureCode[];
+  evidence_refs: string[];
+}
+
+export interface EvidenceDiagnosisSummary {
+  outcome: DiagnosisOutcome;
+  summary: string;
+  primary_issue: DiagnosisFailure | null;
+  failures: DiagnosisFailure[];
+  score_explanations: EvidenceScoreExplanation[];
+  recommendations: DiagnosisRecommendation[];
+}
 
 export interface RetrievalQueryRequest {
   query: string;
@@ -89,6 +167,7 @@ export interface RetrievalQueryResponse {
   answer: ExtractiveAnswer;
   hits: RetrievalQueryHit[];
   embedding_status: RetrievalEmbeddingStatus;
+  diagnosis?: EvidenceDiagnosisSummary | null;
 }
 
 export function queryRetrieval(

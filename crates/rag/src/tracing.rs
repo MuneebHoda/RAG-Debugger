@@ -1,23 +1,37 @@
 use std::collections::HashSet;
 
 use rag_debugger_core::{
-    EvidenceStrength, ExtractiveAnswerStatus, FailureLabel, ProjectId, RetrievalEmbeddingReadiness,
-    RetrievalQualityFlag, RetrievalQueryRequest, RetrievalQueryResponse, Trace, TraceId,
-    TraceRerunComparison, TraceRerunId, TraceSpan, TraceSpanDetail, TraceSpanId, TraceSpanKind,
-    TraceSpanStatus, TraceStatus,
+    DebuggerConfig, DiagnosisOutcome, EvidenceStrength, ExtractiveAnswerStatus, FailureLabel,
+    ProjectId, RetrievalQueryRequest, RetrievalQueryResponse, Trace, TraceId, TraceRerunComparison,
+    TraceRerunId, TraceSpan, TraceSpanDetail, TraceSpanId, TraceSpanKind, TraceSpanStatus,
+    TraceStatus,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
 
+use crate::diagnosis::{
+    attach_diagnosis, compare_diagnoses, diagnose_retrieval, legacy_failure_labels,
+};
+
 pub fn build_trace_from_retrieval(
     project_id: ProjectId,
     response: RetrievalQueryResponse,
+    debugger_config: &DebuggerConfig,
 ) -> Trace {
+    let response = if response.diagnosis.is_some() {
+        response
+    } else {
+        attach_diagnosis(response, debugger_config)
+    };
     let now = OffsetDateTime::now_utc();
     let evidence_strength = strongest_evidence(&response);
-    let failure_labels = diagnose_failure_labels(&response);
-    let status = trace_status(&response, &failure_labels);
-    let summary = trace_summary(&response, evidence_strength, &failure_labels);
+    let diagnosis = response
+        .diagnosis
+        .clone()
+        .unwrap_or_else(|| diagnose_retrieval(&response, debugger_config, None));
+    let failure_labels = legacy_failure_labels(&diagnosis);
+    let status = trace_status(diagnosis.outcome);
+    let summary = diagnosis.summary.clone();
     let spans = build_spans(now, &response, evidence_strength);
 
     Trace {
@@ -37,14 +51,49 @@ pub fn build_trace_from_retrieval(
         spans,
         retrieval: Some(response),
         reruns: Vec::new(),
+        diagnosis: Some(diagnosis),
     }
+}
+
+pub fn ensure_trace_diagnosis(mut trace: Trace, debugger_config: &DebuggerConfig) -> Trace {
+    if trace.diagnosis.is_some() {
+        return trace;
+    }
+    let Some(retrieval) = trace.retrieval.take() else {
+        return trace;
+    };
+    let retrieval = if retrieval.diagnosis.is_some() {
+        retrieval
+    } else {
+        attach_diagnosis(retrieval, debugger_config)
+    };
+    if let Some(diagnosis) = retrieval.diagnosis.clone() {
+        trace.failure_labels = legacy_failure_labels(&diagnosis);
+        trace.status = trace_status(diagnosis.outcome);
+        trace.evidence_strength = Some(strongest_evidence(&retrieval));
+        trace.summary = diagnosis.summary.clone();
+        trace.diagnosis = Some(diagnosis);
+    }
+    trace.retrieval = Some(retrieval);
+    trace
 }
 
 pub fn build_rerun_comparison(
     original: &RetrievalQueryResponse,
     request: RetrievalQueryRequest,
     response: RetrievalQueryResponse,
+    debugger_config: &DebuggerConfig,
 ) -> TraceRerunComparison {
+    let original = if original.diagnosis.is_some() {
+        original.clone()
+    } else {
+        attach_diagnosis(original.clone(), debugger_config)
+    };
+    let response = if response.diagnosis.is_some() {
+        response
+    } else {
+        attach_diagnosis(response, debugger_config)
+    };
     let original_top_score = original.hits.first().map_or(0.0, |hit| hit.score);
     let rerun_top_score = response.hits.first().map_or(0.0, |hit| hit.score);
     let latency_delta_ms = response.run.latency_ms as i64 - original.run.latency_ms as i64;
@@ -71,6 +120,7 @@ pub fn build_rerun_comparison(
         })
         .count() as u32;
 
+    let diagnosis = compare_diagnoses(&original, &response);
     TraceRerunComparison {
         id: TraceRerunId(Uuid::now_v7()),
         request,
@@ -79,58 +129,17 @@ pub fn build_rerun_comparison(
         latency_delta_ms,
         overlap_count,
         changed_rank_count,
+        diagnosis,
         created_at: OffsetDateTime::now_utc(),
     }
 }
 
 pub fn diagnose_failure_labels(response: &RetrievalQueryResponse) -> Vec<FailureLabel> {
-    let mut labels = Vec::new();
-
-    if response.hits.is_empty() {
-        labels.push(FailureLabel::MissingDocument);
-    }
-
-    if response.embedding_status.required {
-        match response.embedding_status.readiness {
-            RetrievalEmbeddingReadiness::Missing => {
-                labels.push(FailureLabel::MissingEmbeddingIndex);
-                labels.push(FailureLabel::BadEmbedding);
-            }
-            RetrievalEmbeddingReadiness::Partial => labels.push(FailureLabel::BadEmbedding),
-            RetrievalEmbeddingReadiness::NotRequired | RetrievalEmbeddingReadiness::Ready => {}
-        }
-    }
-
-    if response.answer.status == ExtractiveAnswerStatus::InsufficientEvidence {
-        labels.push(FailureLabel::WeakEvidence);
-    }
-
-    if response
-        .hits
-        .iter()
-        .any(|hit| hit.evidence_strength == EvidenceStrength::Weak)
-    {
-        labels.push(FailureLabel::BadRanking);
-    }
-
-    if response
-        .hits
-        .iter()
-        .any(|hit| hit.quality_flags.contains(&RetrievalQualityFlag::Duplicate))
-    {
-        labels.push(FailureLabel::DuplicateEvidence);
-        labels.push(FailureLabel::BadChunking);
-    }
-
-    if response.hits.iter().any(|hit| {
-        hit.quality_flags
-            .contains(&RetrievalQualityFlag::HeadingOnly)
-    }) {
-        labels.push(FailureLabel::HeadingOnlyEvidence);
-        labels.push(FailureLabel::BadChunking);
-    }
-
-    dedupe_failure_labels(labels)
+    let diagnosis = response
+        .diagnosis
+        .clone()
+        .unwrap_or_else(|| diagnose_retrieval(response, &DebuggerConfig::default(), None));
+    legacy_failure_labels(&diagnosis)
 }
 
 fn build_spans(
@@ -216,42 +225,12 @@ fn build_spans(
     ]
 }
 
-fn trace_status(response: &RetrievalQueryResponse, labels: &[FailureLabel]) -> TraceStatus {
-    if response.hits.is_empty()
-        || labels.contains(&FailureLabel::MissingEmbeddingIndex)
-        || labels.contains(&FailureLabel::MissingDocument)
-    {
-        TraceStatus::Failed
-    } else if labels.is_empty() {
-        TraceStatus::Completed
-    } else {
-        TraceStatus::Warning
+fn trace_status(outcome: DiagnosisOutcome) -> TraceStatus {
+    match outcome {
+        DiagnosisOutcome::Strong => TraceStatus::Completed,
+        DiagnosisOutcome::Mixed | DiagnosisOutcome::Weak => TraceStatus::Warning,
+        DiagnosisOutcome::Failing => TraceStatus::Failed,
     }
-}
-
-fn trace_summary(
-    response: &RetrievalQueryResponse,
-    evidence_strength: EvidenceStrength,
-    labels: &[FailureLabel],
-) -> String {
-    if response.hits.is_empty() {
-        return "No evidence was retrieved for this query, so CorpusLab saved a failed trace for diagnosis."
-            .to_owned();
-    }
-
-    if labels.is_empty() {
-        return format!(
-            "Retrieved {} evidence chunks with {:?} strongest evidence.",
-            response.hits.len(),
-            evidence_strength
-        );
-    }
-
-    format!(
-        "Retrieved {} chunks, but CorpusLab found {} quality signal(s) that need review.",
-        response.hits.len(),
-        labels.len()
-    )
 }
 
 fn strongest_evidence(response: &RetrievalQueryResponse) -> EvidenceStrength {
@@ -274,24 +253,15 @@ fn answer_status_label(status: ExtractiveAnswerStatus) -> &'static str {
     }
 }
 
-fn dedupe_failure_labels(labels: Vec<FailureLabel>) -> Vec<FailureLabel> {
-    let mut deduped = Vec::new();
-    for label in labels {
-        if !deduped.contains(&label) {
-            deduped.push(label);
-        }
-    }
-    deduped
-}
-
 #[cfg(test)]
 mod tests {
     use rag_debugger_core::{
         ByteRange, ChunkId, ChunkPreview, ChunkSplitReason, ChunkingStrategy, Document, DocumentId,
         DocumentProfile, EmbeddingModelInfo, ExtractionQuality, ExtractiveAnswer,
-        RetrievalCitation, RetrievalEmbeddingStatus, RetrievalMatchedTerm, RetrievalMode,
-        RetrievalQueryHit, RetrievalQueryRun, RetrievalQueryRunId, RetrievalScoreBreakdown, Source,
-        SourceId, SourceKind, SourceSyncPolicy,
+        RetrievalCitation, RetrievalEmbeddingReadiness, RetrievalEmbeddingStatus,
+        RetrievalMatchedTerm, RetrievalMode, RetrievalQualityFlag, RetrievalQueryHit,
+        RetrievalQueryRun, RetrievalQueryRunId, RetrievalScoreBreakdown, Source, SourceId,
+        SourceKind, SourceSyncPolicy,
     };
 
     use super::*;
@@ -304,19 +274,45 @@ mod tests {
 
         assert!(labels.contains(&FailureLabel::MissingEmbeddingIndex));
         assert!(labels.contains(&FailureLabel::BadEmbedding));
-        assert!(labels.contains(&FailureLabel::MissingDocument));
+        assert!(!labels.contains(&FailureLabel::MissingDocument));
     }
 
     #[test]
     fn trace_from_empty_retrieval_is_failed_and_explainable() {
         let response = response_with_status(RetrievalEmbeddingReadiness::Ready, Vec::new());
-        let trace = build_trace_from_retrieval(ProjectId(Uuid::now_v7()), response);
+        let trace = build_trace_from_retrieval(
+            ProjectId(Uuid::now_v7()),
+            response,
+            &DebuggerConfig::default(),
+        );
 
         assert_eq!(trace.status, TraceStatus::Failed);
         assert_eq!(trace.spans.len(), 4);
         assert!(trace
             .failure_labels
             .contains(&FailureLabel::MissingDocument));
+    }
+
+    #[test]
+    fn legacy_trace_is_enriched_without_changing_its_retrieval_payload() {
+        let response =
+            response_with_status(RetrievalEmbeddingReadiness::Ready, vec![quality_hit()]);
+        let mut trace = build_trace_from_retrieval(
+            ProjectId(Uuid::now_v7()),
+            response,
+            &DebuggerConfig::default(),
+        );
+        trace.diagnosis = None;
+        trace.retrieval.as_mut().expect("retrieval").diagnosis = None;
+
+        let enriched = ensure_trace_diagnosis(trace, &DebuggerConfig::default());
+
+        assert!(enriched.diagnosis.is_some());
+        assert!(enriched
+            .retrieval
+            .as_ref()
+            .and_then(|retrieval| retrieval.diagnosis.as_ref())
+            .is_some());
     }
 
     #[test]
@@ -357,7 +353,8 @@ mod tests {
             document_ids: Vec::new(),
         };
 
-        let comparison = build_rerun_comparison(&original, request, rerun);
+        let comparison =
+            build_rerun_comparison(&original, request, rerun, &DebuggerConfig::default());
 
         assert_eq!(comparison.overlap_count, 0);
         assert_eq!(comparison.score_delta, 0.0);
@@ -395,6 +392,7 @@ mod tests {
                 missing_chunks: 10,
                 stale_chunks: 0,
             },
+            diagnosis: None,
         }
     }
 
