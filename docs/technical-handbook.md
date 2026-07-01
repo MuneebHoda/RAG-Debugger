@@ -188,7 +188,7 @@ The provider boundary is intentionally ready for future implementations:
 
 ## Retrieval Scoring
 
-`crates/rag/src/retrieval.rs` implements the local baseline retriever.
+`crates/rag/src/retrieval.rs` implements the local baseline retriever. Candidate retrieval, answerability assessment, and extractive answer construction are separate modules so broad debugging results cannot silently become citations.
 
 Modes:
 
@@ -212,7 +212,10 @@ Quality upgrades:
 - Adds `quality_flags`.
 - Adds `evidence_strength`.
 - Avoids promoting heading-only and weak chunks as strong answer evidence.
-- Produces an evidence summary with cited snippets instead of pretending to generate unsupported claims.
+- Assesses direct body-text support per hit; semantic, path, section, source, and metadata signals remain retrieval-only.
+- Produces an evidence summary only from supported hits and returns `insufficient_evidence` with no citations when candidates do not pass the gate.
+
+The default answerability policy requires at least `0.50` distinct query-term coverage and two matching terms in one body sentence. One-term queries require that term, and all numeric query terms must occur in the same supporting sentence. These defaults are typed, validated, and configurable. Persisted assessments contain statuses, reasons, and counts rather than copied query or body text.
 
 ## Trace Debugger
 
@@ -229,7 +232,7 @@ Trace records include:
 
 Current spans are query input, retrieval ranking, evidence summary, eval check, and optional generation metadata. The Eval Check span is present even before eval linkage so the product can teach users where regression checks fit in the workflow.
 
-`crates/rag/src/diagnosis.rs` is the single deterministic analysis boundary. It classifies each run as strong, mixed, weak, or failing; records typed failures and affected evidence; explains every score from persisted components; and maps failures to prioritized remediation areas. It detects weak and duplicate evidence, heading-only chunks, missing or partial embeddings, low top-two score margin, semantic/lexical disagreement, citation grounding problems, and Eval Lab expected-evidence gaps. The low-margin ratio defaults to `0.10` and is exposed through validated debugger configuration.
+`crates/rag/src/diagnosis.rs` is the single deterministic analysis boundary. It classifies each run as strong, mixed, weak, or failing; records typed failures and affected evidence; explains every score from persisted components; and maps failures to prioritized remediation areas. It detects weak and duplicate evidence, heading-only chunks, answerability gaps, semantic-only and metadata-only candidates, missing or partial embeddings, low top-two score margin, semantic/lexical disagreement, citation grounding problems, and Eval Lab expected-evidence gaps. The low-margin ratio defaults to `0.10` and is exposed through validated debugger configuration.
 
 New retrieval responses, traces, eval case results, rerun comparisons, and audit reports snapshot this diagnosis. Existing JSON remains readable through optional serde defaults. Legacy trace labels remain populated from the structured diagnosis for `/api/v1` compatibility.
 

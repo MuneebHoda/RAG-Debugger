@@ -1,9 +1,9 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use rag_debugger_core::{
-    ChunkingConfig, ChunkingStrategy, DebuggerConfig, DeploymentMode, EmbeddingConfig,
-    EmbeddingModelInfo, EmbeddingProviderKind, IngestionConfig, ProductConfig, ProductInfo,
-    RetrievalConfig, RetrievalMode, RetrievalWeights, UiConfig,
+    AnswerabilityConfig, ChunkingConfig, ChunkingStrategy, DebuggerConfig, DeploymentMode,
+    EmbeddingConfig, EmbeddingModelInfo, EmbeddingProviderKind, IngestionConfig, ProductConfig,
+    ProductInfo, RetrievalConfig, RetrievalMode, RetrievalWeights, UiConfig,
 };
 use thiserror::Error;
 
@@ -142,6 +142,16 @@ impl ApiConfig {
                 min_evidence_score: env_f32("RAG_DEBUGGER_MIN_EVIDENCE_SCORE", 0.35)?,
                 min_semantic_similarity: env_f32("RAG_DEBUGGER_MIN_SEMANTIC_SIMILARITY", 0.25)?,
                 answer_citation_limit: env_u32("RAG_DEBUGGER_ANSWER_CITATION_LIMIT", 3)?,
+                answerability: AnswerabilityConfig {
+                    min_body_term_coverage: env_ratio(
+                        "RAG_DEBUGGER_MIN_ANSWER_BODY_TERM_COVERAGE",
+                        0.50,
+                    )?,
+                    min_body_term_matches: env_positive_u32(
+                        "RAG_DEBUGGER_MIN_ANSWER_BODY_TERM_MATCHES",
+                        2,
+                    )?,
+                },
                 weights: RetrievalWeights {
                     semantic_hybrid: env_f32("RAG_DEBUGGER_WEIGHT_SEMANTIC_HYBRID", 2.0)?,
                     semantic_vector: env_f32("RAG_DEBUGGER_WEIGHT_SEMANTIC_VECTOR", 3.0)?,
@@ -259,6 +269,17 @@ fn env_u32(name: &'static str, default: u32) -> Result<u32, ConfigError> {
                 })
         })
         .unwrap_or(Ok(default))
+}
+
+fn env_positive_u32(name: &'static str, default: u32) -> Result<u32, ConfigError> {
+    let value = env_u32(name, default)?;
+    if value == 0 {
+        return Err(ConfigError::InvalidNumber {
+            name,
+            value: value.to_string(),
+        });
+    }
+    Ok(value)
 }
 
 fn env_u64(name: &'static str, default: u64) -> Result<u64, ConfigError> {
@@ -387,5 +408,14 @@ mod tests {
             parse_ratio("TEST_RATIO", "NaN"),
             Err(ConfigError::InvalidRatio { .. })
         ));
+    }
+
+    #[test]
+    fn answerability_minimum_match_count_must_be_positive() {
+        assert!(matches!(
+            env_positive_u32("CORPUSLAB_TEST_ZERO", 0),
+            Err(ConfigError::InvalidNumber { .. })
+        ));
+        assert_eq!(env_positive_u32("CORPUSLAB_TEST_TWO", 2).ok(), Some(2));
     }
 }

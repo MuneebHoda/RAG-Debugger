@@ -64,6 +64,8 @@ Allows complete local diagnostic detail for investigation. It is not shareable o
 
 Reports do not use an LLM. The same analyzer in `crates/rag/src/diagnosis.rs` supplies retrieval, trace, Eval Lab, and report diagnosis. Given the same stored source, privacy mode, debugger policy, and report-builder version, findings, evidence ordering, failure-label ordering, score explanations, and recommendations must be stable. Generated IDs and timestamps are excluded from deterministic equality.
 
+Report diagnosis follows the retrieval invariant that answerability is stricter than retrieval. A report may list semantic, metadata, path, section, weak, or heading-only candidates as diagnostic evidence while recording that none was safe to cite. Trace reports reuse `answerability_gap`, `semantic_only_match`, and `metadata_only_match` from the shared analyzer rather than inferring answer support independently.
+
 Configuration context uses an ordered map so Markdown and API output remain stable. Report builders must derive recommendations from explicit failure labels and metrics rather than open-ended text generation.
 
 `crates/rag/src/reports` separates source builders, privacy filtering, and recommendation mapping. Callers supply `DebugReportBuildContext` with fixed ownership, ID, privacy mode, and timestamp so tests and later storage/API layers control non-deterministic values.
@@ -118,7 +120,7 @@ The renderer in `crates/rag/src/reports/markdown.rs` produces these stable secti
 
 Context metadata is emitted in ordered-map order. Findings, evidence, failure labels, and recommendations preserve contract order, with duplicate failure labels removed by first occurrence. User-controlled Markdown punctuation is escaped and angle brackets cannot become raw HTML.
 
-`metadata_only` export performs defense-in-depth filtering: it omits subject content, document paths, section titles, evidence snippets, and context keys associated with queries, prompts, answers, text, paths, or sections. Structured diagnosis contains only IDs, scores, labels, and deterministic remediation text, so it remains safe under this mode. `snippets_allowed` may include approved content, but evidence snippets are capped at 280 characters both during report construction and again during export. `full_local_only` remains non-exportable.
+`metadata_only` export performs defense-in-depth filtering: it omits subject content, document paths, section titles, evidence snippets, matched query/body terms, and context keys associated with queries, prompts, answers, text, paths, or sections. Answer-support assessments retain only status, reason, and counts; structured diagnosis retains only IDs, scores, labels, counts, and deterministic remediation text. `snippets_allowed` may include approved content, but evidence snippets are capped at 280 characters both during report construction and again during export. `full_local_only` remains non-exportable.
 
 Checked-in fixtures under `crates/rag/tests/fixtures/reports` lock exact trace, eval, CI, metadata-only, and snippets-allowed output. Maintainers can intentionally regenerate them with:
 

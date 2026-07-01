@@ -130,6 +130,10 @@ function stubWorkbenchFetch() {
             min_evidence_score: 0.35,
             min_semantic_similarity: 0.25,
             answer_citation_limit: 3,
+            answerability: {
+              min_body_term_coverage: 0.5,
+              min_body_term_matches: 2,
+            },
             weights: {},
           },
           embedding: {

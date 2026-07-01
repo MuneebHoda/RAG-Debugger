@@ -17,6 +17,10 @@ Every successful retrieval response must:
 - report insufficient local evidence rather than manufacture an answer.
 - snapshot a deterministic diagnosis with outcome, failure codes, score explanations, and recommendations.
 
+**Answerability must be stricter than retrieval.** Retrieval may rank broad candidates using semantic similarity, paths, section titles, source metadata, and chunk metadata. The answerability gate may authorize an answer only when one non-weak, non-heading chunk-body sentence directly supports the query. Semantic-only, metadata-only, path-only, section-only, weak, heading-only, and insufficient-overlap candidates remain visible for debugging but cannot produce citations.
+
+The default deterministic policy requires at least half of distinct normalized query terms and at least two terms in one sentence. A one-term query requires that term. Every numeric query term must occur in the same supporting sentence. `RAG_DEBUGGER_MIN_ANSWER_BODY_TERM_COVERAGE` and `RAG_DEBUGGER_MIN_ANSWER_BODY_TERM_MATCHES` configure these thresholds. When no hit passes, the answer status is `insufficient_evidence` and citations are empty even if Ranked Evidence contains candidates.
+
 Lexical mode does not require embeddings. Vector and hybrid modes must report missing or partial embeddings explicitly; they must not silently present a lexical-only result as vector-ready.
 
 Retrieval is deterministic for the same corpus state, query, filters, mode, `top_k`, embedding model, and scoring configuration. Timing and generated IDs are excluded from deterministic equality.
@@ -36,6 +40,8 @@ A rerun must preserve the original trace and store the changed request and new r
 Trace diagnosis uses a stable label order. A condition may imply more than one label: duplicate or heading-only evidence also indicates bad chunking, and missing indexes also indicate bad embeddings. Labels are deduplicated without reordering.
 
 The structured diagnosis is the source of truth. Legacy trace labels are derived from it for compatibility. A low score margin is detected only when two results exist and `(top_score - second_score) / top_score` is at or below the configured ratio. Hybrid disagreement is detected only when non-zero semantic and lexical-family signals select different leading chunks. Diagnosis snapshots contain no raw query, path, section, snippet, or chunk content.
+
+Answerability diagnosis adds `answerability_gap`, `semantic_only_match`, and `metadata_only_match`. Per-hit assessments distinguish path-only, section-only, weak, heading-only, and insufficient body overlap. Existing traces without assessments are evaluated from their stored query and chunk bodies when read; this does not migrate or rewrite the stored trace.
 
 ## Eval Lab
 

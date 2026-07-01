@@ -698,6 +698,7 @@ mod tests {
             quality_flags: Vec::new(),
             evidence_strength: EvidenceStrength::Strong,
             duplicate_count: 1,
+            answer_support: Default::default(),
         }
     }
 }

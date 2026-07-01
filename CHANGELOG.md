@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- A deterministic answerability gate that keeps broad retrieval candidates visible while allowing Evidence Summary citations only from directly supporting chunk body text.
 - Deterministic Debugger Intelligence v2 with strong/mixed/weak/failing outcomes, typed failure labels, per-evidence score explanations, actionable remediation, rerun diagnosis deltas, Eval Lab expected-evidence context, and privacy-safe audit-report reuse.
 - Authenticated, idempotent guided demo loading with three versioned public fixtures, deterministic workspace-owned IDs, source-specific progress, suggested diagnostic queries, and a six-step Home workflow through Markdown audit export.
 - Professional deterministic Markdown audit exports with escaped user content, privacy enforcement, ordered sections, and checked-in trace/eval/CI snapshot fixtures.

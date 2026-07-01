@@ -22,6 +22,18 @@ const RETRIEVAL_QUALITY_LABELS: Record<string, string> = {
   section_only_match: "Section-only",
 };
 
+const ANSWER_SUPPORT_LABELS: Record<string, string> = {
+  direct_body_support: "Direct body support",
+  insufficient_body_overlap: "Insufficient body overlap",
+  semantic_only_match: "Semantic-only candidate",
+  metadata_only_match: "Metadata-only candidate",
+  path_only_match: "Path-only candidate",
+  section_only_match: "Section-only candidate",
+  weak_evidence: "Weak evidence",
+  heading_only_evidence: "Heading-only evidence",
+  unassessed: "Not assessed",
+};
+
 export function AnswerPanel({
   response,
   isQuerying,
@@ -72,6 +84,24 @@ export function AnswerPanel({
               <span>{response.diagnosis.summary}</span>
             </div>
           ) : null}
+          <div
+            className={`${styles.answerState} ${
+              response.answer.status === "answered"
+                ? styles.answerStateAnswered
+                : styles.answerStateInsufficient
+            }`}
+          >
+            <strong>
+              {response.answer.status === "answered"
+                ? "Answered from chunk body evidence"
+                : "Insufficient evidence"}
+            </strong>
+            <span>
+              {response.answer.status === "answered"
+                ? "Every citation below passed the direct body-support gate."
+                : "Candidates may still appear below for debugging, but none can be cited as direct support."}
+            </span>
+          </div>
           <p className={styles.answerText}>{response.answer.text}</p>
           {response.answer.citations.length > 0 ? (
             <div className={styles.citationList}>
@@ -170,6 +200,10 @@ function GroupedHitList({ hits }: { hits: RetrievalQueryHit[] }) {
 }
 
 function HitCard({ hit }: { hit: RetrievalQueryHit }) {
+  const support = hit.answer_support ?? {
+    status: "unassessed",
+    reason: "unassessed",
+  };
   return (
     <article className={styles.hitCard}>
       <header>
@@ -205,6 +239,18 @@ function HitCard({ hit }: { hit: RetrievalQueryHit }) {
       </div>
 
       <div className="quality-badges">
+        <span
+          className={`${styles.supportBadge} ${
+            support.status === "supported"
+              ? styles.supported
+              : styles.unsupported
+          }`}
+        >
+          {support.status === "supported"
+            ? "Supports answer"
+            : "Candidate only"}
+          {` · ${ANSWER_SUPPORT_LABELS[support.reason] ?? support.reason}`}
+        </span>
         {(hit.quality_flags ?? []).map((flag) => (
           <span className="quality-badge" key={flag}>
             {RETRIEVAL_QUALITY_LABELS[flag] ?? flag}

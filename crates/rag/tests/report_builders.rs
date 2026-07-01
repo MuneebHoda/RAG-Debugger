@@ -6,7 +6,7 @@ use rag_debugger_core::{
 };
 use rag_debugger_rag::reports::{
     build_ci_eval_debug_report, build_eval_experiment_debug_report, build_trace_debug_report,
-    DebugReportBuildContext, ReportBuildError,
+    render_debug_report_markdown, DebugReportBuildContext, ReportBuildError,
 };
 use serde_json::{json, Value};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -31,6 +31,19 @@ fn trace_report_is_deterministic_and_metadata_only_redacts_content() {
     assert!(!diagnosis_json.contains("technical/gpu.md"));
     assert!(!diagnosis_json.contains("Index publication requires checksum validation"));
     assert!(first.diagnosis.is_some());
+    assert!(first
+        .findings
+        .iter()
+        .any(|finding| finding.code == "answerability_gap"));
+    assert!(first
+        .recommendations
+        .iter()
+        .any(|recommendation| recommendation.code == "restore_direct_answer_support"));
+    let markdown = render_debug_report_markdown(&first).expect("metadata report export");
+    assert!(markdown.contains("Retrieved candidates cannot support an answer"));
+    assert!(!markdown.contains(&trace.input));
+    assert!(!markdown.contains("technical/gpu.md"));
+    assert!(!markdown.contains("Index publication requires checksum validation"));
     assert!(first
         .recommendations
         .iter()

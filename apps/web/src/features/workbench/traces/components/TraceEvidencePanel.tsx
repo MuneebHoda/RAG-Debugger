@@ -42,6 +42,7 @@ function EvidenceCard({
   hit: RetrievalQueryHit;
   explanation?: NonNullable<Trace["diagnosis"]>["score_explanations"][number];
 }) {
+  const support = hit.answer_support;
   return (
     <article className={styles.evidenceCard}>
       <div className={styles.evidenceHeader}>
@@ -53,6 +54,20 @@ function EvidenceCard({
         </span>
       </div>
       <p>{hit.snippet}</p>
+      <div
+        className={`${styles.supportStatus} ${
+          support?.status === "supported"
+            ? styles.supportedEvidence
+            : styles.candidateEvidence
+        }`}
+      >
+        <strong>
+          {support?.status === "supported"
+            ? "Supports answer"
+            : "Candidate only"}
+        </strong>
+        <span>{formatSupportReason(support?.reason ?? "unassessed")}</span>
+      </div>
       <div className={styles.metadata}>
         <span>score {hit.score.toFixed(2)}</span>
         <span>chunk {hit.chunk.ordinal + 1}</span>
@@ -64,4 +79,8 @@ function EvidenceCard({
       <TraceScoreBars explanation={explanation} hit={hit} />
     </article>
   );
+}
+
+function formatSupportReason(reason: string): string {
+  return reason.replaceAll("_", " ");
 }

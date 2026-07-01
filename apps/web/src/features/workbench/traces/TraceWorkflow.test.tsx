@@ -91,6 +91,8 @@ describe("guided run workflow", () => {
     fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
     expect(screen.getByText(/gpu workers speed up/i)).toBeInTheDocument();
     expect(screen.getByText(/strongest scoring signal/i)).toBeInTheDocument();
+    expect(screen.getByText(/candidate only/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/weak evidence/i).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole("tab", { name: /compare/i }));
     fireEvent.change(screen.getByLabelText(/retrieval mode/i), {
@@ -311,6 +313,13 @@ const retrieval = {
       quality_flags: ["semantic_match"],
       evidence_strength: "weak",
       duplicate_count: 1,
+      answer_support: {
+        status: "unsupported",
+        reason: "weak_evidence",
+        matched_body_term_count: 2,
+        query_term_count: 2,
+        body_term_coverage: 1,
+      },
     },
   ],
   embedding_status: {

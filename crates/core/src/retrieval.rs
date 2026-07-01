@@ -95,6 +95,41 @@ pub struct RetrievalQueryHit {
     pub quality_flags: Vec<RetrievalQualityFlag>,
     pub evidence_strength: EvidenceStrength,
     pub duplicate_count: u32,
+    #[serde(default)]
+    pub answer_support: AnswerSupportAssessment,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerSupportStatus {
+    Supported,
+    Unsupported,
+    #[default]
+    Unassessed,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum AnswerSupportReason {
+    DirectBodySupport,
+    InsufficientBodyOverlap,
+    SemanticOnlyMatch,
+    MetadataOnlyMatch,
+    PathOnlyMatch,
+    SectionOnlyMatch,
+    WeakEvidence,
+    HeadingOnlyEvidence,
+    #[default]
+    Unassessed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct AnswerSupportAssessment {
+    pub status: AnswerSupportStatus,
+    pub reason: AnswerSupportReason,
+    pub matched_body_term_count: u32,
+    pub query_term_count: u32,
+    pub body_term_coverage: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
