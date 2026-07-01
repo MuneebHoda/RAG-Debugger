@@ -58,10 +58,10 @@ export type CapabilityGroup = {
 };
 
 export const outcomes = [
-  ["98%", "evidence coverage visible"],
-  ["3 modes", "lexical, vector, hybrid"],
-  ["100k", "team units included"],
-  ["0", "unexplained citations"],
+  ["Retrieve", "broad candidate discovery"],
+  ["Verify", "direct body-text support"],
+  ["Diagnose", "deterministic failure labels"],
+  ["Ship", "quality gates and audit reports"],
 ] as const;
 
 export const failureStages: FailureStage[] = [

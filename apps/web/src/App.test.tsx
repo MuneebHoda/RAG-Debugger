@@ -26,7 +26,7 @@ describe("App", () => {
 
     expect(
       await screen.findByRole("heading", {
-        name: /make every rag answer defensible/i,
+        name: /see why your rag answer failed/i,
       }),
     ).toBeInTheDocument();
     expect(screen.getAllByText(/CorpusLab/i).length).toBeGreaterThan(0);

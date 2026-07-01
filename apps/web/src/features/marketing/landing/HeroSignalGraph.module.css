@@ -1,0 +1,110 @@
+.panel {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.8rem;
+  border-top: 1px solid rgb(130 190 188 / 0.16);
+  padding-top: 0.85rem;
+}
+
+.panel header {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.panel header span,
+.coverage span {
+  color: rgb(230 240 239 / 0.48);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.panel h2 {
+  margin: 0;
+  color: #f7fbfa;
+  font-size: 0.86rem;
+}
+
+.graph {
+  display: grid;
+  min-height: 7.1rem;
+  align-items: center;
+  border: 1px solid rgb(130 190 188 / 0.14);
+  background:
+    linear-gradient(rgb(105 173 170 / 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(105 173 170 / 0.06) 1px, transparent 1px);
+  background-size: 22px 22px;
+  padding: 0.45rem;
+}
+
+.graph svg {
+  width: 100%;
+  height: 6rem;
+  overflow: visible;
+}
+
+.graph path {
+  fill: none;
+  stroke: rgb(74 194 187 / 0.62);
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+.graph circle {
+  fill: #163e42;
+  stroke: #55b8b2;
+  stroke-width: 2;
+}
+
+.graph .gateNode {
+  fill: var(--color-citron-500);
+  stroke: rgb(213 255 95 / 0.3);
+  stroke-width: 8;
+}
+
+.graph .resultNode {
+  fill: #f7fbfa;
+  stroke: rgb(247 251 250 / 0.2);
+  stroke-width: 8;
+}
+
+.labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: -0.35rem;
+  color: rgb(230 240 239 / 0.52);
+  font-size: 0.58rem;
+}
+
+.labels strong {
+  color: var(--color-citron-500);
+}
+
+.coverage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.coverage strong {
+  color: #f7fbfa;
+  font-size: 0.72rem;
+}
+
+.coverage div {
+  grid-column: 1 / -1;
+  height: 0.3rem;
+  overflow: hidden;
+  background: rgb(255 255 255 / 0.08);
+}
+
+.coverage i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--color-citron-500);
+  transform-origin: left center;
+}

@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- An animated, keyboard-accessible RAG diagnosis command center on the public landing page with ranked evidence, answerability states, failure labels, score lineage, CI gate signals, audit-report readiness, explicit playback control, and reduced-motion behavior.
 - A deterministic answerability gate that keeps broad retrieval candidates visible while allowing Evidence Summary citations only from directly supporting chunk body text.
 - Deterministic Debugger Intelligence v2 with strong/mixed/weak/failing outcomes, typed failure labels, per-evidence score explanations, actionable remediation, rerun diagnosis deltas, Eval Lab expected-evidence context, and privacy-safe audit-report reuse.
 - Authenticated, idempotent guided demo loading with three versioned public fixtures, deterministic workspace-owned IDs, source-specific progress, suggested diagnostic queries, and a six-step Home workflow through Markdown audit export.
