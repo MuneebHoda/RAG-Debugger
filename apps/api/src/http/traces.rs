@@ -34,8 +34,11 @@ pub async fn get_trace(
         .await
         .map_err(trace_storage_error)?;
 
-    let trace =
-        rag_debugger_rag::tracing::ensure_trace_diagnosis(trace, &state.config().product.debugger);
+    let trace = rag_debugger_rag::tracing::ensure_trace_diagnosis(
+        trace,
+        &state.config().product.retrieval,
+        &state.config().product.debugger,
+    );
 
     Ok(Json(trace))
 }
@@ -73,7 +76,12 @@ pub async fn create_trace_from_retrieval_run(
         None => repository.ensure_default_project().await?.id,
     };
 
-    let trace = build_trace_from_retrieval(project_id, response, &state.config().product.debugger);
+    let trace = build_trace_from_retrieval(
+        project_id,
+        response,
+        &state.config().product.retrieval,
+        &state.config().product.debugger,
+    );
     Ok(Json(repository.save_trace(trace).await?))
 }
 
@@ -87,8 +95,11 @@ pub async fn rerun_trace(
         .get_trace_detail(rag_debugger_core::TraceId(trace_id))
         .await
         .map_err(trace_storage_error)?;
-    let mut trace =
-        rag_debugger_rag::tracing::ensure_trace_diagnosis(trace, &state.config().product.debugger);
+    let mut trace = rag_debugger_rag::tracing::ensure_trace_diagnosis(
+        trace,
+        &state.config().product.retrieval,
+        &state.config().product.debugger,
+    );
     let original = trace.retrieval.clone().ok_or_else(|| {
         ApiError::BadRequest("trace does not include a retrieval response".to_owned())
     })?;
@@ -118,6 +129,7 @@ pub async fn rerun_trace(
         &original,
         query_request,
         response,
+        &state.config().product.retrieval,
         &state.config().product.debugger,
     );
     trace.reruns.push(comparison.clone());

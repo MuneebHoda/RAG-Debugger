@@ -1,6 +1,7 @@
 use rag_debugger_core::{
-    DebuggerConfig, DiagnosisFailure, DiagnosisFailureCode, DiagnosisOutcome, DiagnosisScoreSignal,
-    DiagnosisSeverity, EvidenceScoreExplanation, EvidenceStrength, ExtractiveAnswerStatus,
+    AnswerSupportReason, AnswerSupportStatus, DebuggerConfig, DiagnosisFailure,
+    DiagnosisFailureCode, DiagnosisOutcome, DiagnosisScoreSignal, DiagnosisSeverity,
+    EvidenceScoreExplanation, EvidenceStrength, ExtractiveAnswerStatus,
     RetrievalEmbeddingReadiness, RetrievalMode, RetrievalQualityFlag, RetrievalQueryHit,
     RetrievalQueryResponse, RetrievalScoreBreakdown,
 };
@@ -66,6 +67,7 @@ pub(super) fn diagnosis_outcome(
             DiagnosisFailureCode::MissingDocument
                 | DiagnosisFailureCode::MissingEmbeddingIndex
                 | DiagnosisFailureCode::MissingExpectedEvidence
+                | DiagnosisFailureCode::AnswerabilityGap
         ) && failure.severity == DiagnosisSeverity::Critical
     }) {
         return DiagnosisOutcome::Failing;
@@ -145,23 +147,79 @@ fn diagnose_evidence(
     config: &DebuggerConfig,
     failures: &mut Vec<DiagnosisFailure>,
 ) {
+    let supported_refs = response
+        .hits
+        .iter()
+        .filter(|hit| hit.answer_support.status == AnswerSupportStatus::Supported)
+        .map(evidence_ref)
+        .collect::<Vec<_>>();
+    let answerability_assessed = response
+        .hits
+        .iter()
+        .all(|hit| hit.answer_support.status != AnswerSupportStatus::Unassessed);
+    if !response.hits.is_empty() && answerability_assessed && supported_refs.is_empty() {
+        failures.push(failure(
+            DiagnosisFailureCode::AnswerabilityGap,
+            DiagnosisSeverity::Critical,
+            "Retrieved candidates cannot support an answer",
+            "Ranked chunks were found, but none contains enough direct body-text support for the question.",
+            response.hits.iter().map(evidence_ref).collect(),
+        ));
+    }
+
+    let semantic_only_refs = response
+        .hits
+        .iter()
+        .filter(|hit| hit.answer_support.reason == AnswerSupportReason::SemanticOnlyMatch)
+        .map(evidence_ref)
+        .collect::<Vec<_>>();
+    if !semantic_only_refs.is_empty() {
+        failures.push(failure(
+            DiagnosisFailureCode::SemanticOnlyMatch,
+            DiagnosisSeverity::Warning,
+            "Semantic similarity lacks direct support",
+            "Semantic scoring retrieved candidates whose body text does not directly support the question.",
+            semantic_only_refs,
+        ));
+    }
+
+    let metadata_only_refs = response
+        .hits
+        .iter()
+        .filter(|hit| {
+            matches!(
+                hit.answer_support.reason,
+                AnswerSupportReason::MetadataOnlyMatch
+                    | AnswerSupportReason::PathOnlyMatch
+                    | AnswerSupportReason::SectionOnlyMatch
+            )
+        })
+        .map(evidence_ref)
+        .collect::<Vec<_>>();
+    if !metadata_only_refs.is_empty() {
+        failures.push(failure(
+            DiagnosisFailureCode::MetadataOnlyMatch,
+            DiagnosisSeverity::Warning,
+            "Metadata matched without body support",
+            "Path, section, or metadata signals retrieved candidates whose body text does not support the question.",
+            metadata_only_refs,
+        ));
+    }
+
     let weak_refs = response
         .hits
         .iter()
         .filter(|hit| hit.evidence_strength == EvidenceStrength::Weak)
         .map(evidence_ref)
         .collect::<Vec<_>>();
-    if response.answer.status == ExtractiveAnswerStatus::InsufficientEvidence
-        || !weak_refs.is_empty()
-    {
+    if !weak_refs.is_empty() {
         let top_is_weak = response
             .hits
             .first()
             .is_some_and(|hit| hit.evidence_strength == EvidenceStrength::Weak);
         failures.push(failure(
             DiagnosisFailureCode::WeakEvidence,
-            if top_is_weak || response.answer.status == ExtractiveAnswerStatus::InsufficientEvidence
-            {
+            if top_is_weak {
                 DiagnosisSeverity::Critical
             } else {
                 DiagnosisSeverity::Warning
@@ -262,7 +320,11 @@ fn diagnose_citations(response: &RetrievalQueryResponse, failures: &mut Vec<Diag
         return;
     }
 
-    let top = &response.hits[0];
+    let top = response
+        .hits
+        .iter()
+        .find(|hit| hit.answer_support.status == AnswerSupportStatus::Supported)
+        .unwrap_or(&response.hits[0]);
     if !response
         .answer
         .citations
@@ -402,13 +464,16 @@ fn failure_code_order(code: DiagnosisFailureCode) -> u8 {
         DiagnosisFailureCode::MissingDocument => 0,
         DiagnosisFailureCode::MissingEmbeddingIndex => 1,
         DiagnosisFailureCode::MissingExpectedEvidence => 2,
-        DiagnosisFailureCode::CitationMissing => 3,
-        DiagnosisFailureCode::WeakEvidence => 4,
-        DiagnosisFailureCode::PartialEmbeddingIndex => 5,
-        DiagnosisFailureCode::DuplicateEvidence => 6,
-        DiagnosisFailureCode::HeadingOnlyEvidence => 7,
-        DiagnosisFailureCode::LowScoreMargin => 8,
-        DiagnosisFailureCode::VectorLexicalDisagreement => 9,
-        DiagnosisFailureCode::TopResultNotCited => 10,
+        DiagnosisFailureCode::AnswerabilityGap => 3,
+        DiagnosisFailureCode::CitationMissing => 4,
+        DiagnosisFailureCode::WeakEvidence => 5,
+        DiagnosisFailureCode::PartialEmbeddingIndex => 6,
+        DiagnosisFailureCode::SemanticOnlyMatch => 7,
+        DiagnosisFailureCode::MetadataOnlyMatch => 8,
+        DiagnosisFailureCode::DuplicateEvidence => 9,
+        DiagnosisFailureCode::HeadingOnlyEvidence => 10,
+        DiagnosisFailureCode::LowScoreMargin => 11,
+        DiagnosisFailureCode::VectorLexicalDisagreement => 12,
+        DiagnosisFailureCode::TopResultNotCited => 13,
     }
 }

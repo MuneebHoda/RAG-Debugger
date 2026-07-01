@@ -76,6 +76,12 @@ pub fn legacy_failure_labels(diagnosis: &EvidenceDiagnosisSummary) -> Vec<Failur
             DiagnosisFailureCode::CitationMissing
             | DiagnosisFailureCode::TopResultNotCited
             | DiagnosisFailureCode::MissingExpectedEvidence => {}
+            DiagnosisFailureCode::AnswerabilityGap => {
+                push_unique(&mut labels, FailureLabel::UnsupportedQuestion)
+            }
+            DiagnosisFailureCode::SemanticOnlyMatch | DiagnosisFailureCode::MetadataOnlyMatch => {
+                push_unique(&mut labels, FailureLabel::BadRanking)
+            }
         }
     }
     labels

@@ -1,23 +1,23 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Instant,
-};
+use std::{collections::BTreeMap, time::Instant};
 
 use async_trait::async_trait;
 use rag_debugger_core::{
-    Chunk, ChunkEmbedding, ChunkPreview, ChunkQualityFlag, DebuggerConfig, EmbeddingModelInfo,
-    EvidenceStrength, ExtractiveAnswer, ExtractiveAnswerStatus, RetrievalCitation, RetrievalConfig,
-    RetrievalEmbeddingReadiness, RetrievalEmbeddingStatus, RetrievalMatchedTerm, RetrievalMode,
-    RetrievalQualityFlag, RetrievalQueryHit, RetrievalQueryRequest, RetrievalQueryResponse,
-    RetrievalQueryRun, RetrievalQueryRunId, RetrievalRun, RetrievalScoreBreakdown,
-    RetrievalWeights, SearchableChunk, TraceId,
+    AnswerSupportAssessment, Chunk, ChunkEmbedding, ChunkPreview, ChunkQualityFlag, DebuggerConfig,
+    EmbeddingModelInfo, EvidenceStrength, ExtractiveAnswer, ExtractiveAnswerStatus,
+    RetrievalCitation, RetrievalConfig, RetrievalEmbeddingReadiness, RetrievalEmbeddingStatus,
+    RetrievalMatchedTerm, RetrievalMode, RetrievalQualityFlag, RetrievalQueryHit,
+    RetrievalQueryRequest, RetrievalQueryResponse, RetrievalQueryRun, RetrievalQueryRunId,
+    RetrievalRun, RetrievalScoreBreakdown, RetrievalWeights, SearchableChunk, TraceId,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
+    answer::build_extractive_answer,
+    answerability::{assess_hits, hits_are_assessed},
     diagnosis::attach_diagnosis,
     embedding::{cosine_similarity, EmbeddingProvider, LocalHashEmbeddingProvider},
+    text::{best_snippet, normalize_text, normalized_tokens, query_terms},
     RagError,
 };
 
@@ -149,7 +149,8 @@ impl LocalHybridRetriever {
             hit.citation.label = format!("[{}]", index + 1);
         }
 
-        let answer = build_extractive_answer(&hits, &self.config);
+        assess_hits(&request.query, &mut hits, &self.config.answerability);
+        let answer = build_extractive_answer(&hits, self.config.answer_citation_limit);
         let run = RetrievalQueryRun {
             id: RetrievalQueryRunId(Uuid::now_v7()),
             query: request.query,
@@ -169,6 +170,29 @@ impl LocalHybridRetriever {
             },
             &self.debugger_config,
         ))
+    }
+}
+
+pub fn ensure_response_answerability(
+    mut response: RetrievalQueryResponse,
+    retrieval_config: &RetrievalConfig,
+    debugger_config: &DebuggerConfig,
+) -> RetrievalQueryResponse {
+    if !response.hits.is_empty() && !hits_are_assessed(&response.hits) {
+        assess_hits(
+            &response.run.query,
+            &mut response.hits,
+            &retrieval_config.answerability,
+        );
+        response.answer =
+            build_extractive_answer(&response.hits, retrieval_config.answer_citation_limit);
+        response.diagnosis = None;
+    }
+
+    if response.diagnosis.is_none() {
+        attach_diagnosis(response, debugger_config)
+    } else {
+        response
     }
 }
 
@@ -305,6 +329,7 @@ fn score_candidate(
         quality_flags,
         evidence_strength,
         duplicate_count: 1,
+        answer_support: AnswerSupportAssessment::default(),
     })
 }
 
@@ -393,32 +418,6 @@ fn not_required_embedding_status(
         missing_chunks: 0,
         stale_chunks: 0,
     }
-}
-
-fn query_terms(query: &str) -> Vec<String> {
-    normalized_tokens(query)
-        .into_iter()
-        .filter(|token| !is_stop_word(token))
-        .collect::<BTreeSet<_>>()
-        .into_iter()
-        .collect()
-}
-
-fn normalized_tokens(text: &str) -> Vec<String> {
-    text.split(|character: char| !character.is_alphanumeric())
-        .filter_map(|token| {
-            let token = token.trim().to_ascii_lowercase();
-            if token.is_empty() {
-                None
-            } else {
-                Some(token)
-            }
-        })
-        .collect()
-}
-
-fn normalize_text(text: &str) -> String {
-    normalized_tokens(text).join(" ")
 }
 
 fn matched_terms(query_terms: &[String], tokens: &[String]) -> Vec<RetrievalMatchedTerm> {
@@ -616,101 +615,6 @@ fn evidence_strength(
     EvidenceStrength::Strong
 }
 
-fn best_snippet(text: &str, query_terms: &[String]) -> String {
-    let mut best_sentence = "";
-    let mut best_score = 0usize;
-
-    for sentence in split_sentences(text) {
-        let tokens = normalized_tokens(sentence);
-        let score = query_terms
-            .iter()
-            .filter(|term| tokens.iter().any(|token| token == *term))
-            .count();
-        if score > best_score {
-            best_sentence = sentence;
-            best_score = score;
-        }
-    }
-
-    if best_sentence.trim().is_empty() {
-        truncate_chars(text.trim(), 280)
-    } else {
-        truncate_chars(best_sentence.trim(), 280)
-    }
-}
-
-fn split_sentences(text: &str) -> Vec<&str> {
-    let mut sentences = Vec::new();
-    let mut start = 0usize;
-
-    for (index, character) in text.char_indices() {
-        if matches!(character, '.' | '!' | '?' | '\n') {
-            if start < index {
-                sentences.push(&text[start..index]);
-            }
-            start = index + character.len_utf8();
-        }
-    }
-
-    if start < text.len() {
-        sentences.push(&text[start..]);
-    }
-
-    sentences
-}
-
-fn truncate_chars(text: &str, max_chars: usize) -> String {
-    let mut output = text.chars().take(max_chars).collect::<String>();
-    if text.chars().count() > max_chars {
-        output.push_str("...");
-    }
-    output
-}
-
-fn build_extractive_answer(
-    hits: &[RetrievalQueryHit],
-    config: &RetrievalConfig,
-) -> ExtractiveAnswer {
-    let Some(top_hit) = hits.first() else {
-        return insufficient_answer();
-    };
-
-    if top_hit.score < config.min_evidence_score
-        || top_hit.evidence_strength == EvidenceStrength::Weak
-    {
-        return insufficient_answer();
-    }
-
-    let mut seen_chunks = BTreeSet::new();
-    let citations = hits
-        .iter()
-        .filter(|hit| hit.evidence_strength != EvidenceStrength::Weak)
-        .filter(|hit| seen_chunks.insert(hit.chunk.id.0))
-        .take(config.answer_citation_limit as usize)
-        .map(|hit| hit.citation.clone())
-        .collect::<Vec<_>>();
-
-    if citations.is_empty() {
-        return insufficient_answer();
-    }
-
-    let text = citations
-        .iter()
-        .map(|citation| format!("{} {}", citation.snippet, citation.label))
-        .collect::<Vec<_>>()
-        .join("\n");
-
-    ExtractiveAnswer {
-        status: ExtractiveAnswerStatus::Answered,
-        text,
-        citations,
-    }
-}
-
-fn insufficient_answer() -> ExtractiveAnswer {
-    insufficient_answer_with_message(None)
-}
-
 fn insufficient_answer_with_message(message: Option<&str>) -> ExtractiveAnswer {
     ExtractiveAnswer {
         status: ExtractiveAnswerStatus::InsufficientEvidence,
@@ -721,42 +625,12 @@ fn insufficient_answer_with_message(message: Option<&str>) -> ExtractiveAnswer {
     }
 }
 
-fn is_stop_word(token: &str) -> bool {
-    matches!(
-        token,
-        "a" | "an"
-            | "and"
-            | "are"
-            | "as"
-            | "at"
-            | "be"
-            | "by"
-            | "for"
-            | "from"
-            | "has"
-            | "have"
-            | "how"
-            | "i"
-            | "in"
-            | "is"
-            | "it"
-            | "of"
-            | "on"
-            | "or"
-            | "that"
-            | "the"
-            | "to"
-            | "what"
-            | "with"
-    )
-}
-
 #[cfg(test)]
 mod tests {
     use rag_debugger_core::{
-        ByteRange, Chunk, ChunkId, ChunkSplitReason, ChunkingConfig, ChunkingStrategy, Document,
-        DocumentId, DocumentProfile, ExtractionQuality, ProjectId, Source, SourceId, SourceKind,
-        SourceSyncPolicy,
+        AnswerSupportReason, AnswerSupportStatus, ByteRange, Chunk, ChunkId, ChunkQualityFlag,
+        ChunkSplitReason, ChunkingConfig, ChunkingStrategy, Document, DocumentId, DocumentProfile,
+        ExtractionQuality, ProjectId, Source, SourceId, SourceKind, SourceSyncPolicy,
     };
     use uuid::Uuid;
 
@@ -859,6 +733,213 @@ mod tests {
     }
 
     #[test]
+    fn direct_body_support_answers_across_document_domains() {
+        let cases = [
+            (
+                "retention period",
+                "The retention period is 30 days for inactive records.",
+            ),
+            (
+                "gpu indexing project",
+                "The GPU indexing project batches document vectors on CUDA workers.",
+            ),
+            (
+                "platform engineer role",
+                "The platform engineer role owns retrieval reliability and deployment.",
+            ),
+            (
+                "salary range",
+                "The salary range is 120000 to 150000 dollars.",
+            ),
+            (
+                "rag retrieval debugging",
+                "RAG retrieval debugging compares ranked chunks, citations, and eval failures.",
+            ),
+        ];
+
+        for (query, body) in cases {
+            let response = LocalHybridRetriever::default()
+                .retrieve(
+                    lexical_request(query),
+                    vec![candidate("general.md", "Details", body)],
+                )
+                .expect("retrieval");
+
+            assert_eq!(response.answer.status, ExtractiveAnswerStatus::Answered);
+            assert_eq!(response.answer.citations.len(), 1);
+            assert_eq!(
+                response.hits[0].answer_support.status,
+                AnswerSupportStatus::Supported
+            );
+            assert_eq!(
+                response.hits[0].answer_support.reason,
+                AnswerSupportReason::DirectBodySupport
+            );
+        }
+    }
+
+    #[test]
+    fn path_only_candidates_remain_ranked_but_cannot_answer() {
+        let response = LocalHybridRetriever::default()
+            .retrieve(
+                lexical_request("salary range"),
+                vec![candidate(
+                    "salary-range.md",
+                    "Overview",
+                    "Employees receive health and leave benefits.",
+                )],
+            )
+            .expect("retrieval");
+
+        assert_eq!(response.hits.len(), 1);
+        assert_eq!(
+            response.hits[0].answer_support.reason,
+            AnswerSupportReason::PathOnlyMatch
+        );
+        assert_insufficient_without_citations(&response);
+    }
+
+    #[test]
+    fn arbitrary_unsupported_questions_abstain_without_query_specific_rules() {
+        for query in [
+            "orbital launch window",
+            "vendor cancellation fee",
+            "medical coverage limit",
+        ] {
+            let path = format!("{}.md", query.replace(' ', "-"));
+            let response = LocalHybridRetriever::default()
+                .retrieve(
+                    lexical_request(query),
+                    vec![candidate(
+                        &path,
+                        "Overview",
+                        "The engineering team maintains internal dashboards.",
+                    )],
+                )
+                .expect("retrieval");
+
+            assert_eq!(response.hits.len(), 1);
+            assert_insufficient_without_citations(&response);
+        }
+    }
+
+    #[test]
+    fn section_only_candidates_remain_ranked_but_cannot_answer() {
+        let response = LocalHybridRetriever::default()
+            .retrieve(
+                lexical_request("salary range"),
+                vec![candidate(
+                    "employee-guide.md",
+                    "Salary range",
+                    "Employees receive health and leave benefits.",
+                )],
+            )
+            .expect("retrieval");
+
+        assert_eq!(response.hits.len(), 1);
+        assert_eq!(
+            response.hits[0].answer_support.reason,
+            AnswerSupportReason::SectionOnlyMatch
+        );
+        assert_insufficient_without_citations(&response);
+    }
+
+    #[test]
+    fn metadata_only_candidates_cannot_answer() {
+        let mut response = LocalHybridRetriever::default()
+            .retrieve(
+                lexical_request("salary range"),
+                vec![candidate(
+                    "salary-range.md",
+                    "Overview",
+                    "Employees receive health and leave benefits.",
+                )],
+            )
+            .expect("retrieval");
+        let hit = response.hits.first_mut().expect("ranked candidate");
+        hit.score_breakdown.semantic = 0.0;
+        hit.score_breakdown.section = 0.0;
+        hit.score_breakdown.path = 0.0;
+        hit.score_breakdown.metadata = 0.5;
+        hit.answer_support = Default::default();
+        assess_hits(
+            &response.run.query,
+            &mut response.hits,
+            &RetrievalConfig::default().answerability,
+        );
+        response.answer = build_extractive_answer(&response.hits, 3);
+
+        assert_eq!(
+            response.hits[0].answer_support.reason,
+            AnswerSupportReason::MetadataOnlyMatch
+        );
+        assert_insufficient_without_citations(&response);
+    }
+
+    #[test]
+    fn weak_and_heading_only_body_matches_cannot_answer() {
+        let mut weak = candidate(
+            "policy.md",
+            "Compensation",
+            "The salary range is 120000 to 150000 dollars.",
+        );
+        weak.chunk.evidence_score_hint = 0.1;
+        let mut heading = candidate(
+            "policy.md",
+            "Compensation",
+            "The salary range is 120000 to 150000 dollars.",
+        );
+        heading.chunk.quality_flags = vec![ChunkQualityFlag::HeadingOnly];
+
+        for (candidate, expected_reason) in [
+            (weak, AnswerSupportReason::WeakEvidence),
+            (heading, AnswerSupportReason::HeadingOnlyEvidence),
+        ] {
+            let response = LocalHybridRetriever::default()
+                .retrieve(lexical_request("salary range"), vec![candidate])
+                .expect("retrieval");
+            assert_eq!(response.hits[0].answer_support.reason, expected_reason);
+            assert_insufficient_without_citations(&response);
+        }
+    }
+
+    #[test]
+    fn numeric_terms_must_be_supported_in_the_same_sentence() {
+        let response = LocalHybridRetriever::default()
+            .retrieve(
+                lexical_request("2026 salary range"),
+                vec![candidate(
+                    "policy.md",
+                    "Compensation",
+                    "The salary range is 120000 to 150000 dollars. This policy applies in 2026.",
+                )],
+            )
+            .expect("retrieval");
+
+        assert_insufficient_without_citations(&response);
+    }
+
+    #[test]
+    fn answer_citation_uses_the_sentence_that_passed_numeric_support() {
+        let response = LocalHybridRetriever::default()
+            .retrieve(
+                lexical_request("2026 2027 salary range"),
+                vec![candidate(
+                    "policy.md",
+                    "Compensation",
+                    "The 2026 salary range is under review. The 2026 and 2027 salary values are published.",
+                )],
+            )
+            .expect("retrieval");
+
+        assert_eq!(response.answer.status, ExtractiveAnswerStatus::Answered);
+        assert_eq!(
+            response.answer.citations[0].snippet,
+            "The 2026 and 2027 salary values are published"
+        );
+    }
+
+    #[test]
     fn hybrid_reports_missing_embeddings_before_falling_back_to_lexical() {
         let response = LocalHybridRetriever::default()
             .retrieve(
@@ -927,6 +1008,19 @@ mod tests {
             Some("Projects")
         );
         assert!(response.hits[0].score_breakdown.semantic > 0.0);
+        assert_eq!(
+            response.hits[0].answer_support.reason,
+            AnswerSupportReason::SemanticOnlyMatch
+        );
+        assert_insufficient_without_citations(&response);
+    }
+
+    fn assert_insufficient_without_citations(response: &RetrievalQueryResponse) {
+        assert_eq!(
+            response.answer.status,
+            ExtractiveAnswerStatus::InsufficientEvidence
+        );
+        assert!(response.answer.citations.is_empty());
     }
 
     fn lexical_request(query: &str) -> RetrievalQueryRequest {

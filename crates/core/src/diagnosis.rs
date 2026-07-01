@@ -36,6 +36,9 @@ pub enum DiagnosisFailureCode {
     CitationMissing,
     TopResultNotCited,
     MissingExpectedEvidence,
+    AnswerabilityGap,
+    SemanticOnlyMatch,
+    MetadataOnlyMatch,
 }
 
 impl DiagnosisFailureCode {
@@ -52,6 +55,9 @@ impl DiagnosisFailureCode {
             Self::CitationMissing => "citation_missing",
             Self::TopResultNotCited => "top_result_not_cited",
             Self::MissingExpectedEvidence => "missing_expected_evidence",
+            Self::AnswerabilityGap => "answerability_gap",
+            Self::SemanticOnlyMatch => "semantic_only_match",
+            Self::MetadataOnlyMatch => "metadata_only_match",
         }
     }
 }

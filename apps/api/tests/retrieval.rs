@@ -60,8 +60,46 @@ async fn retrieval_query_searches_all_indexed_documents() {
     assert_eq!(body["hits"][0]["rank"], 1);
     assert_eq!(body["hits"][0]["matched_terms"][0]["term"], "gpu");
     assert_eq!(body["hits"][0]["document"]["path"], "resume.md");
+    assert_eq!(body["hits"][0]["answer_support"]["status"], "supported");
     assert!(body["diagnosis"]["outcome"].is_string());
     assert!(body["diagnosis"]["score_explanations"][0]["summary"].is_string());
+}
+
+#[tokio::test]
+async fn retrieval_keeps_path_candidates_but_abstains_without_body_support() {
+    let app = test_app();
+    upload_text_file(
+        &app,
+        "compensation-range.md",
+        "Overview\nEmployees receive health and leave benefits.",
+    )
+    .await;
+
+    let response = app
+        .oneshot(json_request(json!({
+            "query": "compensation range",
+            "top_k": 5,
+            "retrieval_mode": "lexical"
+        })))
+        .await
+        .expect("retrieval response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["hits"].as_array().expect("hits").len(), 1);
+    assert_eq!(body["answer"]["status"], "insufficient_evidence");
+    assert!(body["answer"]["citations"]
+        .as_array()
+        .expect("citations")
+        .is_empty());
+    assert_eq!(
+        body["hits"][0]["answer_support"]["reason"],
+        "path_only_match"
+    );
+    assert_eq!(
+        body["diagnosis"]["primary_issue"]["code"],
+        "answerability_gap"
+    );
 }
 
 #[tokio::test]

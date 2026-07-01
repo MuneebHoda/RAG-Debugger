@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RetrievalQueryResponse } from "../../../lib/api/retrieval";
 import { RetrievalPage } from "./RetrievalPage";
+import { AnswerPanel } from "./RetrievalResults";
 
 const sourceId = "018f7a2a-6e2e-7000-a000-000000000101";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000102";
@@ -191,6 +193,13 @@ describe("RetrievalPage", () => {
               quality_flags: ["semantic_match", "exact_term_match"],
               evidence_strength: "strong",
               duplicate_count: 1,
+              answer_support: {
+                status: "supported",
+                reason: "direct_body_support",
+                matched_body_term_count: 2,
+                query_term_count: 2,
+                body_term_coverage: 1,
+              },
             },
           ],
           embedding_status: {
@@ -279,7 +288,57 @@ describe("RetrievalPage", () => {
     expect(screen.getByText(/gpu × 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Strong · 3\.20/i)).toBeInTheDocument();
     expect(screen.getByText(/Exact term/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/answered from chunk body evidence/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/supports answer/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/score breakdown/i)).toBeInTheDocument();
+  });
+
+  it("makes an answerability abstention explicit without citations", () => {
+    const response = {
+      run: {
+        id: "run-unsupported",
+        query: "unsupported question",
+        top_k: 5,
+        retrieval_mode: "hybrid",
+        latency_ms: 4,
+        created_at: "2026-07-01T00:00:00Z",
+      },
+      answer: {
+        status: "insufficient_evidence",
+        text: "Ranked candidates were found, but no chunk body directly supports this question.",
+        citations: [],
+      },
+      hits: [],
+      embedding_status: {
+        readiness: "ready",
+        required: true,
+        model: {
+          provider: "local",
+          model_name: "local-hash-v1",
+          dimension: 384,
+        },
+        total_chunks: 1,
+        indexed_chunks: 1,
+        missing_chunks: 0,
+        stale_chunks: 0,
+      },
+      diagnosis: null,
+    } satisfies RetrievalQueryResponse;
+
+    render(
+      <AnswerPanel
+        isQuerying={false}
+        isSavingTrace={false}
+        response={response}
+        onSaveTrace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/^insufficient evidence$/i)).toBeInTheDocument();
+    expect(screen.getByText(/none can be cited/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^\[1\]/)).not.toBeInTheDocument();
   });
 
   it("saves the latest retrieval response and opens its debugger", async () => {

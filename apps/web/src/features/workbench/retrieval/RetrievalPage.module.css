@@ -70,6 +70,33 @@
   text-transform: capitalize;
 }
 
+.answerState {
+  display: grid;
+  gap: 0.2rem;
+  border-left: 3px solid;
+  padding: 0.7rem 0.8rem;
+}
+
+.answerState strong {
+  font-size: 0.82rem;
+}
+
+.answerState span {
+  color: var(--color-ink-600);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.answerStateAnswered {
+  border-color: var(--color-teal-700);
+  background: color-mix(in srgb, var(--color-teal-500) 7%, white);
+}
+
+.answerStateInsufficient {
+  border-color: #b45309;
+  background: color-mix(in srgb, #f59e0b 8%, white);
+}
+
 .controls {
   min-height: 0;
 }
@@ -322,6 +349,26 @@
 .hitCard small {
   display: block;
   margin-top: 10px;
+}
+
+.supportBadge {
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  padding: 3px 8px;
+}
+
+.supported {
+  border-color: color-mix(in srgb, var(--color-teal-700) 35%, white);
+  background: color-mix(in srgb, var(--color-teal-500) 8%, white);
+  color: var(--color-teal-900);
+}
+
+.unsupported {
+  border-color: color-mix(in srgb, #b45309 30%, white);
+  background: color-mix(in srgb, #f59e0b 7%, white);
+  color: #854d0e;
 }
 
 .modeTabs {

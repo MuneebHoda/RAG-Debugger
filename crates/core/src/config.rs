@@ -55,7 +55,15 @@ pub struct RetrievalConfig {
     pub min_evidence_score: f32,
     pub min_semantic_similarity: f32,
     pub answer_citation_limit: u32,
+    #[serde(default)]
+    pub answerability: AnswerabilityConfig,
     pub weights: RetrievalWeights,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AnswerabilityConfig {
+    pub min_body_term_coverage: f32,
+    pub min_body_term_matches: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -146,7 +154,17 @@ impl Default for RetrievalConfig {
             min_evidence_score: 0.35,
             min_semantic_similarity: 0.25,
             answer_citation_limit: 3,
+            answerability: AnswerabilityConfig::default(),
             weights: RetrievalWeights::default(),
+        }
+    }
+}
+
+impl Default for AnswerabilityConfig {
+    fn default() -> Self {
+        Self {
+            min_body_term_coverage: 0.50,
+            min_body_term_matches: 2,
         }
     }
 }

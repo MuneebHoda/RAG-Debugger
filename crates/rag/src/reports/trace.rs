@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use rag_debugger_core::{
     DebugReport, DebugReportEvidenceRef, DebugReportEvidenceRole, DebugReportFinding,
     DebugReportSeverity, DebugReportSource, DebuggerConfig, DiagnosisFailure, DiagnosisSeverity,
-    Trace,
+    RetrievalConfig, Trace,
 };
 
 use crate::diagnosis::diagnose_retrieval;
@@ -19,6 +19,12 @@ pub fn build_trace_debug_report(
     context: DebugReportBuildContext,
     trace: &Trace,
 ) -> Result<DebugReport, ReportBuildError> {
+    let trace = crate::tracing::ensure_trace_diagnosis(
+        trace.clone(),
+        &RetrievalConfig::default(),
+        &DebuggerConfig::default(),
+    );
+    let trace = &trace;
     let retrieval = trace
         .retrieval
         .as_ref()

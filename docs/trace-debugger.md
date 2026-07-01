@@ -98,9 +98,15 @@ Current spans are:
 
 Every new retrieval response snapshots an `EvidenceDiagnosisSummary`. The summary classifies the run as `strong`, `mixed`, `weak`, or `failing`; identifies one primary issue; records affected evidence labels; explains the score components for every ranked chunk; and provides ordered remediation actions.
 
-The analyzer detects missing or partial embeddings, weak evidence, duplicate and heading-only chunks, a low top-two score margin, hybrid semantic/lexical disagreement, missing citations, an uncited top result, and missing expected evidence when Eval Lab supplies expectations. The low-margin rule uses `(top_score - second_score) / top_score` and the validated `RAG_DEBUGGER_LOW_SCORE_MARGIN_RATIO` setting, which defaults to `0.10`.
+The analyzer detects missing or partial embeddings, weak evidence, duplicate and heading-only chunks, answerability gaps, semantic-only or metadata-only candidates, a low top-two score margin, hybrid semantic/lexical disagreement, missing citations, an uncited supported result, and missing expected evidence when Eval Lab supplies expectations. The low-margin rule uses `(top_score - second_score) / top_score` and the validated `RAG_DEBUGGER_LOW_SCORE_MARGIN_RATIO` setting, which defaults to `0.10`.
 
-Diagnosis contains only IDs, scores, labels, counts, and deterministic templates. It never copies queries, document paths, section titles, snippets, or chunk text. New results persist the diagnosis snapshot for reproducibility. Older trace JSON remains readable; the API computes a diagnosis when an older trace is opened and persists it on the next rerun or report creation.
+Diagnosis contains only IDs, scores, labels, counts, and deterministic templates. It never copies queries, document paths, section titles, snippets, or chunk text. New results persist the diagnosis snapshot for reproducibility. Older trace JSON remains readable; the API assesses answerability and computes diagnosis in memory when an older trace is opened. A rerun persists the new response, and an audit report freezes the enriched diagnosis without rewriting the original trace.
+
+## Answerability Gate
+
+Retrieval, answerability, and answer construction are separate stages. Retrieval may use chunk text, semantic vectors, section titles, paths, and metadata to find candidates. The answerability gate evaluates normalized terms in chunk body sentences only. The answer builder receives only supported hits and emits no citations when every candidate is unsupported.
+
+The Evidence tab preserves rejected candidates and shows whether each chunk supports the answer or is diagnostic only. `answerability_gap` is critical when candidates exist but none passes. `semantic_only_match` and `metadata_only_match` explain why apparently relevant candidates were rejected. Path-only and section-only causes remain available in each hit's support assessment.
 
 ## Legacy Failure Labels
 
@@ -109,7 +115,8 @@ The trace builder assigns labels from the saved retrieval response:
 - `missing_document`: no chunks were retrieved.
 - `missing_embedding_index`: vector or hybrid retrieval needed embeddings that were not indexed.
 - `bad_embedding`: embeddings were missing or partially indexed.
-- `weak_evidence`: answer status was insufficient or evidence was weak.
+- `weak_evidence`: one or more ranked chunks were weak.
+- `unsupported_question`: ranked candidates did not directly support an answer.
 - `bad_ranking`: weak evidence was ranked.
 - `duplicate_evidence`: duplicate evidence affected the result.
 - `heading_only_evidence`: a heading-only chunk appeared as evidence.

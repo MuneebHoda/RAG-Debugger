@@ -11,6 +11,25 @@ import type {
 export type RetrievalMode = "lexical" | "vector" | "hybrid";
 export type EvidenceStrength = "strong" | "medium" | "weak";
 export type ExtractiveAnswerStatus = "answered" | "insufficient_evidence";
+export type AnswerSupportStatus = "supported" | "unsupported" | "unassessed";
+export type AnswerSupportReason =
+  | "direct_body_support"
+  | "insufficient_body_overlap"
+  | "semantic_only_match"
+  | "metadata_only_match"
+  | "path_only_match"
+  | "section_only_match"
+  | "weak_evidence"
+  | "heading_only_evidence"
+  | "unassessed";
+
+export interface AnswerSupportAssessment {
+  status: AnswerSupportStatus;
+  reason: AnswerSupportReason;
+  matched_body_term_count: number;
+  query_term_count: number;
+  body_term_coverage: number;
+}
 export type RetrievalQualityFlag =
   | "duplicate"
   | "heading_only"
@@ -32,7 +51,10 @@ export type DiagnosisFailureCode =
   | "vector_lexical_disagreement"
   | "citation_missing"
   | "top_result_not_cited"
-  | "missing_expected_evidence";
+  | "missing_expected_evidence"
+  | "answerability_gap"
+  | "semantic_only_match"
+  | "metadata_only_match";
 export type DiagnosisRemediationArea =
   | "chunking"
   | "embeddings"
@@ -160,6 +182,7 @@ export interface RetrievalQueryHit {
   quality_flags: RetrievalQualityFlag[];
   evidence_strength: EvidenceStrength;
   duplicate_count: number;
+  answer_support?: AnswerSupportAssessment;
 }
 
 export interface RetrievalQueryResponse {

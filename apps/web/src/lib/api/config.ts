@@ -30,6 +30,10 @@ export interface ProductConfig {
     min_evidence_score: number;
     min_semantic_similarity: number;
     answer_citation_limit: number;
+    answerability: {
+      min_body_term_coverage: number;
+      min_body_term_matches: number;
+    };
     weights: Record<string, number>;
   };
   debugger: {

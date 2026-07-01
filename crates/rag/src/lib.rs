@@ -1,3 +1,5 @@
+pub mod answer;
+pub mod answerability;
 pub mod chunking;
 pub mod diagnosis;
 pub mod embedding;
@@ -8,6 +10,8 @@ pub mod intelligence;
 pub mod reports;
 pub mod retrieval;
 pub mod tracing;
+
+mod text;
 
 pub use extraction::{ExtractedText, ExtractionError, SupportedFileKind, TextExtractor};
 
