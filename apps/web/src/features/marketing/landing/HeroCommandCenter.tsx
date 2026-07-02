@@ -28,6 +28,7 @@ export function HeroCommandCenter() {
   return (
     <section
       className={styles.hero}
+      data-landing-header-tone="hero"
       ref={sectionRef}
       onPointerMove={handlePointerMove}
     >
@@ -64,12 +65,16 @@ export function HeroCommandCenter() {
           </div>
         </m.header>
 
-        <HeroCommandCenterSurface
-          isPlaying={isPlaying}
-          scenario={activeScenario}
-          onSelectScenario={selectScenario}
-          onTogglePlayback={togglePlayback}
-        />
+        <div className={styles.stage}>
+          <div className={styles.stageFrame}>
+            <HeroCommandCenterSurface
+              isPlaying={isPlaying}
+              scenario={activeScenario}
+              onSelectScenario={selectScenario}
+              onTogglePlayback={togglePlayback}
+            />
+          </div>
+        </div>
       </div>
     </section>
   );

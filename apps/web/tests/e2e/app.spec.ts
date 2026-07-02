@@ -72,6 +72,12 @@ async function seedDemoSession(page: Page) {
 
 test("renders the CorpusLab public site", async ({ page }) => {
   await page.goto("/");
+
+  const landingHeader = page.locator("[data-landing-header-state]");
+  await expect(landingHeader).toHaveAttribute(
+    "data-landing-header-state",
+    "hero",
+  );
   await expect(
     page.getByRole("heading", {
       name: "See why your RAG answer failed.",
@@ -93,6 +99,8 @@ test("landing interactions remain accessible and layout-stable", async ({
   await observeCumulativeLayoutShift(page);
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.goto("/");
+
+  const landingHeader = page.locator("[data-landing-header-state]");
 
   const strongScenario = page.getByRole("button", { name: "Strong" });
   await strongScenario.focus();
@@ -119,6 +127,22 @@ test("landing interactions remain accessible and layout-stable", async ({
 
   await page.getByRole("tab", { name: "Quality" }).click();
   await expect(page.getByAltText(/quality experiment/i)).toBeVisible();
+
+  await page
+    .locator("#retrieval-demo")
+    .evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await expect(landingHeader).toHaveAttribute(
+    "data-landing-header-state",
+    "light",
+  );
+
+  await page
+    .locator("#landing-failure-story")
+    .evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await expect(landingHeader).toHaveAttribute(
+    "data-landing-header-state",
+    "dark",
+  );
   await assertNoHorizontalOverflow(page);
 
   await page.waitForLoadState("networkidle");
@@ -152,7 +176,9 @@ test("captures responsive landing screenshots", async ({ page }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const viewport of [
     { width: 1440, height: 1100 },
+    { width: 1280, height: 900 },
     { width: 1024, height: 900 },
+    { width: 768, height: 900 },
     { width: 390, height: 900 },
   ]) {
     await page.setViewportSize(viewport);

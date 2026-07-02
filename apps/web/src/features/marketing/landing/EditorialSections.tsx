@@ -8,7 +8,11 @@ import styles from "./EditorialSections.module.css";
 
 export function OutcomeRail() {
   return (
-    <section className={styles.outcomes} aria-label="CorpusLab outcomes">
+    <section
+      className={styles.outcomes}
+      data-landing-header-tone="dark"
+      aria-label="CorpusLab outcomes"
+    >
       {outcomes.map(([value, label]) => (
         <div key={label}>
           <strong>{value}</strong>
@@ -25,6 +29,7 @@ export function CapabilityStory() {
   return (
     <m.section
       className={styles.capabilities}
+      data-landing-header-tone="light"
       initial={reducedMotion ? false : "hidden"}
       variants={revealVariants}
       viewport={viewportOnce}
@@ -65,7 +70,11 @@ export function CapabilityStory() {
 
 export function EnterpriseBand() {
   return (
-    <section className={styles.enterprise} aria-labelledby="enterprise-title">
+    <section
+      className={styles.enterprise}
+      data-landing-header-tone="light"
+      aria-labelledby="enterprise-title"
+    >
       <div className={styles.enterpriseInner}>
         <div>
           <p>Built for serious RAG systems</p>
@@ -87,7 +96,7 @@ export function EnterpriseBand() {
 
 export function FinalCta() {
   return (
-    <section className={styles.finalCta}>
+    <section className={styles.finalCta} data-landing-header-tone="dark">
       <div>
         <p>Evidence should survive scrutiny.</p>
         <h2>Ship RAG answers your team can defend.</h2>

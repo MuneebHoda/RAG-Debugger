@@ -4,6 +4,10 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { CorpusLabLogo } from "../components/brand/CorpusLabLogo";
 import { ButtonLink } from "../components/ui/Button";
+import {
+  type LandingHeaderState,
+  useLandingHeaderState,
+} from "../features/marketing/header/useLandingHeaderState";
 import styles from "./MarketingLayout.module.css";
 
 const navItems = [
@@ -12,9 +16,16 @@ const navItems = [
   { to: "/login", label: "Login" },
 ];
 
+const landingHeaderClasses: Record<LandingHeaderState, string> = {
+  hero: styles.landingHeaderHero,
+  dark: styles.landingHeaderDark,
+  light: styles.landingHeaderLight,
+};
+
 export function MarketingLayout() {
   const location = useLocation();
   const isLanding = location.pathname === "/";
+  const landingHeaderState = useLandingHeaderState(isLanding, location.key);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -31,9 +42,20 @@ export function MarketingLayout() {
 
   return (
     <div className={isLanding ? styles.landingLayout : styles.layout}>
-      <header className={isLanding ? styles.landingHeader : styles.header}>
+      <header
+        className={
+          isLanding
+            ? `${styles.landingHeader} ${landingHeaderClasses[landingHeaderState]}`
+            : styles.header
+        }
+        data-landing-header-state={isLanding ? landingHeaderState : undefined}
+      >
         <Link to="/" className={styles.brand} aria-label="CorpusLab home">
-          <CorpusLabLogo tone={isLanding ? "light" : "dark"} />
+          <CorpusLabLogo
+            tone={
+              isLanding && landingHeaderState !== "light" ? "light" : "dark"
+            }
+          />
         </Link>
         <nav className={styles.nav} aria-label="Public navigation">
           {navItems.map((item) => (
@@ -90,7 +112,10 @@ export function MarketingLayout() {
         </nav>
       </header>
       <Outlet />
-      <footer className={styles.footer}>
+      <footer
+        className={styles.footer}
+        data-landing-header-tone={isLanding ? "light" : undefined}
+      >
         <CorpusLabLogo />
         <span>Evidence-first RAG operations for serious product teams.</span>
       </footer>

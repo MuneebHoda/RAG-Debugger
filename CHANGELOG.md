@@ -36,6 +36,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- The animated landing command center now uses a more spacious responsive stage, while the landing-only header adapts between hero, dark, and light page surfaces as users scroll.
 - Retrieval workbench orchestration now uses a domain hook, focused control panels, and tested pure filter utilities without changing behavior.
 - Runs and Trace Debugger UI now use focused components, a URL-backed trace hook, and tested filtering, recommendation, and route-loading behavior.
 - Storage persistence now exposes bounded repository traits with a method-free ingestion compatibility composite and MemoryStore contract coverage.
