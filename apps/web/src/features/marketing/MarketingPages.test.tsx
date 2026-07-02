@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe("marketing pages", () => {
-  it("shows the CorpusLab landing story with product imagery", () => {
+  it("shows the CorpusLab command center and guided workflow entry points", () => {
     render(
       <MemoryRouter>
         <LandingPage />
@@ -30,16 +30,70 @@ describe("marketing pages", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: /make every rag answer defensible/i,
+        name: /see why your rag answer failed/i,
       }),
     ).toBeInTheDocument();
     expect(
-      document.querySelector('img[src="/product/corpuslab-hero-theme.png"]'),
+      screen.getByLabelText(/interactive rag diagnosis simulation/i),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /run the guided demo/i }),
+    ).toHaveAttribute("href", "/app");
+    expect(
+      screen.getByRole("link", { name: /view the debugger/i }),
+    ).toHaveAttribute("href", "/app/traces");
     expect(screen.getByAltText(/mission control dashboard/i)).toHaveAttribute(
       "src",
       "/product/corpuslab-dashboard.png",
     );
+  });
+
+  it("changes evidence, diagnosis, gate, and report state by scenario", async () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Answerability failed")).toBeInTheDocument();
+    expect(screen.getByText("answerability gap")).toBeInTheDocument();
+    expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Strong" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Direct evidence, release ready"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText("No blocking labels")).toBeInTheDocument();
+    expect(screen.getByText("Audit ready")).toBeInTheDocument();
+    expect(screen.getByText("97", { selector: "strong" })).toBeInTheDocument();
+  });
+
+  it("provides explicit playback control and disables autoplay for reduced motion", () => {
+    const { unmount } = render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
+    const pause = screen.getByRole("button", { name: "Pause simulation" });
+    fireEvent.click(pause);
+    expect(
+      screen.getByRole("button", { name: "Play simulation" }),
+    ).toBeInTheDocument();
+    unmount();
+
+    globalThis.__setReducedMotionForTests(true);
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+    expect(
+      screen.getByRole("button", { name: "Play simulation" }),
+    ).toBeInTheDocument();
   });
 
   it("updates failure diagnosis through accessible stage tabs", async () => {

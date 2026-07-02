@@ -28,6 +28,13 @@ apps/web/src/features/workbench/<domain>/
 
 Small domains do not need every folder. Add a boundary when it removes real complexity rather than creating empty structure.
 
+The public landing route is lazy-loaded and owned by
+`features/marketing/landing`. Its command-center demonstration uses typed,
+static scenarios and never calls workbench APIs. Motion orchestration stays in
+focused hooks and configuration modules; section and component styling remains
+in CSS modules. The simulation exposes the same product concepts as the
+workbench without representing fixture state as live customer data.
+
 ## Page And Component Boundaries
 
 - Page components compose hooks and panels; they should not contain every control and data transformation for a workflow.
@@ -67,6 +74,7 @@ UI tests should mock the narrow domain boundary or the HTTP route relevant to th
 - Route and component styling uses CSS modules.
 - A feature module should not depend on selectors owned by another feature.
 - Stable boards, score bars, tabs, and tool layouts need explicit responsive dimensions so dynamic data cannot shift controls or overlap text.
+- Marketing motion must preserve visible labels and state, provide controls for automatically changing content, and render a complete static experience under `prefers-reduced-motion`.
 - New UI must be checked at desktop, tablet, and mobile widths with no horizontal overflow.
 
 ## Testing

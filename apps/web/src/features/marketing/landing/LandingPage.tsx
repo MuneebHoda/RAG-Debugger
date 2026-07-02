@@ -7,7 +7,7 @@ import {
   OutcomeRail,
 } from "./EditorialSections";
 import { FailureStory } from "./FailureStory";
-import { HeroSection } from "./HeroSection";
+import { HeroCommandCenter } from "./HeroCommandCenter";
 import { ProductTour } from "./ProductTour";
 import { RetrievalDemo } from "./RetrievalDemo";
 import styles from "./LandingPage.module.css";
@@ -17,7 +17,7 @@ export function LandingPage() {
     <LazyMotion features={domAnimation} strict>
       <MotionConfig reducedMotion="user">
         <main className={styles.page}>
-          <HeroSection />
+          <HeroCommandCenter />
           <OutcomeRail />
           <FailureStory />
           <RetrievalDemo />

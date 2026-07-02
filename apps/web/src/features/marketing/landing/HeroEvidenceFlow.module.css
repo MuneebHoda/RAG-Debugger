@@ -1,0 +1,148 @@
+.panel {
+  display: grid;
+  min-width: 0;
+  align-content: start;
+  gap: 0.75rem;
+}
+
+.header,
+.titleRow,
+.signals {
+  display: flex;
+  align-items: center;
+}
+
+.header {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.header div {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.header span,
+.header strong,
+.evidence small,
+.score span {
+  color: rgb(230 240 239 / 0.48);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.header h2 {
+  margin: 0;
+  color: #f7fbfa;
+  font-size: 0.86rem;
+}
+
+.list {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.evidence {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr) 2.5rem;
+  min-width: 0;
+  align-items: start;
+  gap: 0.65rem;
+  border: 1px solid rgb(130 190 188 / 0.16);
+  border-radius: var(--radius-xs);
+  background: rgb(10 33 37 / 0.72);
+  padding: 0.7rem;
+}
+
+.rank {
+  display: grid;
+  width: 1.55rem;
+  height: 1.55rem;
+  place-items: center;
+  border: 1px solid rgb(213 255 95 / 0.28);
+  border-radius: 50%;
+  color: var(--color-citron-500);
+  font-size: 0.66rem;
+  font-weight: 900;
+}
+
+.body {
+  display: grid;
+  min-width: 0;
+  gap: 0.3rem;
+}
+
+.titleRow {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.titleRow > strong {
+  color: #f7fbfa;
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
+
+.supported,
+.candidate {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--color-citron-500);
+  font-size: 0.58rem;
+  font-weight: 850;
+}
+
+.candidate {
+  color: #ffd783;
+}
+
+.body p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: rgb(230 240 239 / 0.72);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.signals {
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  color: rgb(168 212 209 / 0.66);
+  font-size: 0.58rem;
+  font-weight: 750;
+}
+
+.score {
+  display: grid;
+  justify-items: end;
+}
+
+.score strong {
+  color: #f7fbfa;
+  font-size: 1rem;
+}
+
+@media (max-width: 620px) {
+  .titleRow {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .evidence {
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+  }
+
+  .score {
+    display: none;
+  }
+}

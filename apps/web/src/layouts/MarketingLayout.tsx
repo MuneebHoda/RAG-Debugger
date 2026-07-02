@@ -1,6 +1,6 @@
 import { Menu, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, Outlet } from "react-router-dom";
+import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { CorpusLabLogo } from "../components/brand/CorpusLabLogo";
 import { ButtonLink } from "../components/ui/Button";
@@ -13,6 +13,8 @@ const navItems = [
 ];
 
 export function MarketingLayout() {
+  const location = useLocation();
+  const isLanding = location.pathname === "/";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
 
@@ -28,10 +30,10 @@ export function MarketingLayout() {
   }, [mobileMenuOpen]);
 
   return (
-    <div className={styles.layout}>
-      <header className={styles.header}>
+    <div className={isLanding ? styles.landingLayout : styles.layout}>
+      <header className={isLanding ? styles.landingHeader : styles.header}>
         <Link to="/" className={styles.brand} aria-label="CorpusLab home">
-          <CorpusLabLogo />
+          <CorpusLabLogo tone={isLanding ? "light" : "dark"} />
         </Link>
         <nav className={styles.nav} aria-label="Public navigation">
           {navItems.map((item) => (

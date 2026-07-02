@@ -1,0 +1,31 @@
+.metric {
+  display: grid;
+  min-width: 0;
+  gap: 0.2rem;
+}
+
+.metric span {
+  color: rgb(230 240 239 / 0.5);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  min-height: 1.1rem;
+  color: #f7fbfa;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.positive {
+  color: var(--color-citron-500) !important;
+}
+
+.warning {
+  color: #ffd783 !important;
+}
+
+.critical {
+  color: #ff9e8c !important;
+}

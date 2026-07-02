@@ -74,14 +74,17 @@ test("renders the CorpusLab public site", async ({ page }) => {
   await page.goto("/");
   await expect(
     page.getByRole("heading", {
-      name: "Make every RAG answer defensible.",
+      name: "See why your RAG answer failed.",
     }),
   ).toBeVisible();
   await expect(page.getByRole("link", { name: "Features" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Pricing" })).toBeVisible();
   await expect(
-    page.locator('img[src="/product/corpuslab-hero-theme.png"]'),
+    page.getByLabel("Interactive RAG diagnosis simulation"),
   ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Run the guided demo" }),
+  ).toHaveAttribute("href", "/app");
 });
 
 test("landing interactions remain accessible and layout-stable", async ({
@@ -90,6 +93,12 @@ test("landing interactions remain accessible and layout-stable", async ({
   await observeCumulativeLayoutShift(page);
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.goto("/");
+
+  const strongScenario = page.getByRole("button", { name: "Strong" });
+  await strongScenario.focus();
+  await strongScenario.press("Enter");
+  await expect(page.getByText("Direct evidence, release ready")).toBeVisible();
+  await expect(page.getByText("Audit ready")).toBeVisible();
 
   const extractTab = page.getByRole("tab", { name: "Extract" });
   await extractTab.focus();
@@ -140,6 +149,7 @@ test("mobile navigation and reduced-motion experience remain complete", async ({
 });
 
 test("captures responsive landing screenshots", async ({ page }, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   for (const viewport of [
     { width: 1440, height: 1100 },
     { width: 1024, height: 900 },
@@ -147,10 +157,15 @@ test("captures responsive landing screenshots", async ({ page }, testInfo) => {
   ]) {
     await page.setViewportSize(viewport);
     await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "See why your RAG answer failed." }),
+    ).toBeVisible();
+    await expect(
+      page.getByLabel("Interactive RAG diagnosis simulation"),
+    ).toBeVisible();
     await revealLandingSections(page, viewport.height);
     await assertNoHorizontalOverflow(page);
     await page.screenshot({
-      animations: "disabled",
       fullPage: true,
       path: testInfo.outputPath(
         `landing-${viewport.width}x${viewport.height}.png`,
