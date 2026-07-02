@@ -22,6 +22,7 @@ export function RetrievalDemo() {
   return (
     <m.section
       className={styles.section}
+      data-landing-header-tone="light"
       id="retrieval-demo"
       initial={reducedMotion ? false : "hidden"}
       variants={revealVariants}

@@ -20,7 +20,12 @@ export function FailureStory() {
     failureStages.find((stage) => stage.id === activeId) ?? failureStages[0];
 
   return (
-    <section className={styles.section} aria-labelledby="failure-story-title">
+    <section
+      className={styles.section}
+      data-landing-header-tone="dark"
+      id="landing-failure-story"
+      aria-labelledby="failure-story-title"
+    >
       <div className={styles.inner}>
         <header className={styles.heading}>
           <p>One connected failure surface</p>

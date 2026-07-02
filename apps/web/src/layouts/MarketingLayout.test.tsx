@@ -1,10 +1,47 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MarketingLayout } from "./MarketingLayout";
 
 describe("MarketingLayout", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("uses the landing hero state without affecting other public routes", () => {
+    const { container } = renderLayout();
+
+    expect(
+      container.querySelector("[data-landing-header-state='hero']"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      within(
+        screen.getByRole("navigation", { name: "Public navigation" }),
+      ).getByRole("link", { name: "Features" }),
+    );
+    expect(
+      container.querySelector("[data-landing-header-state]"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("removes landing scroll listeners when the layout unmounts", () => {
+    const removeEventListener = vi.spyOn(window, "removeEventListener");
+    const { unmount } = renderLayout();
+
+    unmount();
+
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "scroll",
+      expect.any(Function),
+    );
+    expect(removeEventListener).toHaveBeenCalledWith(
+      "resize",
+      expect.any(Function),
+    );
+  });
+
   it("opens and closes mobile navigation with Escape", () => {
     renderLayout();
 

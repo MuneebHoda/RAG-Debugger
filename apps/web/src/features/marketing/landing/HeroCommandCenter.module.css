@@ -1,6 +1,6 @@
 .hero {
   position: relative;
-  min-height: min(920px, calc(100svh - 4.8rem));
+  min-height: min(1080px, calc(100svh + 8rem));
   overflow: hidden;
   border-bottom: 1px solid rgb(113 170 169 / 0.18);
   background:
@@ -40,8 +40,8 @@
   display: grid;
   width: min(1320px, calc(100% - 40px));
   margin: 0 auto;
-  gap: 2.2rem;
-  padding-block: 4.25rem 5rem;
+  gap: 3.5rem;
+  padding-block: 5rem 6.5rem;
 }
 
 .copy {
@@ -85,9 +85,70 @@
   gap: 0.7rem;
 }
 
+.stage {
+  position: relative;
+  width: min(1180px, 92%);
+  justify-self: center;
+  padding-block: 0.75rem 1.5rem;
+  perspective: 1800px;
+}
+
+.stage::after {
+  position: absolute;
+  z-index: -1;
+  right: 8%;
+  bottom: 0;
+  left: 8%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(112 182 179 / 0.38),
+    transparent
+  );
+  box-shadow: 0 28px 70px 20px rgb(0 0 0 / 0.24);
+  content: "";
+}
+
+.stageFrame {
+  transform: rotateX(0.7deg) scale(0.965);
+  transform-origin: top center;
+}
+
+.stageFrame > * {
+  box-shadow:
+    0 42px 100px rgb(0 0 0 / 0.42),
+    0 0 0 1px rgb(112 182 179 / 0.04);
+}
+
+@media (max-width: 1280px) {
+  .inner {
+    gap: 3rem;
+    padding-block: 4.5rem 6rem;
+  }
+
+  .stage {
+    width: min(1120px, 95%);
+  }
+}
+
+@media (max-width: 1100px) {
+  .stage {
+    width: 100%;
+  }
+
+  .stageFrame {
+    transform: rotateX(0.35deg) scale(0.985);
+  }
+}
+
 @media (max-width: 980px) {
   .hero {
     min-height: auto;
+  }
+
+  .inner {
+    gap: 2.5rem;
   }
 
   .copy h1 {
@@ -97,8 +158,8 @@
 
 @media (max-width: 720px) {
   .inner {
-    gap: 1.6rem;
-    padding-block: 3.25rem 4rem;
+    gap: 2rem;
+    padding-block: 3.25rem 4.5rem;
   }
 
   .copy h1 {
@@ -107,6 +168,14 @@
 
   .lede {
     font-size: 0.96rem;
+  }
+
+  .stage {
+    padding-block: 0;
+  }
+
+  .stageFrame {
+    transform: none;
   }
 }
 
@@ -132,5 +201,9 @@
 @media (prefers-reduced-motion: reduce) {
   .glow {
     display: none;
+  }
+
+  .stageFrame {
+    transform: none;
   }
 }

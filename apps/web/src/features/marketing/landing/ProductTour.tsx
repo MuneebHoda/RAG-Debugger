@@ -28,6 +28,7 @@ export function ProductTour() {
   return (
     <m.section
       className={styles.section}
+      data-landing-header-tone="light"
       initial={reducedMotion ? false : "hidden"}
       variants={revealVariants}
       viewport={viewportOnce}

@@ -20,7 +20,6 @@
   width: min(var(--max-page), calc(100% - 40px));
   margin: 0 auto;
   padding: 18px 0;
-  backdrop-filter: blur(18px);
 }
 
 .header::before,
@@ -31,14 +30,59 @@
   right: 0;
   left: 0;
   height: 78px;
-  border-bottom: 1px solid rgb(216 222 232 / 0.72);
-  background: rgb(251 252 248 / 0.9);
   content: "";
 }
 
+.header {
+  backdrop-filter: blur(18px);
+}
+
+.header::before {
+  border-bottom: 1px solid rgb(216 222 232 / 0.72);
+  background: rgb(251 252 248 / 0.9);
+}
+
+.landingHeader {
+  --landing-header-background: rgb(7 18 22 / 0.84);
+  --landing-header-border: rgb(112 182 179 / 0.18);
+  --landing-header-text: rgb(247 251 250 / 0.74);
+  --landing-header-hover: var(--color-citron-500);
+  --landing-header-control: rgb(255 255 255 / 0.06);
+  --landing-header-control-border: rgb(112 182 179 / 0.24);
+  --landing-header-focus: var(--color-citron-500);
+
+  backdrop-filter: blur(18px);
+  transition: backdrop-filter 180ms ease;
+}
+
 .landingHeader::before {
-  border-bottom-color: rgb(112 182 179 / 0.18);
-  background: rgb(7 18 22 / 0.88);
+  border-bottom: 1px solid var(--landing-header-border);
+  background-color: var(--landing-header-background);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
+}
+
+.landingHeaderHero {
+  --landing-header-background: rgb(7 18 22 / 0.52);
+  --landing-header-border: rgb(112 182 179 / 0.1);
+
+  backdrop-filter: blur(10px);
+}
+
+.landingHeaderDark {
+  --landing-header-background: rgb(7 18 22 / 0.88);
+  --landing-header-border: rgb(112 182 179 / 0.22);
+}
+
+.landingHeaderLight {
+  --landing-header-background: rgb(251 252 248 / 0.9);
+  --landing-header-border: rgb(216 222 232 / 0.78);
+  --landing-header-text: var(--color-ink-700);
+  --landing-header-hover: var(--color-teal-700);
+  --landing-header-control: var(--color-white);
+  --landing-header-control-border: var(--color-ink-200);
+  --landing-header-focus: var(--color-teal-500);
 }
 
 .brand {
@@ -59,17 +103,34 @@
 }
 
 .landingHeader .nav a {
-  color: rgb(247 251 250 / 0.72);
+  color: var(--landing-header-text);
+  transition: color 180ms ease;
 }
 
 .landingHeader .nav a:hover {
-  color: var(--color-citron-500);
+  color: var(--landing-header-hover);
 }
 
 .landingHeader .menuButton {
-  border-color: rgb(112 182 179 / 0.24);
-  background: rgb(255 255 255 / 0.06);
-  color: white;
+  border-color: var(--landing-header-control-border);
+  background: var(--landing-header-control);
+  color: var(--landing-header-text);
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease;
+}
+
+.landingHeader .actions > a:first-child {
+  border-color: var(--landing-header-control-border);
+  background: var(--landing-header-control);
+  color: var(--landing-header-text);
+}
+
+.landingHeader a:focus-visible,
+.landingHeader button:focus-visible {
+  outline: 3px solid var(--landing-header-focus);
+  outline-offset: 3px;
 }
 
 .actions {
@@ -187,6 +248,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .landingHeader,
+  .landingHeader::before,
+  .landingHeader .nav a,
+  .landingHeader .menuButton {
+    transition: none;
+  }
+
   .mobileNav,
   .mobileNavOpen {
     transition: none;

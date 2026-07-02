@@ -35,6 +35,12 @@ focused hooks and configuration modules; section and component styling remains
 in CSS modules. The simulation exposes the same product concepts as the
 workbench without representing fixture state as live customer data.
 
+Landing sections declare their visual tone through semantic data attributes.
+The marketing header uses a route-scoped, animation-frame-batched hook to read
+the surface beneath its fixed probe line and select hero, dark-glass, or
+light-glass presentation. Other public routes retain the static marketing
+header and do not install landing scroll behavior.
+
 ## Page And Component Boundaries
 
 - Page components compose hooks and panels; they should not contain every control and data transformation for a workflow.
