@@ -37,15 +37,20 @@ describe("marketing pages", () => {
       screen.getByLabelText(/interactive rag diagnosis simulation/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: /run the guided demo/i }),
-    ).toHaveAttribute("href", "/app");
-    expect(
-      screen.getByRole("link", { name: /view the debugger/i }),
-    ).toHaveAttribute("href", "/app/traces");
-    expect(screen.getByAltText(/mission control dashboard/i)).toHaveAttribute(
-      "src",
-      "/product/corpuslab-dashboard.png",
+      screen.getAllByRole("link", { name: /run the guided demo/i }),
+    ).toEqual(
+      expect.arrayContaining([expect.objectContaining({ pathname: "/app" })]),
     );
+    expect(screen.getAllByRole("link", { name: /view the debugger/i })).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ pathname: "/app/traces" }),
+      ]),
+    );
+    expect(
+      screen.getByRole("heading", {
+        name: /retrieval found candidates.*refused to answer/i,
+      }),
+    ).toBeInTheDocument();
   });
 
   it("changes evidence, diagnosis, gate, and report state by scenario", async () => {
@@ -96,55 +101,103 @@ describe("marketing pages", () => {
     ).toBeInTheDocument();
   });
 
-  it("updates failure diagnosis through accessible stage tabs", async () => {
+  it("renders the connected product story in narrative order", () => {
     render(
       <MemoryRouter>
         <LandingPage />
       </MemoryRouter>,
     );
 
-    expect(
-      screen.getByText(/bad text creates invisible evidence/i),
-    ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("tab", { name: "Retrieve" }));
+    const headings = [
+      /retrieval found candidates.*refused to answer/i,
+      /find the exact evidence failure/i,
+      /turn a bad run into a regression test/i,
+      /fail the pr before weak evidence ships/i,
+      /share the diagnosis, not the documents/i,
+      /raw evidence stays local until you approve what leaves/i,
+      /debug the answer.*gate the fix.*share the evidence/i,
+    ].map((name) => screen.getByRole("heading", { name }));
+
+    for (let index = 1; index < headings.length; index += 1) {
+      expect(
+        headings[index - 1].compareDocumentPosition(headings[index]) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    }
+  });
+
+  it("updates evidence, labels, diagnosis, and repair through keyboard tabs", async () => {
+    render(
+      <MemoryRouter>
+        <LandingPage />
+      </MemoryRouter>,
+    );
+
+    const story = screen
+      .getByRole("heading", { name: /find the exact evidence failure/i })
+      .closest("section");
+    expect(story).not.toBeNull();
+    const storyQueries = within(story as HTMLElement);
+
+    expect(storyQueries.getByText("answerability_gap")).toBeInTheDocument();
+    expect(storyQueries.getAllByText(/candidate only/i)).toHaveLength(3);
+
+    const unsupported = storyQueries.getByRole("tab", {
+      name: "Unsupported answer",
+    });
+    unsupported.focus();
+    fireEvent.keyDown(unsupported, { key: "ArrowLeft" });
+
     await waitFor(() =>
       expect(
-        screen.getByText(/relevant evidence can exist and still rank too low/i),
+        storyQueries.getByRole("tab", { name: "Ranking drift" }),
+      ).toHaveAttribute("aria-selected", "true"),
+    );
+    await waitFor(() =>
+      expect(
+        storyQueries.getByText("vector_lexical_disagreement"),
       ).toBeInTheDocument(),
     );
+    expect(storyQueries.getByText(/supports answer/i)).toBeInTheDocument();
+    expect(
+      storyQueries.getByText(/compare lexical, vector, and hybrid runs/i),
+    ).toBeInTheDocument();
   });
 
-  it("updates the retrieval demo query and mode", async () => {
+  it("shows Eval Lab, CI gate, audit report, and privacy boundaries", () => {
     render(
       <MemoryRouter>
         <LandingPage />
       </MemoryRouter>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Vector" }));
-    await waitFor(() =>
-      expect(screen.getByText("86% evidence strength")).toBeInTheDocument(),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Support escalation" }));
-    await waitFor(() =>
-      expect(screen.getByText(/support-operations\.md/i)).toBeInTheDocument(),
-    );
-  });
+    expect(screen.getByText("Example experiment")).toBeInTheDocument();
+    expect(screen.getByText(/gate threshold: recall@5/i)).toBeInTheDocument();
+    expect(screen.getByText("Merge blocked")).toBeInTheDocument();
+    expect(screen.getByText("metadata_only")).toBeInTheDocument();
+    expect(
+      screen.getByText("No external model call is required."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Detailed local reports cannot be exported."),
+    ).toBeInTheDocument();
 
-  it("switches the product tour without changing layout ownership", async () => {
-    render(
-      <MemoryRouter>
-        <LandingPage />
-      </MemoryRouter>,
-    );
-
-    fireEvent.click(screen.getByRole("tab", { name: "Quality" }));
-    await waitFor(() =>
-      expect(screen.getByAltText(/quality experiment/i)).toHaveAttribute(
-        "src",
-        "/product/corpuslab-evals.png",
-      ),
-    );
+    const finalCta = screen
+      .getByRole("heading", {
+        name: /debug the answer.*gate the fix.*share the evidence/i,
+      })
+      .closest("section");
+    expect(finalCta).not.toBeNull();
+    expect(
+      within(finalCta as HTMLElement).getByRole("link", {
+        name: /run the guided demo/i,
+      }),
+    ).toHaveAttribute("href", "/app");
+    expect(
+      within(finalCta as HTMLElement).getByRole("link", {
+        name: /view the debugger/i,
+      }),
+    ).toHaveAttribute("href", "/app/traces");
   });
 
   it("renders reveal sections immediately when reduced motion is requested", () => {
@@ -156,15 +209,15 @@ describe("marketing pages", () => {
       </MemoryRouter>,
     );
 
-    const capabilitySection = screen
+    const qualitySection = screen
       .getByRole("heading", {
-        name: /build, test, debug, measure, and share/i,
+        name: /turn a bad run into a regression test/i,
       })
       .closest("section");
-    expect(capabilitySection).not.toHaveStyle({ opacity: "0" });
+    expect(qualitySection).not.toHaveStyle({ opacity: "0" });
     expect(
       screen.getByRole("heading", {
-        name: /one evidence system. every quality decision/i,
+        name: /fail the pr before weak evidence ships/i,
       }),
     ).toBeInTheDocument();
   });

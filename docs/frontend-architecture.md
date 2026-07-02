@@ -35,6 +35,13 @@ focused hooks and configuration modules; section and component styling remains
 in CSS modules. The simulation exposes the same product concepts as the
 workbench without representing fixture state as live customer data.
 
+The post-hero landing narrative is a second, deliberately separate boundary.
+`LandingPage` only orders focused sections; typed `landingStoryData` fixtures
+connect deterministic diagnosis, Eval Lab comparison, CI gating, audit reports,
+and the local-first privacy boundary. Only the diagnosis stage is interactive.
+Later sections are static product artifacts so they explain the workflow without
+imitating live API state or introducing marketing-only product logic.
+
 Landing sections declare their visual tone through semantic data attributes.
 The marketing header uses a route-scoped, animation-frame-batched hook to read
 the surface beneath its fixed probe line and select hero, dark-glass, or
@@ -81,6 +88,7 @@ UI tests should mock the narrow domain boundary or the HTTP route relevant to th
 - A feature module should not depend on selectors owned by another feature.
 - Stable boards, score bars, tabs, and tool layouts need explicit responsive dimensions so dynamic data cannot shift controls or overlap text.
 - Marketing motion must preserve visible labels and state, provide controls for automatically changing content, and render a complete static experience under `prefers-reduced-motion`.
+- Landing story examples must remain typed, deterministic, and clearly framed as examples; they do not fetch workbench state.
 - New UI must be checked at desktop, tablet, and mobile widths with no horizontal overflow.
 
 ## Testing

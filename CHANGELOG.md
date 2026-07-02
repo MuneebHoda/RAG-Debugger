@@ -36,6 +36,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- The post-hero landing experience now follows one CorpusLab-specific story from unsupported retrieval through deterministic diagnosis, Eval Lab regression, CI gating, metadata-only audit reporting, and local-first privacy controls.
 - The animated landing command center now uses a more spacious responsive stage, while the landing-only header adapts between hero, dark, and light page surfaces as users scroll.
 - Retrieval workbench orchestration now uses a domain hook, focused control panels, and tested pure filter utilities without changing behavior.
 - Runs and Trace Debugger UI now use focused components, a URL-backed trace hook, and tested filtering, recommendation, and route-loading behavior.

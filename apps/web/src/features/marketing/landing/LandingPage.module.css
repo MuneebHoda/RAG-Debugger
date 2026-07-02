@@ -1,10 +1,4 @@
 .page {
   overflow: clip;
-  background: linear-gradient(
-    to bottom,
-    #071216 0,
-    #071216 34%,
-    var(--color-paper) 34%,
-    var(--color-paper) 100%
-  );
+  background: var(--color-paper);
 }
