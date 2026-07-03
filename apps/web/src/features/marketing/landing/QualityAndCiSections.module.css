@@ -1,0 +1,324 @@
+.quality {
+  display: grid;
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+  gap: 2.5rem;
+  padding-block: 6rem;
+}
+
+.loop p,
+.loop h3,
+.loop small,
+.failedCases p {
+  margin: 0;
+}
+
+.loop {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  border-block: 1px solid var(--color-ink-200);
+  list-style: none;
+}
+
+.loop li {
+  display: grid;
+  align-content: start;
+  gap: 0.45rem;
+  padding: 1.5rem;
+}
+
+.loop li + li {
+  border-left: 1px solid var(--color-ink-200);
+}
+
+.loop li > span {
+  color: var(--color-teal-500);
+  font-size: 0.65rem;
+  font-weight: 900;
+}
+
+.loop p {
+  color: var(--color-teal-700);
+  font-size: 0.65rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.loop h3 {
+  color: var(--color-ink-950);
+  font-size: 1rem;
+}
+
+.loop small {
+  color: var(--color-ink-600);
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+.experiment {
+  overflow: hidden;
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: white;
+}
+
+.experimentHeading,
+.ciRunHeader,
+.ciDecision {
+  display: flex;
+  align-items: center;
+}
+
+.experimentHeading {
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid var(--color-ink-200);
+  padding: 1rem 1.25rem;
+}
+
+.experimentHeading span,
+.ciRunHeader span,
+.ciDecision span {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.experimentHeading small,
+.ciRunHeader small,
+.ciDecision small {
+  color: var(--color-ink-500);
+  font-size: 0.6rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.experimentHeading strong {
+  color: var(--color-ink-900);
+  font-size: 0.8rem;
+}
+
+.experimentHeading b {
+  color: var(--color-teal-700);
+  font-size: 0.68rem;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.experiment table {
+  width: 100%;
+  min-width: 680px;
+  border-collapse: collapse;
+  color: var(--color-ink-700);
+  font-size: 0.76rem;
+}
+
+.experiment th,
+.experiment td {
+  border-bottom: 1px solid var(--color-ink-200);
+  padding: 0.9rem 1.25rem;
+  text-align: left;
+}
+
+.experiment thead th {
+  color: var(--color-ink-500);
+  font-size: 0.6rem;
+  text-transform: uppercase;
+}
+
+.experiment tbody th {
+  color: var(--color-ink-950);
+}
+
+.pass,
+.fail {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-weight: 900;
+}
+
+.pass {
+  color: var(--color-teal-700);
+}
+
+.fail {
+  color: var(--color-coral-600);
+}
+
+.ci {
+  background: #071216;
+  color: white;
+  padding-block: 6rem;
+}
+
+.ciInner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.7fr) minmax(520px, 1fr);
+  width: min(var(--max-page), calc(100% - 40px));
+  margin: 0 auto;
+  align-items: start;
+  gap: 4rem;
+}
+
+.ciRun {
+  border: 1px solid rgb(112 182 179 / 0.2);
+  border-radius: var(--radius-sm);
+  background: rgb(7 24 28 / 0.88);
+}
+
+.ciRunHeader {
+  gap: 0.7rem;
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+  padding: 1rem;
+}
+
+.ciRunHeader > svg {
+  color: var(--color-teal-500);
+}
+
+.ciRunHeader span {
+  min-width: 0;
+}
+
+.ciRunHeader small,
+.ciDecision small {
+  color: rgb(255 255 255 / 0.42);
+}
+
+.ciRunHeader strong,
+.ciDecision strong {
+  color: white;
+  font-size: 0.8rem;
+}
+
+.ciRunHeader b {
+  display: inline-flex;
+  margin-left: auto;
+  align-items: center;
+  gap: 0.35rem;
+  color: #ff9b91;
+  font-size: 0.72rem;
+}
+
+.deltas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-bottom: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.deltas div {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.deltas div + div {
+  border-left: 1px solid rgb(255 255 255 / 0.12);
+}
+
+.deltas span {
+  color: rgb(255 255 255 / 0.44);
+  font-size: 0.62rem;
+  font-weight: 850;
+}
+
+.deltas strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: #ff9b91;
+  font-size: 1.1rem;
+}
+
+.failedCases {
+  display: grid;
+  gap: 0.65rem;
+  padding: 1rem;
+}
+
+.failedCases p {
+  color: var(--color-citron-500);
+  font-size: 0.62rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.failedCases span {
+  color: rgb(255 255 255 / 0.68);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.failedCases code {
+  color: white;
+}
+
+.ciDecision {
+  gap: 0.65rem;
+  border-top: 1px solid rgb(255 255 255 / 0.12);
+  padding: 1rem;
+}
+
+.ciDecision > svg {
+  color: #ff9b91;
+}
+
+@media (max-width: 980px) {
+  .loop {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .loop li:nth-child(3) {
+    border-top: 1px solid var(--color-ink-200);
+    border-left: 0;
+  }
+
+  .loop li:nth-child(4) {
+    border-top: 1px solid var(--color-ink-200);
+  }
+
+  .ciInner {
+    grid-template-columns: 1fr;
+    gap: 2rem;
+  }
+}
+
+@media (max-width: 620px) {
+  .quality,
+  .ci {
+    padding-block: 4rem;
+  }
+
+  .quality,
+  .ciInner {
+    width: min(100% - 28px, var(--max-page));
+  }
+
+  .loop {
+    grid-template-columns: 1fr;
+  }
+
+  .loop li + li,
+  .loop li:nth-child(4) {
+    border-top: 1px solid var(--color-ink-200);
+    border-left: 0;
+  }
+
+  .experimentHeading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .deltas {
+    grid-template-columns: 1fr;
+  }
+
+  .deltas div + div {
+    border-top: 1px solid rgb(255 255 255 / 0.12);
+    border-left: 0;
+  }
+}

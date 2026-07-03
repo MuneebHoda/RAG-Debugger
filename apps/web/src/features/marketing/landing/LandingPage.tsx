@@ -1,15 +1,16 @@
 import { domAnimation, LazyMotion, MotionConfig } from "motion/react";
 
 import {
-  CapabilityStory,
-  EnterpriseBand,
-  FinalCta,
-  OutcomeRail,
-} from "./EditorialSections";
-import { FailureStory } from "./FailureStory";
+  DiagnosticProofBand,
+  DiagnosticStorySection,
+} from "./DiagnosticStorySection";
 import { HeroCommandCenter } from "./HeroCommandCenter";
-import { ProductTour } from "./ProductTour";
-import { RetrievalDemo } from "./RetrievalDemo";
+import { CiGateSection, QualityLoopSection } from "./QualityAndCiSections";
+import {
+  AuditReportSection,
+  LandingCtaSection,
+  LocalFirstTrustSection,
+} from "./ReportTrustCtaSections";
 import styles from "./LandingPage.module.css";
 
 export function LandingPage() {
@@ -18,13 +19,13 @@ export function LandingPage() {
       <MotionConfig reducedMotion="user">
         <main className={styles.page}>
           <HeroCommandCenter />
-          <OutcomeRail />
-          <FailureStory />
-          <RetrievalDemo />
-          <CapabilityStory />
-          <ProductTour />
-          <EnterpriseBand />
-          <FinalCta />
+          <DiagnosticProofBand />
+          <DiagnosticStorySection />
+          <QualityLoopSection />
+          <CiGateSection />
+          <AuditReportSection />
+          <LocalFirstTrustSection />
+          <LandingCtaSection />
         </main>
       </MotionConfig>
     </LazyMotion>

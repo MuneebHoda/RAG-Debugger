@@ -89,7 +89,7 @@ test("renders the CorpusLab public site", async ({ page }) => {
     page.getByLabel("Interactive RAG diagnosis simulation"),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Run the guided demo" }),
+    page.getByRole("link", { name: "Run the guided demo" }).first(),
   ).toHaveAttribute("href", "/app");
 });
 
@@ -108,28 +108,22 @@ test("landing interactions remain accessible and layout-stable", async ({
   await expect(page.getByText("Direct evidence, release ready")).toBeVisible();
   await expect(page.getByText("Audit ready")).toBeVisible();
 
-  const extractTab = page.getByRole("tab", { name: "Extract" });
-  await extractTab.focus();
-  await extractTab.press("ArrowRight");
-  await expect(page.getByRole("tab", { name: "Chunk" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await page.getByRole("tab", { name: "Retrieve" }).click();
+  const unsupportedAnswer = page.getByRole("tab", {
+    name: "Unsupported answer",
+  });
+  await unsupportedAnswer.focus();
+  await unsupportedAnswer.press("ArrowLeft");
   await expect(
-    page.getByText(/relevant evidence can exist and still rank too low/i),
+    page.getByRole("tab", { name: "Ranking drift" }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByText("vector_lexical_disagreement")).toBeVisible();
+  await expect(page.getByText("Supports answer")).toBeVisible();
+  await expect(
+    page.getByText(/compare lexical, vector, and hybrid runs/i),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Vector" }).click();
-  await expect(page.getByText("86% evidence strength")).toBeVisible();
-  await page.getByRole("button", { name: "Support escalation" }).click();
-  await expect(page.getByText(/support-operations\.md/i)).toBeVisible();
-
-  await page.getByRole("tab", { name: "Quality" }).click();
-  await expect(page.getByAltText(/quality experiment/i)).toBeVisible();
-
   await page
-    .locator("#retrieval-demo")
+    .locator("#quality-loop")
     .evaluate((element) => element.scrollIntoView({ block: "start" }));
   await expect(landingHeader).toHaveAttribute(
     "data-landing-header-state",
@@ -137,12 +131,26 @@ test("landing interactions remain accessible and layout-stable", async ({
   );
 
   await page
-    .locator("#landing-failure-story")
+    .locator("#ci-gate")
     .evaluate((element) => element.scrollIntoView({ block: "start" }));
   await expect(landingHeader).toHaveAttribute(
     "data-landing-header-state",
     "dark",
   );
+  await expect(page.getByText("Merge blocked")).toBeVisible();
+
+  await page
+    .locator("#audit-report")
+    .evaluate((element) => element.scrollIntoView({ block: "start" }));
+  await expect(page.getByText("metadata_only")).toBeVisible();
+
+  const finalCta = page.locator("#landing-cta");
+  await expect(
+    finalCta.getByRole("link", { name: "Run the guided demo" }),
+  ).toHaveAttribute("href", "/app");
+  await expect(
+    finalCta.getByRole("link", { name: "View the debugger" }),
+  ).toHaveAttribute("href", "/app/traces");
   await assertNoHorizontalOverflow(page);
 
   await page.waitForLoadState("networkidle");
@@ -165,10 +173,16 @@ test("mobile navigation and reduced-motion experience remain complete", async ({
   await expect(menuButton).toHaveAttribute("aria-expanded", "false");
   await expect(menuButton).toBeFocused();
 
-  await page.getByRole("tab", { name: "Evaluate" }).click();
+  await page.getByRole("tab", { name: "Missing source" }).click();
   await expect(
-    page.getByText(/quality needs a release decision, not a hunch/i),
+    page.getByText(/answer never entered the corpus/i),
   ).toBeVisible();
+  await expect(page.getByText("missing_expected_evidence")).toBeVisible();
+  await expect(
+    page.getByRole("heading", {
+      name: /turn a bad run into a regression test/i,
+    }),
+  ).toBeAttached();
   await assertNoHorizontalOverflow(page);
 });
 
