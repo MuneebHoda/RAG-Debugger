@@ -10,17 +10,6 @@
   isolation: isolate;
 }
 
-.grid {
-  position: absolute;
-  z-index: -2;
-  inset: 0;
-  background-image:
-    linear-gradient(rgb(112 182 179 / 0.055) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(112 182 179 / 0.055) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(to bottom, black, transparent 92%);
-}
-
 .glow {
   position: absolute;
   z-index: -1;
@@ -87,38 +76,22 @@
 
 .stage {
   position: relative;
+  z-index: 0;
   width: min(1180px, 92%);
   justify-self: center;
-  padding-block: 0.75rem 1.5rem;
+  padding-block: 0.75rem 5.5rem;
   perspective: 1800px;
 }
 
-.stage::after {
-  position: absolute;
-  z-index: -1;
-  right: 8%;
-  bottom: 0;
-  left: 8%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgb(112 182 179 / 0.38),
-    transparent
-  );
-  box-shadow: 0 28px 70px 20px rgb(0 0 0 / 0.24);
-  content: "";
-}
-
 .stageFrame {
+  position: relative;
+  z-index: 1;
   transform: rotateX(0.7deg) scale(0.965);
   transform-origin: top center;
 }
 
 .stageFrame > * {
-  box-shadow:
-    0 42px 100px rgb(0 0 0 / 0.42),
-    0 0 0 1px rgb(112 182 179 / 0.04);
+  box-shadow: 0 42px 100px rgb(0 0 0 / 0.42);
 }
 
 @media (max-width: 1280px) {
@@ -171,6 +144,7 @@
   }
 
   .stage {
+    margin-bottom: 3.75rem;
     padding-block: 0;
   }
 
@@ -180,10 +154,6 @@
 }
 
 @media (max-width: 520px) {
-  .hero {
-    background: #071216;
-  }
-
   .inner {
     width: min(100% - 28px, 1320px);
   }

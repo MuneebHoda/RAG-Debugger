@@ -1,0 +1,58 @@
+.layer,
+.deckLayer {
+  position: absolute;
+  pointer-events: none;
+}
+
+.layer {
+  z-index: 0;
+  inset: -5rem -7rem -6rem;
+}
+
+.mobileReactor {
+  display: none;
+}
+
+.deckLayer {
+  z-index: 2;
+  bottom: 0;
+  inset-inline: -4rem;
+  height: 6.75rem;
+}
+
+@media (max-width: 1199px) {
+  .layer {
+    inset: -3rem -2rem -4rem;
+  }
+
+  .deckLayer {
+    inset-inline: -1rem;
+  }
+}
+
+@media (max-width: 979px) {
+  .layer {
+    inset: -2rem -1rem -3rem;
+  }
+}
+
+@media (max-width: 719px) {
+  .layer {
+    inset: auto 0 -4.6rem;
+    height: 4.25rem;
+    opacity: 0.82;
+    transform: none !important;
+  }
+
+  .deckLayer {
+    display: none;
+  }
+
+  .desktopReactor {
+    display: none;
+  }
+
+  .mobileReactor {
+    display: block;
+  }
+}

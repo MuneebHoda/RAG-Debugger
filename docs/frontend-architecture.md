@@ -42,6 +42,14 @@ and the local-first privacy boundary. Only the diagnosis stage is interactive.
 Later sections are static product artifacts so they explain the workflow without
 imitating live API state or introducing marketing-only product logic.
 
+The hero's SVG-first Evidence Reactor is a decorative projection of the existing
+`CommandCenterScenario`; it does not own another simulation state. Documents,
+candidate and supported evidence, answerability coverage, gate state, and report
+readiness are derived from that scenario and rendered with transform, opacity,
+and path-progress motion. The reactor is pointer-transparent, hidden from the
+accessibility tree, static under reduced motion, and introduces no canvas,
+WebGL, image, API, or dependency boundary.
+
 Landing sections declare their visual tone through semantic data attributes.
 The marketing header uses a route-scoped, animation-frame-batched hook to read
 the surface beneath its fixed probe line and select hero, dark-glass, or
