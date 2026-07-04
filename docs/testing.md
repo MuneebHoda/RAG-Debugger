@@ -95,7 +95,30 @@ cd apps/web
 npx playwright test
 ```
 
-Generate the three landing review captures at 1440x1100, 1024x900, and 390x900:
+Run the focused workbench route, accessibility, responsive-layout, and hostile
+content gates with:
+
+```sh
+cd apps/web
+npx playwright test tests/e2e/workbench-quality.spec.ts
+```
+
+The suite covers Home, Corpus, Test Retrieval, Runs, Quality, Audit Reports,
+and Settings at desktop, tablet, and mobile widths. Typed fixtures verify long
+paths, IDs, queries, snippets, score breakdowns, labels, report titles, and API
+key names without external services or customer data. See
+[`docs/workbench-ui-quality.md`](workbench-ui-quality.md) for the merge
+checklist and assertion rules.
+
+Generate ignored workbench review captures with:
+
+```sh
+cd apps/web
+npm run screenshots:workbench
+```
+
+Generate the five landing review captures at 1440x1100, 1280x900, 1024x900,
+768x900, and 390x900:
 
 ```sh
 cd apps/web

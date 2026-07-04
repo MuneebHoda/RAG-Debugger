@@ -82,6 +82,7 @@ The demo adds three versioned Markdown documents to the active workspace. It nev
 - [Development Guide](docs/development.md)
 - [Engineering Quality](docs/engineering-quality.md)
 - [Frontend Architecture](docs/frontend-architecture.md)
+- [Workbench UI Quality](docs/workbench-ui-quality.md)
 - [Documentation Maintenance](docs/doc-maintenance.md)
 - [Marketing Experience](docs/marketing-experience.md)
 - [File Ingestion](docs/file-ingestion.md)

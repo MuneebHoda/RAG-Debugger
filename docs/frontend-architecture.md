@@ -107,6 +107,19 @@ UI tests should mock the narrow domain boundary or the HTTP route relevant to th
 - Playwright covers workflows that cross routes or require the real API boundary.
 - Visible regressions require screenshots or recordings in the PR.
 
+Playwright specifications are separated by ownership: marketing behavior,
+workbench feature workflows, real memory-backed flows, and workbench quality
+gates. Shared authentication, exact endpoint mocks, and layout assertions live
+under `tests/e2e/support`; deterministic hostile-data fixtures live under
+`tests/e2e/fixtures`. Do not use a catch-all API mock that can hide a new route
+dependency.
+
+The workbench quality suite verifies every primary route at desktop, tablet,
+and mobile widths, then exercises document, trace, experiment, report, and API
+key surfaces with long technical strings. Review screenshots are opt-in and
+remain under ignored Playwright output. The complete checklist is in
+`docs/workbench-ui-quality.md`.
+
 Before merging frontend work, run:
 
 ```sh

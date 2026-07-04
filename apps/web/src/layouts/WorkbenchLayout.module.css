@@ -182,11 +182,6 @@
   list-style: none;
 }
 
-.closeNav,
-.menuButton {
-  display: none;
-}
-
 .avatar {
   display: grid;
   width: 1.6rem;

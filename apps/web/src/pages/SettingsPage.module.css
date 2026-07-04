@@ -218,6 +218,7 @@
 .keyRow,
 .privacyList article {
   display: flex;
+  min-width: 0;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
@@ -229,17 +230,20 @@
 .keyRow span,
 .privacyList article span {
   display: grid;
+  min-width: 0;
   gap: 0.2rem;
 }
 
 .keyRow strong,
 .privacyList strong {
+  overflow-wrap: anywhere;
   color: var(--color-ink-900);
   font-size: 0.8rem;
 }
 
 .keyRow small,
 .privacyList small {
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.72rem;
   line-height: 1.45;

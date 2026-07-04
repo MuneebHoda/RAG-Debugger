@@ -355,6 +355,16 @@ just web-check
 just ci-check
 ```
 
+Workbench UI quality is enforced through a typed Playwright route matrix at
+desktop, tablet, and mobile widths. It verifies semantic headings, primary or
+empty-state actions, active navigation, keyboard behavior, reduced motion,
+route isolation, overlap, and horizontal overflow. Synthetic stress fixtures
+exercise long document paths, IDs, queries, snippets, score explanations,
+failure labels, experiment failures, report metadata, and API-key names.
+Review screenshots are generated locally with `npm run screenshots:workbench`
+and remain in ignored Playwright output. The review checklist and assertion
+policy are documented in `docs/workbench-ui-quality.md`.
+
 `just full-check` remains a backward-compatible alias for `just ci-check`. Documentation ownership, ADR triggers, and changelog expectations are defined in `docs/doc-maintenance.md`. Generated output is excluded unless intentionally versioned; the handbook PDF and curated product assets are explicit exceptions.
 
 Focused RAG invariant validation:
