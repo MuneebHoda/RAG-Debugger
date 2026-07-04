@@ -54,12 +54,22 @@ describe("marketing pages", () => {
   });
 
   it("changes evidence, diagnosis, gate, and report state by scenario", async () => {
-    render(
+    const { container } = render(
       <MemoryRouter>
         <LandingPage />
       </MemoryRouter>,
     );
+    const reactor = container.querySelector("[data-evidence-reactor]");
 
+    expect(reactor).toHaveAttribute("aria-hidden", "true");
+    expect(container.querySelectorAll("svg[overflow='visible']")).toHaveLength(
+      0,
+    );
+    expect(reactor).toHaveAttribute("data-reactor-outcome", "failing");
+    expect(reactor).toHaveAttribute("data-reactor-gate", "failed");
+    expect(reactor).toHaveAttribute("data-reactor-coverage", "0");
+    expect(reactor).toHaveAttribute("data-reactor-supported", "0");
+    expect(reactor).toHaveAttribute("data-reactor-candidates", "3");
     expect(screen.getByText("Answerability failed")).toBeInTheDocument();
     expect(screen.getByText("answerability gap")).toBeInTheDocument();
     expect(screen.getAllByText("Failed").length).toBeGreaterThan(0);
@@ -74,6 +84,11 @@ describe("marketing pages", () => {
     expect(screen.getByText("No blocking labels")).toBeInTheDocument();
     expect(screen.getByText("Audit ready")).toBeInTheDocument();
     expect(screen.getByText("97", { selector: "strong" })).toBeInTheDocument();
+    expect(reactor).toHaveAttribute("data-reactor-outcome", "strong");
+    expect(reactor).toHaveAttribute("data-reactor-gate", "passed");
+    expect(reactor).toHaveAttribute("data-reactor-coverage", "100");
+    expect(reactor).toHaveAttribute("data-reactor-supported", "2");
+    expect(reactor).toHaveAttribute("data-reactor-report", "Audit ready");
   });
 
   it("provides explicit playback control and disables autoplay for reduced motion", () => {
@@ -91,7 +106,7 @@ describe("marketing pages", () => {
     unmount();
 
     globalThis.__setReducedMotionForTests(true);
-    render(
+    const { container } = render(
       <MemoryRouter>
         <LandingPage />
       </MemoryRouter>,
@@ -99,6 +114,10 @@ describe("marketing pages", () => {
     expect(
       screen.getByRole("button", { name: "Play simulation" }),
     ).toBeInTheDocument();
+    expect(container.querySelector("[data-evidence-reactor]")).toHaveAttribute(
+      "data-reactor-motion",
+      "static",
+    );
   });
 
   it("renders the connected product story in narrative order", () => {

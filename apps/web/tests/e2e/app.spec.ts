@@ -101,12 +101,25 @@ test("landing interactions remain accessible and layout-stable", async ({
   await page.goto("/");
 
   const landingHeader = page.locator("[data-landing-header-state]");
+  const reactor = page.locator("[data-evidence-reactor]");
+
+  await expect(reactor).toHaveAttribute("data-reactor-outcome", "failing");
+  await expect(reactor).toHaveAttribute("data-reactor-gate", "failed");
+  await expect(reactor).toHaveAttribute("data-reactor-coverage", "0");
 
   const strongScenario = page.getByRole("button", { name: "Strong" });
   await strongScenario.focus();
   await strongScenario.press("Enter");
   await expect(page.getByText("Direct evidence, release ready")).toBeVisible();
   await expect(page.getByText("Audit ready")).toBeVisible();
+  await expect(reactor).toHaveAttribute("data-reactor-outcome", "strong");
+  await expect(reactor).toHaveAttribute("data-reactor-gate", "passed");
+  await expect(reactor).toHaveAttribute("data-reactor-coverage", "100");
+  expect(
+    await reactor.evaluate(
+      (element) => getComputedStyle(element).pointerEvents,
+    ),
+  ).toBe("none");
 
   const unsupportedAnswer = page.getByRole("tab", {
     name: "Unsupported answer",
@@ -163,6 +176,11 @@ test("mobile navigation and reduced-motion experience remain complete", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto("/");
+
+  await expect(page.locator("[data-evidence-reactor]")).toHaveAttribute(
+    "data-reactor-motion",
+    "static",
+  );
 
   const menuButton = page.getByRole("button", { name: "Open menu" });
   await menuButton.click();

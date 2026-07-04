@@ -1,8 +1,15 @@
 import { Activity, ArrowRight } from "lucide-react";
-import { m, useMotionValue, useReducedMotion, useSpring } from "motion/react";
+import {
+  m,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from "motion/react";
 import { type PointerEvent, useRef } from "react";
 
 import { ButtonLink } from "../../../components/ui/Button";
+import { EvidenceReactor } from "./EvidenceReactor";
 import { HeroCommandCenterSurface } from "./HeroCommandCenterSurface";
 import { motionTransition } from "./motion";
 import { useCommandCenterSimulation } from "./useCommandCenterSimulation";
@@ -15,6 +22,8 @@ export function HeroCommandCenter() {
   const pointerY = useMotionValue(0);
   const glowX = useSpring(pointerX, { stiffness: 110, damping: 30 });
   const glowY = useSpring(pointerY, { stiffness: 110, damping: 30 });
+  const reactorX = useTransform(glowX, [-260, 1_100], [-6, 6]);
+  const reactorY = useTransform(glowY, [-260, 900], [-4, 4]);
   const { activeScenario, isPlaying, selectScenario, togglePlayback } =
     useCommandCenterSimulation();
 
@@ -32,7 +41,6 @@ export function HeroCommandCenter() {
       ref={sectionRef}
       onPointerMove={handlePointerMove}
     >
-      <div aria-hidden="true" className={styles.grid} />
       <m.div
         aria-hidden="true"
         className={styles.glow}
@@ -66,6 +74,11 @@ export function HeroCommandCenter() {
         </m.header>
 
         <div className={styles.stage}>
+          <EvidenceReactor
+            parallaxX={reactorX}
+            parallaxY={reactorY}
+            scenario={activeScenario}
+          />
           <div className={styles.stageFrame}>
             <HeroCommandCenterSurface
               isPlaying={isPlaying}
