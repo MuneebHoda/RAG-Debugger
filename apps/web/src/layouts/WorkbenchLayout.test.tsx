@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -32,25 +38,58 @@ describe("WorkbenchLayout", () => {
     vi.clearAllMocks();
   });
 
-  it("groups navigation and identifies the active workbench route", async () => {
+  it("groups the product workflow and identifies the active route", async () => {
     renderLayout("/app/traces");
 
     const navigation = screen.getByRole("complementary", {
       name: "Workspace navigation",
     });
-    expect(within(navigation).getByText("Build")).toBeInTheDocument();
-    expect(within(navigation).getByText("Improve")).toBeInTheDocument();
+    expect(within(navigation).getByText("Setup")).toBeInTheDocument();
+    expect(within(navigation).getByText("Debug")).toBeInTheDocument();
+    expect(within(navigation).getByText("Quality")).toBeInTheDocument();
     expect(within(navigation).getByText("Share")).toBeInTheDocument();
-    expect(within(navigation).getByText("Workspace")).toBeInTheDocument();
+    expect(within(navigation).getByText("Admin")).toBeInTheDocument();
     expect(
-      within(navigation).getByRole("link", { name: "Runs" }),
+      within(navigation).getByRole("link", { name: "Trace Debugger" }),
     ).toHaveAttribute("aria-current", "page");
-    expect(await screen.findByLabelText("Current page")).toHaveTextContent(
-      "Runs",
+    expect(
+      await screen.findByRole("navigation", { name: "Breadcrumb" }),
+    ).toHaveTextContent("HomeTrace Debugger");
+  });
+
+  it("keeps CI Runs distinct from the Eval Lab active state", () => {
+    renderLayout("/app/evals?view=ci-runs");
+
+    const navigation = screen.getByRole("complementary", {
+      name: "Workspace navigation",
+    });
+    expect(
+      within(navigation).getByRole("link", { name: "CI Runs" }),
+    ).toHaveAttribute("aria-current", "page");
+    expect(
+      within(navigation).getByRole("link", { name: "Eval Lab" }),
+    ).not.toHaveAttribute("aria-current");
+  });
+
+  it("renders linked parent breadcrumbs for detail routes", () => {
+    renderLayout("/app/traces/trace-1");
+
+    const breadcrumbs = screen.getByRole("navigation", {
+      name: "Breadcrumb",
+    });
+    expect(
+      within(breadcrumbs).getByRole("link", { name: "Home" }),
+    ).toHaveAttribute("href", "/app");
+    expect(
+      within(breadcrumbs).getByRole("link", { name: "Trace Debugger" }),
+    ).toHaveAttribute("href", "/app/traces");
+    expect(within(breadcrumbs).getByText("Run detail")).toHaveAttribute(
+      "aria-current",
+      "page",
     );
   });
 
-  it("closes mobile navigation with Escape and restores focus", () => {
+  it("moves focus into mobile navigation and restores it with Escape", async () => {
     renderLayout("/app/sources");
 
     const menuButton = screen.getByRole("button", {
@@ -58,10 +97,15 @@ describe("WorkbenchLayout", () => {
     });
     fireEvent.click(menuButton);
     expect(menuButton).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "Corpus" })).toHaveFocus(),
+    );
+    expect(document.body.style.overflow).toBe("hidden");
 
     fireEvent.keyDown(window, { key: "Escape" });
     expect(menuButton).toHaveAttribute("aria-expanded", "false");
     expect(menuButton).toHaveFocus();
+    await waitFor(() => expect(document.body.style.overflow).toBe(""));
   });
 });
 
@@ -75,7 +119,9 @@ function renderLayout(initialEntry: string) {
         <Routes>
           <Route path="/app" element={<WorkbenchLayout />}>
             <Route path="sources" element={<h1>Corpus route</h1>} />
-            <Route path="traces" element={<h1>Runs route</h1>} />
+            <Route path="traces" element={<h1>Trace Debugger route</h1>} />
+            <Route path="traces/:traceId" element={<h1>Run detail</h1>} />
+            <Route path="evals" element={<h1>Eval Lab route</h1>} />
           </Route>
         </Routes>
       </MemoryRouter>

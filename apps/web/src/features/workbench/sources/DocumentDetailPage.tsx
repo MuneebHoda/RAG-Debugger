@@ -1,7 +1,8 @@
-import { AlertTriangle, ArrowLeft, FileText } from "lucide-react";
+import { AlertTriangle, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { listDocumentChunks, listSources } from "../../../lib/api/sources";
 import { ChunkList } from "./SourcesPanels";
 import styles from "./DocumentDetailPage.module.css";
@@ -49,27 +50,28 @@ export function DocumentDetailPage() {
   const { document, chunk_count: chunkCount } = documentSummary;
   return (
     <section className={styles.page} aria-labelledby="document-title">
-      <Link className={styles.backLink} to="/app/sources">
-        <ArrowLeft aria-hidden="true" size={15} /> Back to Corpus
-      </Link>
-
-      <header className={styles.header}>
-        <div>
-          <h1 id="document-title">{document.path}</h1>
-          <p>Extraction and chunk evidence for this document.</p>
-        </div>
-        <div className={styles.badges}>
-          <span className={styles.badge}>{prettyLabel(document.profile)}</span>
-          <span className={styles.badge}>
-            {document.extraction_quality} extraction
-          </span>
-          {(document.warnings ?? []).length > 0 ? (
-            <span className={styles.warning}>
-              {(document.warnings ?? []).length} warnings
+      <WorkbenchPageHeader
+        back={{ label: "Back to Corpus", to: "/app/sources" }}
+        description="Inspect extraction metadata, warnings, and the exact chunks available to retrieval."
+        metadata={
+          <>
+            <span className={styles.badge}>
+              {prettyLabel(document.profile)}
             </span>
-          ) : null}
-        </div>
-      </header>
+            <span className={styles.badge}>
+              {document.extraction_quality} extraction
+            </span>
+            {(document.warnings ?? []).length > 0 ? (
+              <span className={styles.warning}>
+                {(document.warnings ?? []).length} warnings
+              </span>
+            ) : null}
+          </>
+        }
+        section="Corpus document"
+        title={document.path}
+        titleId="document-title"
+      />
 
       <section className={styles.summary} aria-label="Document summary">
         <Metric label="Type" value={document.mime_type ?? "Unknown"} />

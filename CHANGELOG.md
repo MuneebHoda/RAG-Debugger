@@ -38,6 +38,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- The authenticated workbench now follows one typed Setup → Debug → Quality → Share → Admin information architecture with canonical route labels, linked breadcrumbs, a focused CI Runs view, consistent page headers, actionable empty states, mobile focus management, and route-scoped legacy styles.
 - Playwright coverage is split by marketing, mocked workbench, real workflow, and quality-gate ownership, with shared typed fixtures and exact endpoint mocks.
 - The post-hero landing experience now follows one CorpusLab-specific story from unsupported retrieval through deterministic diagnosis, Eval Lab regression, CI gating, metadata-only audit reporting, and local-first privacy controls.
 - The animated landing command center now uses a more spacious responsive stage, while the landing-only header adapts between hero, dark, and light page surfaces as users scroll.
@@ -47,7 +48,6 @@ This project uses semantic pre-release versioning while the product is pre-launc
 - API route composition now has a dedicated module, and structured errors are parsed by the web client while internal storage details remain private.
 - CI now covers frontend formatting, Playwright smoke tests, technical handbook PDF generation, and SQLx migration checks.
 - API timestamps now use RFC3339 strings while remaining compatible with legacy persisted timestamp arrays.
-- The workbench shell now organizes CorpusLab around Build, Improve, Share, and Workspace workflows.
 - Corpus and Test retrieval now lead with one primary task and disclose chunking, indexing, filters, and ranking controls under Advanced sections.
 - Runs now separate search from debugging; Quality now separates overview, dataset management, and experiment results.
 - Reports prioritize actionable diagnoses, Settings use task-focused tabs, and route-specific styling is isolated in CSS modules.

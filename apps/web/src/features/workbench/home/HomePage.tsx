@@ -14,6 +14,7 @@ import { ActivityList } from "../../../components/dashboard/ActivityList";
 import { MetricTile } from "../../../components/dashboard/MetricTile";
 import { ProgressBar } from "../../../components/dashboard/ProgressBar";
 import { RiskList } from "../../../components/dashboard/RiskList";
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import {
   getOverview,
   type OverviewMetric,
@@ -51,19 +52,19 @@ export function HomePage() {
 
   return (
     <section className={styles.page} aria-labelledby="overview-title">
-      <header className={styles.header}>
-        <div>
-          <p>Workspace</p>
-          <h1 id="overview-title">Home</h1>
-          <span>Your next action, current quality, and recent work.</span>
-        </div>
-        {overviewQuery.data ? (
-          <div className={styles.snapshot}>
-            <small>Updated</small>
-            <strong>{formatDateTime(overviewQuery.data.generated_at)}</strong>
-          </div>
-        ) : null}
-      </header>
+      <WorkbenchPageHeader
+        description="Follow the recommended next action, review workspace quality, and return to recent work."
+        metadata={
+          overviewQuery.data ? (
+            <span>
+              Updated {formatDateTime(overviewQuery.data.generated_at)}
+            </span>
+          ) : undefined
+        }
+        section="Setup"
+        title="Home"
+        titleId="overview-title"
+      />
 
       {overviewQuery.isError ? (
         <div className={styles.alert} role="alert">

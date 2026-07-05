@@ -3,48 +3,8 @@
   gap: 1rem;
 }
 
-.header {
-  display: flex;
-  min-width: 0;
-  align-items: end;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.header > div {
-  min-width: 0;
-}
-
-.header p,
-.header h1,
-.header span {
-  margin: 0;
-}
-
-.header p {
-  color: var(--color-teal-900);
-  font-size: 0.7rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
-.header h1 {
-  overflow-wrap: anywhere;
-  color: var(--color-ink-950);
-  font-size: 1.8rem;
-}
-
-.header span {
-  display: block;
-  margin-top: 0.2rem;
-  overflow-wrap: anywhere;
-  color: var(--color-ink-600);
-  font-size: 0.9rem;
-}
-
 .primaryButton,
-.secondaryButton,
-.headerButton {
+.secondaryButton {
   display: inline-flex;
   min-height: 2.4rem;
   align-items: center;
@@ -315,17 +275,6 @@
   gap: 0.5rem;
 }
 
-.backLink {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--color-ink-600);
-  font-size: 0.78rem;
-  font-weight: 800;
-  text-decoration: none;
-}
-
 .details {
   border-top: 1px solid var(--color-ink-200);
   padding-top: 0.75rem;
@@ -496,11 +445,6 @@
 }
 
 @media (max-width: 620px) {
-  .header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
   .stats,
   .modeResults,
   .formGrid,

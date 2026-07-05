@@ -85,6 +85,7 @@ Expected coverage in the scaffold:
 - Guided-demo API tests for authentication, `201` first load, `200` repeat load, exactly three documents, and stable chunk counts.
 - Guided-demo UI tests for each checklist transition, source-scoped indexing, query-ID resolution, demo-source preselection, and Markdown copy/download privacy behavior.
 - The real Playwright demo flow covers login → load sample → index → suggested query → debug run → metadata-only report → copy/download Markdown.
+- Workbench shell tests treat canonical navigation order, active parent routes, breadcrumbs, actionable empty states, mobile focus recovery, and the dedicated CI Runs query view as compatibility contracts.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 

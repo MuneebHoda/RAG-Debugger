@@ -1,13 +1,8 @@
-import {
-  AlertTriangle,
-  ArrowLeft,
-  CheckCircle2,
-  Gauge,
-  XCircle,
-} from "lucide-react";
+import { AlertTriangle, CheckCircle2, Gauge, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { getEvalLabExperiment } from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
@@ -44,25 +39,27 @@ export function ExperimentDetailPage() {
   const gatePassed = experiment.gate.status === "passed";
   return (
     <section className={styles.page} aria-labelledby="experiment-title">
-      <Link
-        className={styles.backLink}
-        to={`/app/evals/datasets/${experiment.dataset_id}`}
-      >
-        <ArrowLeft aria-hidden="true" size={15} /> Back to dataset
-      </Link>
-
-      <header className={styles.header}>
-        <div>
-          <p>Experiment result</p>
-          <h1 id="experiment-title">{experiment.name}</h1>
-          <span>
-            {experiment.dataset_name} · {formatDateTime(experiment.created_at)}
-          </span>
-        </div>
-      </header>
-
-      <CreateAuditReportAction
-        source={{ sourceType: "experiment", sourceId: experiment.id }}
+      <WorkbenchPageHeader
+        actions={
+          <CreateAuditReportAction
+            compact
+            source={{ sourceType: "experiment", sourceId: experiment.id }}
+          />
+        }
+        back={{
+          label: "Back to dataset",
+          to: `/app/evals/datasets/${experiment.dataset_id}`,
+        }}
+        description="Review gate outcome, failed cases, and retrieval-mode performance."
+        metadata={
+          <>
+            <span>{experiment.dataset_name}</span>
+            <span>{formatDateTime(experiment.created_at)}</span>
+          </>
+        }
+        section="Eval experiment"
+        title={experiment.name}
+        titleId="experiment-title"
       />
 
       <section className={`${styles.gate} ${styles[experiment.gate.status]}`}>

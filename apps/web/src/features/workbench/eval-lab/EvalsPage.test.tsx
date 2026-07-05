@@ -14,7 +14,7 @@ const documentId = "018f7a2a-6e2e-7000-a000-000000000304";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000305";
 const experimentId = "018f7a2a-6e2e-7000-a000-000000000306";
 
-describe("guided Quality workflow", () => {
+describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
     vi.stubGlobal(
       "fetch",
@@ -55,13 +55,28 @@ describe("guided Quality workflow", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: "Quality" }),
+      await screen.findByRole("heading", { name: "Eval Lab" }),
     ).toBeInTheDocument();
     expect(
       await screen.findByText("Production corpus gate"),
     ).toBeInTheDocument();
     expect(await screen.findAllByText("failed")).not.toHaveLength(0);
     expect(screen.getByText(/recent experiments/i)).toBeInTheDocument();
+  });
+
+  it("exposes CI Runs as a focused quality view", async () => {
+    renderRoute(
+      "/app/evals?view=ci-runs",
+      <Route path="/app/evals" element={<EvalsPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "CI Runs" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("No CI quality runs")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Manage API keys/ }),
+    ).toHaveAttribute("href", "/app/settings?tab=api-keys");
   });
 
   it("opens a focused dataset with cases and experiment controls", async () => {

@@ -20,6 +20,7 @@ import { installWorkbenchMocks } from "./support/workbenchMocks";
 
 const viewports = [
   { name: "desktop", width: 1440, height: 1000 },
+  { name: "compact desktop", width: 1024, height: 900 },
   { name: "tablet", width: 768, height: 900 },
   { name: "mobile", width: 390, height: 900 },
 ] as const;
@@ -39,27 +40,33 @@ const routeCases = [
   },
   {
     path: "/app/retrieval",
-    heading: "Test retrieval",
-    nav: "Test retrieval",
+    heading: "Retrieval",
+    nav: "Retrieval",
     primary: { role: "button", name: "Run retrieval" },
   },
   {
     path: "/app/traces",
-    heading: "Runs",
-    nav: "Runs",
+    heading: "Trace Debugger",
+    nav: "Trace Debugger",
     primary: { role: "link", name: "New retrieval test" },
   },
   {
     path: "/app/evals",
-    heading: "Quality",
-    nav: "Quality",
+    heading: "Eval Lab",
+    nav: "Eval Lab",
     primary: { role: "button", name: "New dataset" },
   },
   {
+    path: "/app/evals?view=ci-runs",
+    heading: "CI Runs",
+    nav: "CI Runs",
+    primary: { role: "link", name: "Manage API keys" },
+  },
+  {
     path: "/app/reports",
-    heading: "Audit reports",
-    nav: "Reports",
-    primary: { role: "link", name: "Continue the guided demo" },
+    heading: "Audit Reports",
+    nav: "Audit Reports",
+    primary: { role: "link", name: "Create audit report" },
   },
   {
     path: "/app/settings",
@@ -80,6 +87,13 @@ for (const viewport of viewports) {
         await page.goto(routeCase.path);
 
         await expectSinglePageHeading(page, routeCase.heading);
+        if (viewport.width > 900) {
+          await expect(
+            page
+              .getByRole("navigation", { name: "Breadcrumb" })
+              .locator('[aria-current="page"]'),
+          ).toHaveText(routeCase.heading);
+        }
         const primary = page.getByRole(routeCase.primary.role, {
           name: routeCase.primary.name,
           exact: true,
@@ -139,6 +153,9 @@ test("mobile navigation is keyboard-operable and reduced-motion safe", async ({
     name: "Workspace navigation",
   });
   await expect(navigation).toBeVisible();
+  await expect(
+    navigation.getByRole("link", { name: "Trace Debugger" }),
+  ).toBeFocused();
   expect(
     await navigation.evaluate(
       (element) => getComputedStyle(element).transitionDuration,
@@ -149,6 +166,42 @@ test("mobile navigation is keyboard-operable and reduced-motion safe", async ({
   await expect(openNavigation).toHaveAttribute("aria-expanded", "false");
   await expect(openNavigation).toBeFocused();
   await expectNoHorizontalOverflow(page);
+});
+
+test("navigation order and detail breadcrumbs preserve workflow context", async ({
+  page,
+}) => {
+  await installWorkbenchMocks(page, {
+    traces: [stressTraceSummary],
+    traceDetails: { [stressValues.trace]: stressTrace },
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto(`/app/traces/${stressValues.trace}`);
+
+  const navigation = page.getByRole("navigation", {
+    name: "Product workflow",
+  });
+  await expect(navigation.getByRole("link")).toHaveText([
+    "Home",
+    "Corpus",
+    "Retrieval",
+    "Trace Debugger",
+    "Eval Lab",
+    "CI Runs",
+    "Audit Reports",
+    "Settings",
+  ]);
+  const breadcrumbs = page.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(breadcrumbs.getByRole("link", { name: "Home" })).toHaveAttribute(
+    "href",
+    "/app",
+  );
+  await expect(
+    breadcrumbs.getByRole("link", { name: "Trace Debugger" }),
+  ).toHaveAttribute("href", "/app/traces");
+  await expect(breadcrumbs.locator('[aria-current="page"]')).toHaveText(
+    "Run detail",
+  );
 });
 
 test("marketing and workbench shells remain route-isolated", async ({

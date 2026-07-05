@@ -4,6 +4,8 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { listTraces } from "../../../lib/api/traces";
+import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { TraceList } from "./components/TraceList";
 import styles from "./RunsPage.module.css";
 import { filterRuns, type RunFilter } from "./utils/runFilters";
@@ -22,16 +24,17 @@ export function RunsPage() {
 
   return (
     <section className={styles.page} aria-labelledby="runs-title">
-      <header className={styles.header}>
-        <div>
-          <p>Improve</p>
-          <h1 id="runs-title">Runs</h1>
-          <span>Saved retrieval tests, diagnoses, and comparisons.</span>
-        </div>
-        <Link to="/app/retrieval">
-          <Plus aria-hidden="true" size={16} /> New retrieval test
-        </Link>
-      </header>
+      <WorkbenchPageHeader
+        actions={
+          <Link to="/app/retrieval">
+            <Plus aria-hidden="true" size={16} /> New retrieval test
+          </Link>
+        }
+        description="Inspect saved retrieval runs, deterministic diagnoses, evidence, and rerun comparisons."
+        section="Debug"
+        title="Trace Debugger"
+        titleId="runs-title"
+      />
 
       <div className={styles.toolbar}>
         <label className={styles.search}>
@@ -67,12 +70,13 @@ export function RunsPage() {
           </button>
         </div>
       ) : runsQuery.data?.length === 0 ? (
-        <div className={styles.empty}>
-          <GitBranch aria-hidden="true" size={24} />
-          <strong>No saved runs yet</strong>
-          <span>Run a suggested question, then choose Debug this run.</span>
-          <Link to="/app">Continue the guided demo</Link>
-        </div>
+        <WorkbenchEmptyState
+          description="Run a diagnostic question, inspect its evidence, then choose Debug this run to preserve the diagnosis."
+          icon={GitBranch}
+          primaryAction={{ label: "Test retrieval", to: "/app/retrieval" }}
+          secondaryAction={{ label: "Continue guided demo", to: "/app" }}
+          title="No saved retrieval runs"
+        />
       ) : (
         <TraceList runs={runs} />
       )}

@@ -1,7 +1,7 @@
 .shell {
   display: grid;
   min-height: 100vh;
-  grid-template-columns: 228px minmax(0, 1fr);
+  grid-template-columns: 240px minmax(0, 1fr);
   background: #f4f7f6;
 }
 
@@ -35,7 +35,7 @@
 .nav {
   display: grid;
   align-content: start;
-  gap: 0.85rem;
+  gap: 0.7rem;
   overflow-y: auto;
 }
 
@@ -137,6 +137,11 @@
   text-decoration: none;
 }
 
+.closeNav,
+.menuButton {
+  display: none;
+}
+
 .workspacePicker {
   max-width: 16rem;
   list-style: none;
@@ -155,10 +160,45 @@
   white-space: nowrap;
 }
 
-.breadcrumb {
+.breadcrumbs {
+  min-width: 0;
   color: var(--color-ink-600);
-  font-size: 0.82rem;
-  font-weight: 780;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.breadcrumbs ol,
+.breadcrumbs li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.breadcrumbs ol {
+  gap: 0.15rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.breadcrumbs li {
+  gap: 0.15rem;
+}
+
+.breadcrumbs a {
+  color: var(--color-ink-500);
+  text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+  color: var(--color-ink-900);
+}
+
+.breadcrumbs span {
+  overflow: hidden;
+  max-width: 12rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .healthStatus {
@@ -193,6 +233,7 @@
 }
 
 .menu {
+  min-width: 0;
   position: relative;
 }
 
@@ -261,6 +302,26 @@
   display: none;
 }
 
+@media (max-width: 1100px) {
+  .healthStatus span,
+  .userEmail {
+    display: none;
+  }
+
+  .userButton {
+    width: 2.35rem;
+    padding: 0;
+  }
+
+  .userButton > svg:last-child {
+    display: none;
+  }
+
+  .workspacePicker {
+    max-width: 12rem;
+  }
+}
+
 @media (max-width: 900px) {
   .shell {
     grid-template-columns: 1fr;
@@ -301,27 +362,23 @@
     padding: 0.55rem 0.75rem;
   }
 
-  .breadcrumb,
-  .healthStatus span,
-  .userEmail {
-    display: none;
-  }
-
-  .userButton {
-    width: 2.35rem;
-    padding: 0;
-  }
-
-  .userButton > svg:last-child {
-    display: none;
-  }
-
+  .breadcrumbs,
   .workspacePicker {
     max-width: 11rem;
   }
 
   .main {
     padding: 0.85rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .healthStatus {
+    display: none;
+  }
+
+  .workspacePicker {
+    max-width: 10.5rem;
   }
 }
 

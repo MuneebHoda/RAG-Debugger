@@ -52,10 +52,9 @@ describe("App", () => {
       await screen.findByRole("heading", { name: /^home$/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /corpus/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /^runs$/i })).toHaveAttribute(
-      "href",
-      "/app/traces",
-    );
+    expect(
+      screen.getByRole("link", { name: /^trace debugger$/i }),
+    ).toHaveAttribute("href", "/app/traces");
   });
 
   it("redirects unauthenticated workbench visits to login", () => {
