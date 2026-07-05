@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Link,
   NavLink,
@@ -76,6 +76,7 @@ export function WorkbenchLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [session, setSession] = useState<AuthSession | null>(() =>
     readAuthSession(),
   );
@@ -99,6 +100,18 @@ export function WorkbenchLayout() {
     return () =>
       window.removeEventListener("corpuslab-auth-change", handleAuthChange);
   }, []);
+
+  useEffect(() => {
+    if (!mobileNavOpen) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setMobileNavOpen(false);
+      menuButtonRef.current?.focus();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mobileNavOpen]);
 
   function handleLogout() {
     void logout().catch(() => undefined);
@@ -124,6 +137,7 @@ export function WorkbenchLayout() {
         onClick={() => setMobileNavOpen(false)}
       />
       <aside
+        id="workbench-navigation"
         className={mobileNavOpen ? styles.sidebarOpen : styles.sidebar}
         aria-label="Workspace navigation"
       >
@@ -180,8 +194,11 @@ export function WorkbenchLayout() {
         <header className={styles.topbar} aria-label="Workspace header">
           <div className={styles.topbarStart}>
             <button
+              aria-controls="workbench-navigation"
+              aria-expanded={mobileNavOpen}
               aria-label="Open navigation"
               className={styles.menuButton}
+              ref={menuButtonRef}
               type="button"
               onClick={() => setMobileNavOpen(true)}
             >

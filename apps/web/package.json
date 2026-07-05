@@ -14,7 +14,8 @@
     "format:check": "prettier --check .",
     "docs:pdf": "node scripts/render-technical-handbook.mjs",
     "screenshots:marketing": "node scripts/generate-marketing-screenshots.mjs",
-    "screenshots:landing": "playwright test tests/e2e/app.spec.ts --grep \"captures responsive landing screenshots\""
+    "screenshots:landing": "playwright test tests/e2e/marketing.spec.ts --grep \"captures responsive landing screenshots\"",
+    "screenshots:workbench": "CORPUSLAB_CAPTURE_WORKBENCH=1 playwright test tests/e2e/workbench-quality.spec.ts --grep \"captures workbench review screenshots\""
   },
   "dependencies": {
     "@tanstack/react-query": "^5.101.1",

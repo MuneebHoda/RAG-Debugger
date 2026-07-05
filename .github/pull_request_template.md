@@ -1,11 +1,17 @@
 ## Summary
 
-- 
+-
 
 ## Screenshots / Demo
 
 - UI changes: add screenshots or a short recording.
 - Non-UI changes: write `N/A`.
+
+## Workbench UI QA (when applicable)
+
+- [ ] Checked desktop, tablet, and mobile without horizontal overflow or overlap
+- [ ] Checked keyboard access, focus, accessible names, and relevant UI states
+- [ ] Checked long technical strings/dense data and attached visual evidence
 
 ## Tests Run
 

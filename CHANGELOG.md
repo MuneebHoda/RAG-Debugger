@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Dependency-free workbench UI quality gates covering semantic route contracts, desktop/tablet/mobile overflow, keyboard navigation, reduced motion, hostile technical strings, and opt-in review screenshots.
 - A scenario-reactive SVG Evidence Reactor that projects document, chunk, ranking, answerability, CI-gate, and audit-report state around the landing command center with responsive and reduced-motion behavior.
 - An animated, keyboard-accessible RAG diagnosis command center on the public landing page with ranked evidence, answerability states, failure labels, score lineage, CI gate signals, audit-report readiness, explicit playback control, and reduced-motion behavior.
 - A deterministic answerability gate that keeps broad retrieval candidates visible while allowing Evidence Summary citations only from directly supporting chunk body text.
@@ -37,6 +38,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Playwright coverage is split by marketing, mocked workbench, real workflow, and quality-gate ownership, with shared typed fixtures and exact endpoint mocks.
 - The post-hero landing experience now follows one CorpusLab-specific story from unsupported retrieval through deterministic diagnosis, Eval Lab regression, CI gating, metadata-only audit reporting, and local-first privacy controls.
 - The animated landing command center now uses a more spacious responsive stage, while the landing-only header adapts between hero, dark, and light page surfaces as users scroll.
 - Retrieval workbench orchestration now uses a domain hook, focused control panels, and tested pure filter utilities without changing behavior.

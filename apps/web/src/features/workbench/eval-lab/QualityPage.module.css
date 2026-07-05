@@ -5,9 +5,14 @@
 
 .header {
   display: flex;
+  min-width: 0;
   align-items: end;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.header > div {
+  min-width: 0;
 }
 
 .header p,
@@ -24,6 +29,7 @@
 }
 
 .header h1 {
+  overflow-wrap: anywhere;
   color: var(--color-ink-950);
   font-size: 1.8rem;
 }
@@ -31,6 +37,7 @@
 .header span {
   display: block;
   margin-top: 0.2rem;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.9rem;
 }
@@ -80,6 +87,7 @@
 .caseCard,
 .failureCard {
   display: grid;
+  min-width: 0;
   gap: 0.55rem;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
@@ -117,6 +125,10 @@
   gap: 1rem;
 }
 
+.panelHeading > div {
+  min-width: 0;
+}
+
 .panelHeadingCopy {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -134,6 +146,7 @@
 
 .panelHeading p {
   margin-top: 0.2rem;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.8rem;
 }
@@ -389,6 +402,7 @@
 
 .gate p {
   margin-top: 0.2rem;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.82rem;
 }
@@ -401,6 +415,7 @@
 
 .modeCard {
   display: grid;
+  min-width: 0;
   gap: 0.55rem;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
@@ -429,6 +444,8 @@
 }
 
 .metricRows strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--color-ink-900);
 }
 
@@ -444,6 +461,7 @@
 .failureCard p,
 .failureCard small {
   margin: 0;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.78rem;
 }

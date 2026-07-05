@@ -28,6 +28,7 @@
 
 .header h1 {
   max-width: 52rem;
+  overflow-wrap: anywhere;
   color: var(--color-ink-950);
   font-size: 1.65rem;
   line-height: 1.25;
@@ -35,6 +36,7 @@
 
 .header p {
   margin-top: 0.35rem;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.88rem;
   line-height: 1.5;
@@ -142,6 +144,7 @@
 .actionPanel,
 .qualityPanel {
   display: grid;
+  min-width: 0;
   gap: 0.85rem;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
@@ -183,6 +186,7 @@
 .panelHeading p,
 .diagnosis p,
 .actionPanel p {
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.84rem;
   line-height: 1.55;
@@ -221,7 +225,12 @@
 
 .signalList li > span {
   display: grid;
+  min-width: 0;
   gap: 0.12rem;
+}
+
+.signalList strong {
+  overflow-wrap: anywhere;
 }
 
 .signalList small,
@@ -303,12 +312,14 @@
 .evidenceList,
 .timeline {
   display: grid;
+  min-width: 0;
   gap: 0.7rem;
 }
 
 .evidenceCard,
 .spanCard {
   display: grid;
+  min-width: 0;
   gap: 0.6rem;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
@@ -319,6 +330,7 @@
 .evidenceHeader,
 .spanHeader {
   display: flex;
+  min-width: 0;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
@@ -337,6 +349,7 @@
 .evidenceCard p,
 .spanCard p {
   margin: 0;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.82rem;
   line-height: 1.55;
@@ -349,6 +362,7 @@
 }
 
 .metadata span {
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.72rem;
   font-weight: 780;
@@ -403,6 +417,8 @@
 }
 
 .scoreSummary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--color-ink-800);
   font-size: 0.76rem;
 }
