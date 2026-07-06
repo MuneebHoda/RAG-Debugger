@@ -612,7 +612,9 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   });
 
   await page.goto("/app/traces");
-  await expect(page.getByRole("heading", { name: "Runs" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Trace Debugger" }),
+  ).toBeVisible();
   await page.getByRole("link", { name: /gpu embedding workers/i }).click();
   await expect(page).toHaveURL(new RegExp(`/app/traces/${traceId}$`));
   await expect(page.getByText("Primary diagnosis")).toBeVisible();
@@ -725,7 +727,7 @@ test("creates and opens a privacy-classified audit report", async ({
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/app/reports");
   await expect(
-    page.getByRole("heading", { name: "Audit reports" }),
+    page.getByRole("heading", { name: "Audit Reports" }),
   ).toBeVisible();
   const runSelect = page.getByLabel("Run", { exact: true });
   await expect(runSelect).toBeEnabled();

@@ -8,9 +8,10 @@ This quality system is intentionally lightweight. It uses Vitest, Testing Librar
 
 ## Automated Coverage
 
-`apps/web/tests/e2e/workbench-quality.spec.ts` checks the authenticated Home, Corpus, Test Retrieval, Runs, Quality, Audit Reports, and Settings routes at:
+`apps/web/tests/e2e/workbench-quality.spec.ts` checks the authenticated Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings routes at:
 
 - Desktop: `1440x1000`
+- Compact desktop: `1024x900`
 - Tablet: `768x900`
 - Mobile: `390x900`
 
@@ -19,10 +20,11 @@ Every route check requires:
 - One visible level-one heading.
 - A visible primary action or useful empty-state action.
 - The correct active workspace navigation item.
+- A breadcrumb whose current item matches the page heading.
 - No heading/action overlap.
 - No document-level horizontal overflow.
 
-Additional browser checks cover keyboard-operated mobile navigation, Escape focus recovery, reduced-motion behavior, and isolation between the public marketing shell and authenticated workbench shell.
+Additional browser checks cover canonical workflow order, parent breadcrumbs on detail routes, focus entering the active mobile navigation item, Escape focus recovery, reduced-motion behavior, and isolation between the public marketing shell and authenticated workbench shell.
 
 Feature-level Vitest tests remain responsible for loading, error, empty, success, and mutation states. Playwright is reserved for layout, navigation, responsive behavior, and workflows that cross a real route or HTTP boundary.
 

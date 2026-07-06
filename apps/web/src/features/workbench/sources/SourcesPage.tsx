@@ -1,6 +1,8 @@
 import { AlertCircle, Loader2, UploadCloud } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { getProductConfig, type ProductConfig } from "../../../lib/api/config";
 import {
   ingestFiles,
@@ -101,13 +103,18 @@ export function SourcesPage() {
 
   return (
     <section className={styles.page} aria-labelledby="sources-title">
-      <header className={styles.pageHeader}>
-        <div>
-          <p className={styles.eyebrow}>Build</p>
-          <h1 id="sources-title">Corpus</h1>
-          <p>Add documents and inspect what CorpusLab can retrieve.</p>
-        </div>
-      </header>
+      <WorkbenchPageHeader
+        actions={
+          <>
+            <a href="#add-documents">Add documents</a>
+            <Link to="/app">Load guided sample</Link>
+          </>
+        }
+        description="Add documents, inspect extraction quality, and verify the chunks available to retrieval."
+        section="Setup"
+        title="Corpus"
+        titleId="sources-title"
+      />
 
       {error ? (
         <div className="alert" role="alert">
@@ -117,7 +124,7 @@ export function SourcesPage() {
       ) : null}
 
       <section className={styles.layout}>
-        <div className="panel upload-panel">
+        <div className="panel upload-panel" id="add-documents">
           <div className="panel-heading">
             <h2>Add documents</h2>
             <span className="status-pill">

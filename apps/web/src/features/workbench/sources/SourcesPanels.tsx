@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, FileText, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
 import type {
   ChunkPreview,
   ChunkingStrategy,
@@ -67,11 +68,13 @@ export function UploadResults({
 export function DocumentList({ documents }: { documents: DocumentSummary[] }) {
   if (documents.length === 0) {
     return (
-      <p>
-        No documents indexed yet.{" "}
-        <Link to="/app">Load the guided sample corpus</Link> or upload your own
-        files.
-      </p>
+      <WorkbenchEmptyState
+        description="Upload your own documents or load the versioned sample corpus to inspect extraction and chunks."
+        icon={FileText}
+        primaryAction={{ label: "Add documents", href: "#add-documents" }}
+        secondaryAction={{ label: "Load guided sample", to: "/app" }}
+        title="No documents indexed"
+      />
     );
   }
 

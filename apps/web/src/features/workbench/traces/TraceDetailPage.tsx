@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import { TraceEvidencePanel } from "./components/TraceEvidencePanel";
 import { TraceRerunPanel } from "./components/TraceRerunPanel";
@@ -51,31 +52,32 @@ export function TraceDetailPage() {
   const trace = traceQuery.data;
   return (
     <section className={styles.page} aria-labelledby="run-title">
-      <Link className={styles.backLink} to="/app/traces">
-        <ArrowLeft aria-hidden="true" size={15} /> Back to Runs
-      </Link>
-
-      <header className={styles.header}>
-        <div>
-          <h1 id="run-title">{trace.input}</h1>
-          <p>{trace.summary}</p>
-        </div>
-        <div className={styles.headerMeta}>
-          <span className={styles.status}>{trace.status}</span>
-          <span className={styles[trace.evidence_strength ?? "weak"]}>
-            {trace.evidence_strength ?? "weak"} evidence
-          </span>
-          <span className={styles.metaPill}>
-            {trace.retrieval?.run.retrieval_mode ?? "unknown"}
-          </span>
-          <span className={styles.metaPill}>
-            {trace.retrieval?.run.latency_ms ?? 0} ms
-          </span>
-        </div>
-      </header>
-
-      <CreateAuditReportAction
-        source={{ sourceType: "trace", sourceId: trace.id }}
+      <WorkbenchPageHeader
+        actions={
+          <CreateAuditReportAction
+            compact
+            source={{ sourceType: "trace", sourceId: trace.id }}
+          />
+        }
+        back={{ label: "Back to Trace Debugger", to: "/app/traces" }}
+        description={trace.summary}
+        metadata={
+          <>
+            <span className={styles.status}>{trace.status}</span>
+            <span className={styles[trace.evidence_strength ?? "weak"]}>
+              {trace.evidence_strength ?? "weak"} evidence
+            </span>
+            <span className={styles.metaPill}>
+              {trace.retrieval?.run.retrieval_mode ?? "unknown"}
+            </span>
+            <span className={styles.metaPill}>
+              {trace.retrieval?.run.latency_ms ?? 0} ms
+            </span>
+          </>
+        }
+        section="Saved retrieval run"
+        title={trace.input}
+        titleId="run-title"
       />
 
       <div className={styles.tabs} role="tablist" aria-label="Run details">

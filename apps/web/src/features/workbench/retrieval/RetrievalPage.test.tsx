@@ -232,7 +232,7 @@ describe("RetrievalPage", () => {
     );
 
     expect(
-      await screen.findByRole("heading", { name: /test retrieval/i }),
+      await screen.findByRole("heading", { name: /^retrieval$/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByLabelText(/what should the corpus answer/i),

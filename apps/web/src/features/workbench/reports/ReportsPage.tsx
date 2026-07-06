@@ -9,6 +9,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import {
   listCiEvalRuns,
   listEvalLabExperiments,
@@ -70,16 +71,18 @@ export function ReportsPage() {
 
   return (
     <section className={styles.page} aria-labelledby="reports-title">
-      <header className={styles.header}>
-        <div>
-          <p>Share</p>
-          <h1 id="reports-title">Audit reports</h1>
-          <span>
-            Convert retrieval evidence and quality failures into defensible,
-            privacy-classified diagnoses.
-          </span>
-        </div>
-      </header>
+      <WorkbenchPageHeader
+        actions={
+          <>
+            <a href="#create-report-panel">Create audit report</a>
+            <Link to="/app/traces">Open Trace Debugger</Link>
+          </>
+        }
+        description="Convert retrieval evidence and quality failures into defensible, privacy-classified diagnoses."
+        section="Share"
+        title="Audit Reports"
+        titleId="reports-title"
+      />
 
       {error ? (
         <div className={styles.alert} role="alert">

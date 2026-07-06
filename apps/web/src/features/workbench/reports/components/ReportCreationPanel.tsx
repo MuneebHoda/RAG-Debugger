@@ -44,7 +44,11 @@ export function ReportCreationPanel({
   }
 
   return (
-    <section className={styles.creationPanel} aria-labelledby="create-report">
+    <section
+      className={styles.creationPanel}
+      id="create-report-panel"
+      aria-labelledby="create-report"
+    >
       <div className={styles.panelHeading}>
         <div>
           <h2 id="create-report">Create an audit report</h2>

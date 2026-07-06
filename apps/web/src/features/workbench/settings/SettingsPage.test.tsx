@@ -3,18 +3,18 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { listApiKeys } from "../lib/api/apiKeys";
-import { getCurrentUser } from "../lib/api/auth";
-import { getProductConfig } from "../lib/api/config";
+import { listApiKeys } from "../../../lib/api/apiKeys";
+import { getCurrentUser } from "../../../lib/api/auth";
+import { getProductConfig } from "../../../lib/api/config";
 import { SettingsPage } from "./SettingsPage";
 
-vi.mock("../lib/api/apiKeys", () => ({
+vi.mock("../../../lib/api/apiKeys", () => ({
   createApiKey: vi.fn(),
   listApiKeys: vi.fn(),
   revokeApiKey: vi.fn(),
 }));
-vi.mock("../lib/api/auth", () => ({ getCurrentUser: vi.fn() }));
-vi.mock("../lib/api/config", () => ({ getProductConfig: vi.fn() }));
+vi.mock("../../../lib/api/auth", () => ({ getCurrentUser: vi.fn() }));
+vi.mock("../../../lib/api/config", () => ({ getProductConfig: vi.fn() }));
 
 describe("SettingsPage", () => {
   beforeEach(() => {

@@ -1,6 +1,7 @@
 import { ArrowRight, FileCheck2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
+import { WorkbenchEmptyState } from "../../../../components/workbench/WorkbenchEmptyState";
 import type { DebugReport } from "../../../../lib/api/reports";
 import { formatDateTime } from "../../../../lib/dateTime";
 import styles from "../ReportsPage.module.css";
@@ -8,15 +9,13 @@ import styles from "../ReportsPage.module.css";
 export function ReportList({ reports }: { reports: DebugReport[] }) {
   if (reports.length === 0) {
     return (
-      <div className={styles.emptyState}>
-        <FileCheck2 aria-hidden="true" size={18} />
-        <span>
-          <strong>No audit reports yet.</strong>
-          Create one from a saved run or experiment to establish a shareable
-          diagnosis.
-        </span>
-        <Link to="/app">Continue the guided demo</Link>
-      </div>
+      <WorkbenchEmptyState
+        description="Create a privacy-classified report from a saved retrieval run or Eval Lab experiment."
+        icon={FileCheck2}
+        primaryAction={{ label: "Open Trace Debugger", to: "/app/traces" }}
+        secondaryAction={{ label: "Open Eval Lab", to: "/app/evals" }}
+        title="No audit reports"
+      />
     );
   }
 

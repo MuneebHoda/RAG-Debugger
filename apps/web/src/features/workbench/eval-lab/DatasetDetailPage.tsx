@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  ArrowLeft,
   FlaskConical,
   Loader2,
   Pencil,
@@ -12,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import {
   createEvalLabCase,
   deleteEvalLabCase,
@@ -122,31 +122,29 @@ export function DatasetDetailPage() {
   const dataset = datasetQuery.data;
   return (
     <section className={styles.page} aria-labelledby="dataset-title">
-      <Link className={styles.backLink} to="/app/evals">
-        <ArrowLeft aria-hidden="true" size={15} /> Back to Quality
-      </Link>
-
-      <header className={styles.header}>
-        <div>
-          <p>Quality dataset</p>
-          <h1 id="dataset-title">{dataset.name}</h1>
-          <span>
-            {dataset.description ?? "Questions with expected evidence."}
-          </span>
-        </div>
-        <button
-          className={styles.headerButton}
-          type="button"
-          onClick={() => setCaseFormOpen((current) => !current)}
-        >
-          {caseFormOpen ? (
-            <X aria-hidden="true" size={16} />
-          ) : (
-            <Plus aria-hidden="true" size={16} />
-          )}
-          {caseFormOpen ? "Close" : "Add case"}
-        </button>
-      </header>
+      <WorkbenchPageHeader
+        actions={
+          <button
+            type="button"
+            onClick={() => setCaseFormOpen((current) => !current)}
+          >
+            {caseFormOpen ? (
+              <X aria-hidden="true" size={16} />
+            ) : (
+              <Plus aria-hidden="true" size={16} />
+            )}
+            {caseFormOpen ? "Close" : "Add case"}
+          </button>
+        }
+        back={{ label: "Back to Eval Lab", to: "/app/evals" }}
+        description={
+          dataset.description ??
+          "Questions paired with the evidence a correct retrieval must find."
+        }
+        section="Eval dataset"
+        title={dataset.name}
+        titleId="dataset-title"
+      />
 
       <section className={styles.stats} aria-label="Dataset summary">
         <Stat label="Cases" value={String(dataset.cases.length)} />

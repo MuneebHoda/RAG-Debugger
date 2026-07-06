@@ -1,12 +1,12 @@
 /* Shared workbench primitives. Route-specific styling belongs in CSS modules. */
-.panel {
+:where([data-workbench-shell]) .panel {
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
   background: white;
   padding: 1rem;
 }
 
-.panel-heading {
+:where([data-workbench-shell]) .panel-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -14,13 +14,13 @@
   margin-bottom: 0.85rem;
 }
 
-.panel-heading h2 {
+:where([data-workbench-shell]) .panel-heading h2 {
   margin-bottom: 0;
   color: var(--color-ink-950);
   font-size: 1rem;
 }
 
-.status-pill {
+:where([data-workbench-shell]) .status-pill {
   border: 1px solid #c9d6df;
   border-radius: 999px;
   color: #335466;
@@ -30,7 +30,7 @@
   white-space: nowrap;
 }
 
-.alert {
+:where([data-workbench-shell]) .alert {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -41,14 +41,14 @@
   padding: 12px 14px;
 }
 
-.config-grid {
+:where([data-workbench-shell]) .config-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
 
-.config-grid label {
+:where([data-workbench-shell]) .config-grid label {
   display: grid;
   gap: 6px;
   color: #435260;
@@ -56,8 +56,8 @@
   font-weight: 750;
 }
 
-.config-grid input,
-.config-grid select {
+:where([data-workbench-shell]) .config-grid input,
+:where([data-workbench-shell]) .config-grid select {
   width: 100%;
   border: 1px solid #c9d6df;
   border-radius: var(--radius-sm);
@@ -65,8 +65,8 @@
   padding: 9px 10px;
 }
 
-.primary-button,
-.secondary-button {
+:where([data-workbench-shell]) .primary-button,
+:where([data-workbench-shell]) .secondary-button {
   display: inline-flex;
   min-height: 2.4rem;
   align-items: center;
@@ -78,30 +78,30 @@
   padding: 0 0.85rem;
 }
 
-.primary-button {
+:where([data-workbench-shell]) .primary-button {
   border: 1px solid var(--color-ink-950);
   background: var(--color-ink-950);
   color: white;
 }
 
-.secondary-button {
+:where([data-workbench-shell]) .secondary-button {
   border: 1px solid #c9d6df;
   background: white;
   color: #244453;
 }
 
-.secondary-button.compact {
+:where([data-workbench-shell]) .secondary-button.compact {
   min-height: 2rem;
   padding: 0 0.65rem;
 }
 
-.primary-button:disabled,
-.secondary-button:disabled {
+:where([data-workbench-shell]) .primary-button:disabled,
+:where([data-workbench-shell]) .secondary-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.panel-actions {
+:where([data-workbench-shell]) .panel-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -109,9 +109,9 @@
   gap: 8px;
 }
 
-.row-badge,
-.quality-badge,
-.strength-pill {
+:where([data-workbench-shell]) .row-badge,
+:where([data-workbench-shell]) .quality-badge,
+:where([data-workbench-shell]) .strength-pill {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -124,35 +124,35 @@
   white-space: nowrap;
 }
 
-.row-badge.warning,
-.quality-badge.warning,
-.strength-pill.weak {
+:where([data-workbench-shell]) .row-badge.warning,
+:where([data-workbench-shell]) .quality-badge.warning,
+:where([data-workbench-shell]) .strength-pill.weak {
   border-color: #e5b7a5;
   background: #fff4ef;
   color: #7c3925;
 }
 
-.quality-badge.good,
-.strength-pill.strong {
+:where([data-workbench-shell]) .quality-badge.good,
+:where([data-workbench-shell]) .strength-pill.strong {
   border-color: #9dc6a0;
   background: #f0faef;
   color: #315b33;
 }
 
-.strength-pill.medium {
+:where([data-workbench-shell]) .strength-pill.medium {
   border-color: #d6c78d;
   background: #fff9df;
   color: #66521f;
 }
 
-.quality-badges {
+:where([data-workbench-shell]) .quality-badges {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin: 8px 0 10px;
 }
 
-.spin {
+:where([data-workbench-shell]) .spin {
   animation: spin 0.9s linear infinite;
 }
 
@@ -163,11 +163,11 @@
 }
 
 @media (max-width: 620px) {
-  .config-grid {
+  :where([data-workbench-shell]) .config-grid {
     grid-template-columns: 1fr;
   }
 
-  .panel-heading {
+  :where([data-workbench-shell]) .panel-heading {
     align-items: flex-start;
   }
 }

@@ -1,5 +1,7 @@
-import { Link } from "react-router-dom";
+import { Search } from "lucide-react";
 
+import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { EmbeddingPanel } from "./components/EmbeddingPanel";
 import { RetrievalFiltersPanel } from "./components/RetrievalFiltersPanel";
 import { RetrievalQueryPanel } from "./components/RetrievalQueryPanel";
@@ -13,22 +15,23 @@ export function RetrievalPage() {
 
   return (
     <section className={styles.page} aria-labelledby="retrieval-title">
-      <header className={styles.pageHeader}>
-        <div>
-          <p className={styles.eyebrow}>Build</p>
-          <h1 id="retrieval-title">Test retrieval</h1>
-          <p>Ask one question and inspect the evidence CorpusLab would use.</p>
-        </div>
-      </header>
+      <WorkbenchPageHeader
+        description="Ask one diagnostic question, inspect ranked candidates, and verify which evidence can support an answer."
+        section="Debug"
+        title="Retrieval"
+        titleId="retrieval-title"
+      />
 
       <RetrievalStatusAlert error={workbench.error} />
 
       {!workbench.isLoadingSources && workbench.allDocuments.length === 0 ? (
-        <div className={styles.emptyNotice}>
-          Retrieval needs a corpus.{" "}
-          <Link to="/app">Load the guided sample corpus</Link> or add documents
-          in Corpus.
-        </div>
+        <WorkbenchEmptyState
+          description="Retrieval needs indexed documents before it can rank evidence or assess answerability."
+          icon={Search}
+          primaryAction={{ label: "Open Corpus", to: "/app/sources" }}
+          secondaryAction={{ label: "Load guided sample", to: "/app" }}
+          title="Add a corpus before testing retrieval"
+        />
       ) : null}
 
       <section className={styles.layout}>

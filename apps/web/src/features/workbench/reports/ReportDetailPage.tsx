@@ -1,6 +1,5 @@
 import {
   AlertTriangle,
-  ArrowLeft,
   Check,
   Clipboard,
   Download,
@@ -8,6 +7,7 @@ import {
 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
+import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { debugReportMarkdownUrl } from "../../../lib/api/reports";
 import { formatDateTime } from "../../../lib/dateTime";
 import { useCopyReportMarkdown, useDebugReport } from "./hooks/useReports";
@@ -40,49 +40,53 @@ export function ReportDetailPage() {
 
   return (
     <section className={styles.page} aria-labelledby="report-title">
-      <Link className={styles.backLink} to="/app/reports">
-        <ArrowLeft aria-hidden="true" size={15} /> Back to reports
-      </Link>
-
-      <header className={styles.header}>
-        <div>
-          <p>{prettyLabel(report.source.type)} audit</p>
-          <h1 id="report-title">{report.title}</h1>
-          <span>{formatDateTime(report.created_at)}</span>
-        </div>
-        <div className={styles.exportActions}>
-          <button
-            type="button"
-            className={styles.copyButton}
-            disabled={exportBlocked || copyMarkdown.isPending}
-            onClick={() => copyMarkdown.mutate(report.id)}
-          >
-            {copyMarkdown.isSuccess ? (
-              <Check aria-hidden="true" size={16} />
-            ) : (
-              <Clipboard aria-hidden="true" size={16} />
-            )}
-            {copyMarkdown.isSuccess
-              ? "Copied"
-              : copyMarkdown.isPending
-                ? "Copying…"
-                : "Copy Markdown"}
-          </button>
-          {exportBlocked ? (
-            <button className={styles.copyButton} disabled type="button">
-              <Download aria-hidden="true" size={16} /> Download Markdown
-            </button>
-          ) : (
-            <a
-              className={styles.downloadButton}
-              download={`corpuslab-report-${report.id}.md`}
-              href={debugReportMarkdownUrl(report.id)}
+      <WorkbenchPageHeader
+        actions={
+          <>
+            <button
+              type="button"
+              className={styles.copyButton}
+              disabled={exportBlocked || copyMarkdown.isPending}
+              onClick={() => copyMarkdown.mutate(report.id)}
             >
-              <Download aria-hidden="true" size={16} /> Download Markdown
-            </a>
-          )}
-        </div>
-      </header>
+              {copyMarkdown.isSuccess ? (
+                <Check aria-hidden="true" size={16} />
+              ) : (
+                <Clipboard aria-hidden="true" size={16} />
+              )}
+              {copyMarkdown.isSuccess
+                ? "Copied"
+                : copyMarkdown.isPending
+                  ? "Copying…"
+                  : "Copy Markdown"}
+            </button>
+            {exportBlocked ? (
+              <button className={styles.copyButton} disabled type="button">
+                <Download aria-hidden="true" size={16} /> Download Markdown
+              </button>
+            ) : (
+              <a
+                className={styles.downloadButton}
+                download={`corpuslab-report-${report.id}.md`}
+                href={debugReportMarkdownUrl(report.id)}
+              >
+                <Download aria-hidden="true" size={16} /> Download Markdown
+              </a>
+            )}
+          </>
+        }
+        back={{ label: "Back to Audit Reports", to: "/app/reports" }}
+        description="Review the deterministic diagnosis, evidence references, and prioritized remediation plan."
+        metadata={
+          <>
+            <span>{prettyLabel(report.source.type)} source</span>
+            <span>{formatDateTime(report.created_at)}</span>
+          </>
+        }
+        section="Audit report"
+        title={report.title}
+        titleId="report-title"
+      />
 
       <section className={styles.privacyBanner}>
         <FileLock2 aria-hidden="true" size={18} />
