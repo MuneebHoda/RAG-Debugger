@@ -10,7 +10,7 @@ export function WorkspaceSettingsPanel({
   user: Awaited<ReturnType<typeof getCurrentUser>>["user"] | undefined;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={`panel ${styles.panel}`}>
       <div className={styles.panelHeading}>
         <div>
           <h2>Workspace</h2>
@@ -98,7 +98,7 @@ export function RuntimeSettingsPanel({
 
 export function PrivacySettingsPanel() {
   return (
-    <section className={styles.panel}>
+    <section className={`panel ${styles.panel}`}>
       <div className={styles.panelHeading}>
         <div>
           <h2>Privacy posture</h2>
@@ -134,7 +134,7 @@ function ConfigPanel({
   items: Array<[string, string]>;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={`panel ${styles.panel}`}>
       <div className={styles.panelHeading}>
         <h2>{title}</h2>
         <Icon aria-hidden="true" size={18} />

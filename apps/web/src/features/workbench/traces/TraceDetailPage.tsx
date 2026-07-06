@@ -42,7 +42,7 @@ export function TraceDetailPage() {
         <button type="button" onClick={() => void traceQuery.refetch()}>
           Retry
         </button>
-        <Link className={styles.backLink} to="/app/traces">
+        <Link className="secondary-button compact" to="/app/traces">
           <ArrowLeft aria-hidden="true" size={15} /> Back to Runs
         </Link>
       </section>
@@ -63,14 +63,16 @@ export function TraceDetailPage() {
         description={trace.summary}
         metadata={
           <>
-            <span className={styles.status}>{trace.status}</span>
-            <span className={styles[trace.evidence_strength ?? "weak"]}>
+            <span className="status-pill">{trace.status}</span>
+            <span
+              className={`status-pill ${styles[trace.evidence_strength ?? "weak"]}`}
+            >
               {trace.evidence_strength ?? "weak"} evidence
             </span>
-            <span className={styles.metaPill}>
+            <span className="status-pill">
               {trace.retrieval?.run.retrieval_mode ?? "unknown"}
             </span>
-            <span className={styles.metaPill}>
+            <span className="status-pill">
               {trace.retrieval?.run.latency_ms ?? 0} ms
             </span>
           </>

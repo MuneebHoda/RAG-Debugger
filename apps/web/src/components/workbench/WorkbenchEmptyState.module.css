@@ -1,7 +1,7 @@
 .emptyState {
-  display: grid;
+  display: flex;
   min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.85rem;
   border: 1px dashed var(--color-ink-300);
@@ -12,6 +12,7 @@
 
 .icon {
   display: grid;
+  flex: 0 0 auto;
   width: 2.2rem;
   height: 2.2rem;
   place-items: center;
@@ -23,6 +24,7 @@
 
 .copy {
   min-width: 0;
+  flex: 1 1 14rem;
 }
 
 .copy strong {
@@ -40,6 +42,8 @@
 
 .actions {
   display: flex;
+  max-width: 24rem;
+  flex: 1 1 20rem;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 0.45rem;
@@ -70,17 +74,6 @@
   color: white;
 }
 
-@media (max-width: 700px) {
-  .emptyState {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .actions {
-    grid-column: 1 / -1;
-    justify-content: stretch;
-  }
-
-  .actions > * {
-    flex: 1 1 10rem;
-  }
+.actions > * {
+  flex: 1 1 9rem;
 }

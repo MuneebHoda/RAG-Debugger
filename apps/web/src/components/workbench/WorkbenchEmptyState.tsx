@@ -25,16 +25,16 @@ export function WorkbenchEmptyState({
   title: string;
 }) {
   return (
-    <div className={styles.emptyState}>
+    <div className={styles.emptyState} data-workbench-empty-state>
       <span className={styles.icon}>
         <Icon aria-hidden="true" size={19} />
       </span>
-      <div className={styles.copy}>
+      <div className={styles.copy} data-workbench-empty-state-copy>
         <strong>{title}</strong>
         <p>{description}</p>
       </div>
       {primaryAction || secondaryAction ? (
-        <div className={styles.actions}>
+        <div className={styles.actions} data-workbench-empty-state-actions>
           {primaryAction ? (
             <EmptyStateAction action={primaryAction} primary />
           ) : null}

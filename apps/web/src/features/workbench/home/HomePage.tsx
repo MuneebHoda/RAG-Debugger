@@ -146,7 +146,7 @@ function HomeContent({
         <summary>System details</summary>
         <div className={styles.detailsGrid}>
           <DocumentMix overview={overview} />
-          <section className={styles.panel}>
+          <section className={`panel ${styles.panel}`}>
             <div className={styles.panelHeading}>
               <div>
                 <p>Corpus totals</p>
@@ -188,7 +188,10 @@ function DocumentMix({ overview }: { overview: OverviewResponse }) {
   );
 
   return (
-    <section className={styles.panel} aria-labelledby="document-mix-title">
+    <section
+      className={`panel ${styles.panel}`}
+      aria-labelledby="document-mix-title"
+    >
       <div className={styles.panelHeading}>
         <div>
           <p>Document mix</p>

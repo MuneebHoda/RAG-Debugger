@@ -357,11 +357,11 @@ just ci-check
 ```
 
 Workbench UI quality is enforced through a typed Playwright route matrix at
-desktop, tablet, and mobile widths. It verifies semantic headings, primary or
-empty-state actions, active navigation, keyboard behavior, reduced motion,
-route isolation, overlap, and horizontal overflow. Synthetic stress fixtures
-exercise long document paths, IDs, queries, snippets, score explanations,
-failure labels, experiment failures, report metadata, and API-key names.
+1440, 1280, 1024, 768, and 390 pixel widths. It verifies semantic headings,
+primary or empty-state actions, active navigation, keyboard behavior, reduced
+motion, route isolation, overlap, page overflow, and child-to-panel
+containment. Synthetic stress fixtures exercise populated retrieval, document,
+trace, experiment, report, and API-key surfaces with long technical content.
 Review screenshots are generated locally with `npm run screenshots:workbench`
 and remain in ignored Playwright output. The review checklist and assertion
 policy are documented in `docs/workbench-ui-quality.md`.

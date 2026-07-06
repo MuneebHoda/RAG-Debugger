@@ -100,7 +100,8 @@ requiring extra API calls.
 
 `WorkbenchPageHeader` provides the shared title, explanation, action, metadata,
 and back-link structure. `WorkbenchEmptyState` provides explicit primary and
-secondary next actions. Pages keep workflow-specific controls and data fetching
+secondary next actions and wraps according to its available panel width rather
+than the viewport alone. Pages keep workflow-specific controls and data fetching
 inside their feature domains. Legacy shared workbench classes are scoped under
 `data-workbench-shell`, while all new shell, page, and component styling uses CSS
 modules.
@@ -126,6 +127,8 @@ UI tests should mock the narrow domain boundary or the HTTP route relevant to th
 - Route and component styling uses CSS modules.
 - A feature module should not depend on selectors owned by another feature.
 - Stable boards, score bars, tabs, and tool layouts need explicit responsive dimensions so dynamic data cannot shift controls or overlap text.
+- Grid and flex children that own technical content use `min-width: 0`; paths, identifiers, queries, and evidence wrap safely or use a deliberate local scroll region. Do not mask a child overflow at the page root.
+- Reusable controls placed inside nested panels must respond to their available container width. Viewport breakpoints alone are insufficient for split workbench layouts.
 - Marketing motion must preserve visible labels and state, provide controls for automatically changing content, and render a complete static experience under `prefers-reduced-motion`.
 - Landing story examples must remain typed, deterministic, and clearly framed as examples; they do not fetch workbench state.
 - New UI must be checked at desktop, tablet, and mobile widths with no horizontal overflow.
@@ -145,11 +148,12 @@ under `tests/e2e/support`; deterministic hostile-data fixtures live under
 `tests/e2e/fixtures`. Do not use a catch-all API mock that can hide a new route
 dependency.
 
-The workbench quality suite verifies every primary route at desktop, tablet,
-and mobile widths, then exercises document, trace, experiment, report, and API
-key surfaces with long technical strings. Review screenshots are opt-in and
-remain under ignored Playwright output. The complete checklist is in
-`docs/workbench-ui-quality.md`.
+The workbench quality suite verifies every primary route at 1440, 1280, 1024,
+768, and 390 pixel widths, then exercises retrieval, document, trace,
+experiment, report, and API-key surfaces with long technical strings. Geometry
+checks assert both page-level overflow and containment within the owning panel.
+Review screenshots are opt-in and remain under ignored Playwright output. The
+complete checklist is in `docs/workbench-ui-quality.md`.
 
 Before merging frontend work, run:
 

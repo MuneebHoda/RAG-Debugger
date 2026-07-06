@@ -11,6 +11,7 @@ This quality system is intentionally lightweight. It uses Vitest, Testing Librar
 `apps/web/tests/e2e/workbench-quality.spec.ts` checks the authenticated Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings routes at:
 
 - Desktop: `1440x1000`
+- Wide desktop: `1280x900`
 - Compact desktop: `1024x900`
 - Tablet: `768x900`
 - Mobile: `390x900`
@@ -25,6 +26,11 @@ Every route check requires:
 - No document-level horizontal overflow.
 
 Additional browser checks cover canonical workflow order, parent breadcrumbs on detail routes, focus entering the active mobile navigation item, Escape focus recovery, reduced-motion behavior, and isolation between the public marketing shell and authenticated workbench shell.
+
+Nested surfaces are checked independently of document overflow. Empty-state
+copy must retain a readable inline size, actions must remain inside their owning
+panel, mobile tab labels must remain visible, and dense populated detail views
+must contain their technical strings after a viewport resize.
 
 Feature-level Vitest tests remain responsible for loading, error, empty, success, and mutation states. Playwright is reserved for layout, navigation, responsive behavior, and workflows that cross a real route or HTTP boundary.
 
@@ -74,7 +80,12 @@ cd apps/web
 npm run screenshots:workbench
 ```
 
-The screenshot command uses reduced motion and captures every major workbench route at desktop and mobile sizes. Output is written beneath Playwright's ignored `test-results` directory. Attach useful captures to the PR; do not commit them.
+The screenshot command uses reduced motion and captures every major workbench
+route at `1440`, `1280`, `1024`, `768`, and `390` pixel widths. It also captures
+populated document, trace, experiment, report, and API-key detail surfaces at
+compact-desktop and mobile widths. Output is written beneath Playwright's
+ignored `test-results` directory. Attach useful captures to the PR; do not
+commit them.
 
 Before merge, run:
 
@@ -86,6 +97,6 @@ git diff --check
 
 ## Assertion Design
 
-Prefer semantic assertions such as headings, roles, accessible names, selected state, and visible recovery actions. Geometry checks should protect stable relationships such as a heading and primary action or viewport containment. Avoid exact coordinates, animation timing internals, generated CSS class names, and pixel snapshots that fail on harmless rendering differences.
+Prefer semantic assertions such as headings, roles, accessible names, selected state, and visible recovery actions. Geometry checks should protect stable relationships such as a heading and primary action, a child inside its panel, or a minimum readable copy width. Avoid exact coordinates, animation timing internals, generated CSS class names, and pixel snapshots that fail on harmless rendering differences.
 
 When a stress fixture exposes overflow, fix containment in the CSS module that owns the component. Use `min-width: 0`, responsive grid constraints, safe wrapping, or deliberate local scrolling. Do not hide document-level overflow without fixing the responsible child.

@@ -51,5 +51,8 @@ describe("workbench primitives", () => {
       "href",
       "/app",
     );
+    expect(
+      screen.getByText("No evidence").closest("[data-workbench-empty-state]"),
+    ).toContainElement(screen.getByRole("button", { name: /Add evidence/ }));
   });
 });

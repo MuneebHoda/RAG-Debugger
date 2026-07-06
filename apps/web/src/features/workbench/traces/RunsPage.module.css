@@ -54,6 +54,7 @@
 .tableHeader,
 .row {
   display: grid;
+  min-width: 0;
   grid-template-columns: minmax(16rem, 1fr) 7rem 8rem 6rem 9rem 1.5rem;
   align-items: center;
   gap: 0.8rem;
@@ -89,9 +90,7 @@
 .query strong,
 .query small {
   display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .query strong {
@@ -105,6 +104,11 @@
   color: var(--color-ink-600);
   font-size: 0.76rem;
   font-weight: 720;
+}
+
+.cell {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .pill,
@@ -175,7 +179,7 @@
   cursor: pointer;
 }
 
-@media (max-width: 950px) {
+@media (max-width: 1120px) {
   .table {
     display: grid;
     gap: 0.65rem;
@@ -204,15 +208,6 @@
 }
 
 @media (max-width: 620px) {
-  .header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .header a {
-    justify-content: center;
-  }
-
   .toolbar {
     grid-template-columns: 1fr;
   }

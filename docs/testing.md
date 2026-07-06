@@ -104,10 +104,12 @@ cd apps/web
 npx playwright test tests/e2e/workbench-quality.spec.ts
 ```
 
-The suite covers Home, Corpus, Test Retrieval, Runs, Quality, Audit Reports,
-and Settings at desktop, tablet, and mobile widths. Typed fixtures verify long
-paths, IDs, queries, snippets, score breakdowns, labels, report titles, and API
-key names without external services or customer data. See
+The suite covers Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs,
+Audit Reports, and Settings at 1440, 1280, 1024, 768, and 390 pixel widths.
+Typed fixtures verify long paths, IDs, queries, snippets, score breakdowns,
+labels, report titles, and API key names without external services or customer
+data. Child-to-panel containment checks catch internal collapse even when the
+document itself has no horizontal overflow. See
 [`docs/workbench-ui-quality.md`](workbench-ui-quality.md) for the merge
 checklist and assertion rules.
 

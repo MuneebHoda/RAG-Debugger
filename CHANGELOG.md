@@ -38,6 +38,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Workbench panels now preserve readable empty states, visible mobile tabs, stable dense grids, and contained technical content across five responsive viewports, with populated detail screenshots and component-level geometry gates.
 - The authenticated workbench now follows one typed Setup → Debug → Quality → Share → Admin information architecture with canonical route labels, linked breadcrumbs, a focused CI Runs view, consistent page headers, actionable empty states, mobile focus management, and route-scoped legacy styles.
 - Playwright coverage is split by marketing, mocked workbench, real workflow, and quality-gate ownership, with shared typed fixtures and exact endpoint mocks.
 - The post-hero landing experience now follows one CorpusLab-specific story from unsupported retrieval through deterministic diagnosis, Eval Lab regression, CI gating, metadata-only audit reporting, and local-first privacy controls.
