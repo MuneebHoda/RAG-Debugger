@@ -12,6 +12,7 @@
 
 .alert {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
   border: 1px solid color-mix(in srgb, #d84b4b 35%, var(--color-ink-200));
@@ -45,6 +46,7 @@
 
 .healthBand {
   display: grid;
+  min-width: 0;
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.9rem;
@@ -84,6 +86,7 @@
 
 .healthBand h2 {
   margin-top: 0.15rem;
+  overflow-wrap: anywhere;
   color: var(--color-ink-800);
   font-size: 0.95rem;
 }
@@ -127,15 +130,14 @@
 
 .panel {
   display: grid;
+  min-width: 0;
   gap: 0.85rem;
-  padding: 1rem;
-  border: 1px solid var(--color-ink-200);
-  border-radius: var(--radius-sm);
-  background: white;
 }
 
 .panelHeading {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
@@ -171,10 +173,12 @@
 
 .profileRow div {
   display: grid;
+  min-width: 0;
   gap: 0.15rem;
 }
 
 .profileRow strong {
+  overflow-wrap: anywhere;
   color: var(--color-ink-950);
 }
 
@@ -205,17 +209,16 @@
 }
 
 @media (max-width: 620px) {
-  .header {
-    align-items: start;
-    flex-direction: column;
-  }
-
-  .snapshot {
-    text-align: left;
-  }
-
   .metrics,
   .secondaryMetrics {
     grid-template-columns: 1fr;
+  }
+
+  .profileRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .profileRow > div:nth-child(2) {
+    grid-column: 1 / -1;
   }
 }

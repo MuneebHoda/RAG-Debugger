@@ -4,6 +4,7 @@ import {
   stressApiKey,
   stressChunk,
   stressExperiment,
+  stressRetrieval,
   stressReport,
   stressSource,
   stressTrace,
@@ -11,7 +12,9 @@ import {
   stressValues,
 } from "./fixtures/workbenchStress";
 import {
+  expectElementContainedBy,
   expectElementsNotToOverlap,
+  expectMinimumInlineSize,
   expectNoHorizontalOverflow,
   expectSinglePageHeading,
   expectTextContained,
@@ -20,6 +23,7 @@ import { installWorkbenchMocks } from "./support/workbenchMocks";
 
 const viewports = [
   { name: "desktop", width: 1440, height: 1000 },
+  { name: "wide desktop", width: 1280, height: 900 },
   { name: "compact desktop", width: 1024, height: 900 },
   { name: "tablet", width: 768, height: 900 },
   { name: "mobile", width: 390, height: 900 },
@@ -226,6 +230,40 @@ test("marketing and workbench shells remain route-isolated", async ({
   ).toHaveCount(0);
 });
 
+test("nested empty states preserve readable copy and contained actions", async ({
+  page,
+}) => {
+  await installWorkbenchMocks(page);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/app/evals");
+
+  const emptyState = page
+    .locator("[data-workbench-empty-state]")
+    .filter({ hasText: "No experiments run" });
+  await expect(emptyState).toHaveCount(1);
+  const copy = emptyState.locator("[data-workbench-empty-state-copy]");
+  const actions = emptyState.locator("[data-workbench-empty-state-actions]");
+  await expectMinimumInlineSize(copy, 160);
+  await expectElementContainedBy(copy, emptyState);
+  await expectElementContainedBy(actions, emptyState);
+  await expectElementsNotToOverlap(copy, actions);
+});
+
+test("mobile settings tabs expose every label without clipping", async ({
+  page,
+}) => {
+  await installWorkbenchMocks(page);
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto("/app/settings");
+
+  const tabs = page.getByRole("tablist", { name: "Settings sections" });
+  const privacyTab = page.getByRole("tab", { name: "Privacy" });
+  await expect(privacyTab).toBeVisible();
+  await expectTextContained(privacyTab);
+  await expectElementContainedBy(privacyTab, tabs);
+  await expectNoHorizontalOverflow(page);
+});
+
 test.describe("hostile technical content", () => {
   test.beforeEach(async ({ page }) => {
     await installWorkbenchMocks(page, {
@@ -238,11 +276,12 @@ test.describe("hostile technical content", () => {
       reports: [stressReport],
       reportDetails: { [stressValues.report]: stressReport },
       apiKeys: [stressApiKey],
+      retrievalResponse: stressRetrieval,
     });
-    await page.setViewportSize({ width: 390, height: 900 });
   });
 
   test("document paths and chunk text stay contained", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
     await page.goto(`/app/sources/${stressValues.document}`);
     const heading = page.getByRole("heading", {
       level: 1,
@@ -258,6 +297,7 @@ test.describe("hostile technical content", () => {
   test("dense trace evidence and failure labels stay contained", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
     await page.goto(`/app/traces/${stressValues.trace}`);
     await expectTextContained(
       page.getByRole("heading", { level: 1, name: stressValues.query }),
@@ -272,12 +312,37 @@ test.describe("hostile technical content", () => {
       page.getByText(stressValues.snippet, { exact: true }),
     );
     await expect(page.getByLabel("Score breakdown")).toBeVisible();
+    await page.getByRole("tab", { name: "Compare" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Compare retrieval settings" }),
+    ).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test("retrieval evidence stays readable at compact desktop and mobile widths", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await page.goto("/app/retrieval");
+    await page
+      .getByLabel("What should the corpus answer?")
+      .fill(stressValues.query);
+    await page.getByRole("button", { name: "Run retrieval" }).click();
+
+    const snippet = page.getByText(stressValues.snippet, { exact: true });
+    await expectTextContained(snippet);
+    await expect(page.getByLabel("Score breakdown")).toBeVisible();
+    await expectNoHorizontalOverflow(page);
+
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectTextContained(snippet);
     await expectNoHorizontalOverflow(page);
   });
 
   test("experiment failures and dense metrics stay contained", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
     await page.goto(`/app/evals/experiments/${stressValues.experiment}`);
     await expectTextContained(
       page.getByRole("heading", {
@@ -290,11 +355,15 @@ test.describe("hostile technical content", () => {
       page.getByRole("heading", { name: "Mode comparison" }),
     ).toBeVisible();
     await expectNoHorizontalOverflow(page);
+    await page.setViewportSize({ width: 390, height: 900 });
+    await expectTextContained(page.getByText(stressValues.query));
+    await expectNoHorizontalOverflow(page);
   });
 
   test("report titles and Markdown-sensitive metadata stay contained", async ({
     page,
   }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
     await page.goto(`/app/reports/${stressValues.report}`);
     await expectTextContained(
       page.getByRole("heading", {
@@ -307,6 +376,7 @@ test.describe("hostile technical content", () => {
   });
 
   test("long API-key names stay contained", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 900 });
     await page.goto("/app/settings?tab=api-keys");
     await expectTextContained(page.getByText(stressValues.apiKeyName));
     await expect(
@@ -326,10 +396,7 @@ test.describe("workbench review screenshots", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await installWorkbenchMocks(page);
 
-    for (const viewport of [
-      { width: 1440, height: 1000 },
-      { width: 390, height: 900 },
-    ]) {
+    for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       for (const routeCase of routeCases) {
         await page.goto(routeCase.path);
@@ -339,6 +406,54 @@ test.describe("workbench review screenshots", () => {
           animations: "disabled",
           path: testInfo.outputPath(
             `${routeSlug(routeCase.path)}-${viewport.width}x${viewport.height}.png`,
+          ),
+        });
+      }
+    }
+
+    await installWorkbenchMocks(page, {
+      sources: [stressSource],
+      documentChunks: { [stressValues.document]: [stressChunk] },
+      traces: [stressTraceSummary],
+      traceDetails: { [stressValues.trace]: stressTrace },
+      experiments: [stressExperiment],
+      experimentDetails: { [stressValues.experiment]: stressExperiment },
+      reports: [stressReport],
+      reportDetails: { [stressValues.report]: stressReport },
+      apiKeys: [stressApiKey],
+      retrievalResponse: stressRetrieval,
+    });
+
+    for (const viewport of [
+      { width: 1024, height: 900 },
+      { width: 390, height: 900 },
+    ]) {
+      await page.setViewportSize(viewport);
+      for (const detail of [
+        {
+          path: `/app/sources/${stressValues.document}`,
+          name: "document-detail",
+        },
+        {
+          path: `/app/traces/${stressValues.trace}`,
+          name: "trace-detail",
+        },
+        {
+          path: `/app/evals/experiments/${stressValues.experiment}`,
+          name: "experiment-detail",
+        },
+        {
+          path: `/app/reports/${stressValues.report}`,
+          name: "report-detail",
+        },
+        { path: "/app/settings?tab=api-keys", name: "api-keys" },
+      ]) {
+        await page.goto(detail.path);
+        await expectNoHorizontalOverflow(page);
+        await page.screenshot({
+          animations: "disabled",
+          path: testInfo.outputPath(
+            `${detail.name}-${viewport.width}x${viewport.height}.png`,
           ),
         });
       }

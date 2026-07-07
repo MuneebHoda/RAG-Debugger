@@ -12,6 +12,7 @@
 
 .diagnosisNotice {
   display: grid;
+  min-width: 0;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 0.65rem;
   border-left: 3px solid var(--color-teal-700);
@@ -21,6 +22,12 @@
   padding: 0.65rem 0.75rem;
 }
 
+.diagnosisNotice span,
+.answerState span,
+.answerText {
+  overflow-wrap: anywhere;
+}
+
 .diagnosisNotice strong {
   color: var(--color-teal-900);
   text-transform: capitalize;
@@ -28,6 +35,7 @@
 
 .answerState {
   display: grid;
+  min-width: 0;
   gap: 0.2rem;
   border-left: 3px solid;
   padding: 0.7rem 0.8rem;
@@ -199,6 +207,7 @@
 
 .embeddingStatus {
   display: grid;
+  min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
@@ -222,6 +231,7 @@
 .hitList,
 .hitGroup {
   display: grid;
+  min-width: 0;
   gap: 10px;
 }
 
@@ -238,6 +248,9 @@
 .hitGroup > header,
 .hitCard header {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: start;
   justify-content: space-between;
   gap: 10px;
 }
@@ -247,7 +260,15 @@
   font-size: 0.8rem;
 }
 
+.hitGroup > header strong,
+.hitCard header strong,
+.hitSource span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .hitCard {
+  min-width: 0;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
   background: #fbfcfe;
@@ -278,6 +299,8 @@
 .citationList span,
 .termRow span,
 .queryStatusRow span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: 1px solid #c9d6df;
   border-radius: 999px;
   color: #335466;
@@ -288,6 +311,7 @@
 
 .hitSource {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
@@ -295,8 +319,13 @@
   font-size: 0.8rem;
 }
 
+.hitSource > svg {
+  flex: 0 0 auto;
+}
+
 .hitCard p {
   margin-bottom: 10px;
+  overflow-wrap: anywhere;
   color: #273541;
   font-size: 0.85rem;
   line-height: 1.55;
@@ -305,9 +334,12 @@
 .hitCard small {
   display: block;
   margin-top: 10px;
+  overflow-wrap: anywhere;
 }
 
 .supportBadge {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: 1px solid;
   border-radius: 999px;
   font-size: 0.7rem;

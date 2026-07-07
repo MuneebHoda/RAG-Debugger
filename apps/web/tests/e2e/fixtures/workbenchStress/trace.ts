@@ -93,7 +93,7 @@ export const stressDiagnosis = {
   ],
 } satisfies NonNullable<RetrievalQueryResponse["diagnosis"]>;
 
-const stressRetrieval = {
+export const stressRetrieval = {
   run: {
     id: stressIds.run,
     query: stressValues.query,

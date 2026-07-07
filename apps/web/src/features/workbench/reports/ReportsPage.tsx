@@ -102,7 +102,10 @@ export function ReportsPage() {
         onCreated={(reportId) => navigate(`/app/reports/${reportId}`)}
       />
 
-      <section className={styles.panel} aria-labelledby="generated-reports">
+      <section
+        className={`panel ${styles.panel}`}
+        aria-labelledby="generated-reports"
+      >
         <div className={styles.panelHeading}>
           <div>
             <h2 id="generated-reports">Generated reports</h2>
@@ -245,7 +248,7 @@ function CandidatePanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className={styles.panel}>
+    <section className={`panel ${styles.panel}`}>
       <div className={styles.panelHeading}>
         <div className={styles.panelTitle}>
           <Icon aria-hidden="true" size={17} />

@@ -74,6 +74,7 @@
 .resultRow,
 .documentRow {
   display: grid;
+  min-width: 0;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
   gap: 10px;
@@ -118,6 +119,7 @@
 }
 
 .chunkCard {
+  min-width: 0;
   border: 1px solid var(--color-ink-200);
   border-radius: var(--radius-sm);
   background: #fbfcfe;
@@ -126,6 +128,8 @@
 
 .chunkCard header {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 8px;
@@ -139,6 +143,8 @@
 }
 
 .chunkMeta span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border: 1px solid #c9d6df;
   border-radius: 999px;
   color: #335466;
@@ -149,14 +155,30 @@
 
 .chunkCard p {
   margin-bottom: 10px;
+  overflow-wrap: anywhere;
   color: #273541;
   font-size: 0.85rem;
   line-height: 1.55;
   white-space: pre-wrap;
 }
 
+.chunkCard small {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 860px) {
   .layout {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .documentRow {
+    grid-template-columns: 22px minmax(0, 1fr);
+  }
+
+  .documentRow > :last-child {
+    grid-column: 2;
+    justify-self: start;
   }
 }

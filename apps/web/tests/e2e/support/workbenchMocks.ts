@@ -9,6 +9,7 @@ import type {
 } from "../../../src/lib/api/evalLab";
 import type { OverviewResponse } from "../../../src/lib/api/overview";
 import type { DebugReport } from "../../../src/lib/api/reports";
+import type { RetrievalQueryResponse } from "../../../src/lib/api/retrieval";
 import type { ChunkPreview, SourceSummary } from "../../../src/lib/api/sources";
 import type { Trace, TraceSummary } from "../../../src/lib/api/traces";
 import type { ApiKey } from "../../../src/lib/api/apiKeys";
@@ -25,6 +26,7 @@ export interface WorkbenchMockState {
   reports: DebugReport[];
   reportDetails: Record<string, DebugReport>;
   apiKeys: ApiKey[];
+  retrievalResponse: RetrievalQueryResponse | null;
 }
 
 const productConfig = {
@@ -133,6 +135,7 @@ export async function installWorkbenchMocks(
     reports: [],
     reportDetails: {},
     apiKeys: [],
+    retrievalResponse: null,
     ...overrides,
   };
 
@@ -157,6 +160,14 @@ export async function installWorkbenchMocks(
   await fulfillJson(page, "**/api/v1/eval-lab/ci/runs", []);
   await fulfillJson(page, "**/api/v1/reports", state.reports);
   await fulfillJson(page, "**/api/v1/api-keys", state.apiKeys);
+
+  if (state.retrievalResponse) {
+    await fulfillJson(
+      page,
+      "**/api/v1/retrieval/query",
+      state.retrievalResponse,
+    );
+  }
 
   for (const [id, trace] of Object.entries(state.traceDetails)) {
     await fulfillJson(page, `**/api/v1/traces/${id}`, trace);

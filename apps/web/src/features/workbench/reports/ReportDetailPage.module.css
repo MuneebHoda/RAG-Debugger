@@ -41,10 +41,6 @@
   text-decoration: none;
 }
 
-.downloadButton {
-  text-decoration: none;
-}
-
 .copyButton:disabled {
   border-color: var(--color-ink-200);
   background: var(--color-ink-100);
@@ -54,6 +50,7 @@
 
 .privacyBanner {
   display: flex;
+  min-width: 0;
   align-items: start;
   gap: 0.65rem;
   border-left: 3px solid var(--color-citron-500);
@@ -63,6 +60,7 @@
 
 .privacyBanner div {
   display: grid;
+  min-width: 0;
   gap: 0.15rem;
 }
 
@@ -73,6 +71,7 @@
 }
 
 .privacyBanner p {
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.75rem;
 }
@@ -100,7 +99,7 @@
 
 .twoColumn {
   display: grid;
-  grid-template-columns: 0.85fr 1.15fr;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   gap: 1rem;
 }
 
@@ -214,6 +213,7 @@
 
 .evidence blockquote {
   margin: 0;
+  overflow-wrap: anywhere;
   border-left: 2px solid var(--color-teal-400);
   padding-left: 0.65rem;
 }
@@ -226,6 +226,8 @@
 .info,
 .warning,
 .critical {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border-radius: 999px;
   background: var(--color-ink-100);
   color: var(--color-ink-700);

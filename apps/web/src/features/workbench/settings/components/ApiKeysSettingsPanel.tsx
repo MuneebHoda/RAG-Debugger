@@ -30,7 +30,10 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
   });
 
   return (
-    <section className={styles.panel} aria-labelledby="api-keys-title">
+    <section
+      className={`panel ${styles.panel}`}
+      aria-labelledby="api-keys-title"
+    >
       <div className={styles.panelHeading}>
         <div>
           <h2 id="api-keys-title">API keys</h2>

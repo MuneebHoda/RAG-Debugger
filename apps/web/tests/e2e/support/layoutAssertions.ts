@@ -55,6 +55,37 @@ export async function expectElementsNotToOverlap(
   expect(overlaps).toBeFalsy();
 }
 
+export async function expectElementContainedBy(
+  element: Locator,
+  container: Locator,
+) {
+  const elementBox = await element.boundingBox();
+  const containerBox = await container.boundingBox();
+  expect(elementBox).not.toBeNull();
+  expect(containerBox).not.toBeNull();
+  if (!elementBox || !containerBox) return;
+
+  const tolerance = 1;
+  expect(elementBox.x).toBeGreaterThanOrEqual(containerBox.x - tolerance);
+  expect(elementBox.y).toBeGreaterThanOrEqual(containerBox.y - tolerance);
+  expect(elementBox.x + elementBox.width).toBeLessThanOrEqual(
+    containerBox.x + containerBox.width + tolerance,
+  );
+  expect(elementBox.y + elementBox.height).toBeLessThanOrEqual(
+    containerBox.y + containerBox.height + tolerance,
+  );
+}
+
+export async function expectMinimumInlineSize(
+  locator: Locator,
+  minimumWidth: number,
+) {
+  const box = await locator.boundingBox();
+  expect(box).not.toBeNull();
+  if (!box) return;
+  expect(box.width).toBeGreaterThanOrEqual(minimumWidth);
+}
+
 export async function expectTextContained(locator: Locator) {
   await expect(locator).toBeVisible();
   const contained = await locator.evaluate((element) => {

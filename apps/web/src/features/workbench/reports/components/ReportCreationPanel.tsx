@@ -45,7 +45,7 @@ export function ReportCreationPanel({
 
   return (
     <section
-      className={styles.creationPanel}
+      className={`panel ${styles.creationPanel}`}
       id="create-report-panel"
       aria-labelledby="create-report"
     >

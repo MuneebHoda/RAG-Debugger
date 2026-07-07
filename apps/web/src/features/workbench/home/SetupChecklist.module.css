@@ -10,6 +10,8 @@
 
 .header {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
@@ -97,11 +99,9 @@
 .current strong,
 .complete strong {
   display: block;
-  overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--color-ink-800);
   font-size: 0.77rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .actionRow {
@@ -114,6 +114,8 @@
 }
 
 .actionRow span {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--color-ink-600);
   font-size: 0.86rem;
   line-height: 1.45;
@@ -173,7 +175,7 @@
   text-decoration: none;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 1150px) {
   .steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }

@@ -40,7 +40,7 @@ export function DocumentDetailPage() {
         >
           Retry
         </button>
-        <Link className={styles.backLink} to="/app/sources">
+        <Link className="secondary-button compact" to="/app/sources">
           Back to Corpus
         </Link>
       </section>
@@ -55,14 +55,12 @@ export function DocumentDetailPage() {
         description="Inspect extraction metadata, warnings, and the exact chunks available to retrieval."
         metadata={
           <>
-            <span className={styles.badge}>
-              {prettyLabel(document.profile)}
-            </span>
-            <span className={styles.badge}>
+            <span className="status-pill">{prettyLabel(document.profile)}</span>
+            <span className="status-pill">
               {document.extraction_quality} extraction
             </span>
             {(document.warnings ?? []).length > 0 ? (
-              <span className={styles.warning}>
+              <span className={`status-pill ${styles.warning}`}>
                 {(document.warnings ?? []).length} warnings
               </span>
             ) : null}
@@ -80,12 +78,12 @@ export function DocumentDetailPage() {
         <Metric label="Checksum" value={document.checksum.slice(0, 12)} />
       </section>
 
-      <section className={styles.panel}>
+      <section className={`panel ${styles.panel}`}>
         <div className={styles.panelHeading}>
           <h2>
             <FileText aria-hidden="true" size={17} /> Chunks
           </h2>
-          <span className={styles.badge}>{chunkCount}</span>
+          <span className="status-pill">{chunkCount}</span>
         </div>
         <ChunkList chunks={chunksQuery.data ?? []} isLoading={false} />
       </section>

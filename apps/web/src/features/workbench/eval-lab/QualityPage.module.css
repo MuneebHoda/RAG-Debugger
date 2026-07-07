@@ -131,6 +131,8 @@
 .cardHeader,
 .caseHeader {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   align-items: start;
   justify-content: space-between;
   gap: 1rem;
@@ -138,6 +140,8 @@
 
 .cardHeader strong,
 .caseHeader strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--color-ink-900);
   font-size: 0.86rem;
 }
@@ -349,6 +353,10 @@
   font-size: 1rem;
 }
 
+.gate > div:last-child {
+  min-width: 0;
+}
+
 .gate p {
   margin-top: 0.2rem;
   overflow-wrap: anywhere;
@@ -386,6 +394,8 @@
 
 .metricRows span {
   display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 0.7rem;
   color: var(--color-ink-600);
@@ -404,6 +414,7 @@
 }
 
 .failureCard strong {
+  overflow-wrap: anywhere;
   color: #7c3925;
 }
 
@@ -416,17 +427,12 @@
 }
 
 .error,
-.message,
 .empty {
   margin: 0;
   overflow-wrap: anywhere;
   color: #8f2626;
   font-size: 0.8rem;
   font-weight: 800;
-}
-
-.message {
-  color: #315b33;
 }
 
 .empty {
