@@ -230,6 +230,22 @@ test("marketing and workbench shells remain route-isolated", async ({
   ).toHaveCount(0);
 });
 
+test("workbench visual primitives stay scoped to authenticated routes", async ({
+  page,
+}) => {
+  await installWorkbenchMocks(page);
+
+  await page.goto("/");
+  await expect(page.locator("[data-workbench-panel]")).toHaveCount(0);
+  await expect(page.locator("[data-workbench-status-pill]")).toHaveCount(0);
+
+  await page.goto("/app/retrieval");
+  await expect(page.locator("[data-workbench-panel]").first()).toBeVisible();
+  await expect(
+    page.locator("[data-workbench-status-pill]").first(),
+  ).toBeVisible();
+});
+
 test("nested empty states preserve readable copy and contained actions", async ({
   page,
 }) => {

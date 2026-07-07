@@ -2,6 +2,7 @@ import { AlertCircle, CheckCircle2, FileText, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import type {
   ChunkPreview,
   ChunkingStrategy,
@@ -96,11 +97,11 @@ export function DocumentList({ documents }: { documents: DocumentSummary[] }) {
             </small>
           </span>
           {(document.warnings ?? []).length > 0 ? (
-            <span className="row-badge warning">
+            <WorkbenchStatusPill tone="warning">
               {(document.warnings ?? []).length} warnings
-            </span>
+            </WorkbenchStatusPill>
           ) : (
-            <span className="row-badge">ready</span>
+            <WorkbenchStatusPill tone="success">ready</WorkbenchStatusPill>
           )}
         </Link>
       ))}
@@ -141,19 +142,17 @@ export function ChunkList({
           {(chunk.quality_flags ?? []).length > 0 ? (
             <div className="quality-badges" aria-label="Chunk quality flags">
               {(chunk.quality_flags ?? []).map((flag) => (
-                <span
-                  className={
-                    flag === "good_evidence_candidate"
-                      ? "quality-badge good"
-                      : "quality-badge warning"
-                  }
+                <WorkbenchStatusPill
                   key={flag}
+                  tone={
+                    flag === "good_evidence_candidate" ? "success" : "warning"
+                  }
                 >
                   {flag === "good_evidence_candidate" ? null : (
                     <ShieldAlert aria-hidden="true" size={13} />
                   )}
                   {CHUNK_QUALITY_LABELS[flag] ?? prettyLabel(flag)}
-                </span>
+                </WorkbenchStatusPill>
               ))}
             </div>
           ) : null}

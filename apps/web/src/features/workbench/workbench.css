@@ -1,39 +1,4 @@
-/* Shared workbench primitives. Route-specific styling belongs in CSS modules. */
-:where([data-workbench-shell]) .panel {
-  border: 1px solid var(--color-ink-200);
-  border-radius: var(--radius-sm);
-  background: white;
-  padding: 1rem;
-}
-
-:where([data-workbench-shell]) .panel-heading {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.85rem;
-}
-
-:where([data-workbench-shell]) .panel-heading h2 {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  margin-bottom: 0;
-  color: var(--color-ink-950);
-  font-size: 1rem;
-}
-
-:where([data-workbench-shell]) .status-pill {
-  border: 1px solid #c9d6df;
-  border-radius: 999px;
-  color: #335466;
-  font-size: 0.72rem;
-  font-weight: 750;
-  padding: 4px 9px;
-  white-space: nowrap;
-}
-
+/* Shared workbench legacy utilities. New surfaces should prefer components/workbench primitives. */
 :where([data-workbench-shell]) .alert {
   display: flex;
   align-items: center;
@@ -105,52 +70,6 @@
   opacity: 0.55;
 }
 
-:where([data-workbench-shell]) .panel-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-:where([data-workbench-shell]) .row-badge,
-:where([data-workbench-shell]) .quality-badge,
-:where([data-workbench-shell]) .strength-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px solid #c9d6df;
-  border-radius: 999px;
-  color: #335466;
-  font-size: 0.72rem;
-  font-weight: 800;
-  padding: 3px 8px;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-:where([data-workbench-shell]) .row-badge.warning,
-:where([data-workbench-shell]) .quality-badge.warning,
-:where([data-workbench-shell]) .strength-pill.weak {
-  border-color: #e5b7a5;
-  background: #fff4ef;
-  color: #7c3925;
-}
-
-:where([data-workbench-shell]) .quality-badge.good,
-:where([data-workbench-shell]) .strength-pill.strong {
-  border-color: #9dc6a0;
-  background: #f0faef;
-  color: #315b33;
-}
-
-:where([data-workbench-shell]) .strength-pill.medium {
-  border-color: #d6c78d;
-  background: #fff9df;
-  color: #66521f;
-}
-
 :where([data-workbench-shell]) .quality-badges {
   display: flex;
   flex-wrap: wrap;
@@ -171,9 +90,5 @@
 @media (max-width: 620px) {
   :where([data-workbench-shell]) .config-grid {
     grid-template-columns: 1fr;
-  }
-
-  :where([data-workbench-shell]) .panel-heading {
-    align-items: flex-start;
   }
 }

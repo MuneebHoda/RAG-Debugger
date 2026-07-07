@@ -101,10 +101,13 @@ requiring extra API calls.
 `WorkbenchPageHeader` provides the shared title, explanation, action, metadata,
 and back-link structure. `WorkbenchEmptyState` provides explicit primary and
 secondary next actions and wraps according to its available panel width rather
-than the viewport alone. Pages keep workflow-specific controls and data fetching
-inside their feature domains. Legacy shared workbench classes are scoped under
-`data-workbench-shell`, while all new shell, page, and component styling uses CSS
-modules.
+than the viewport alone. `WorkbenchPanel`, `WorkbenchToolbar`,
+`WorkbenchStatusPill`, and `WorkbenchMetricCard` own the common authenticated
+workspace surfaces, filter/action rows, state labels, and dense metrics. Pages
+keep workflow-specific controls and data fetching inside their feature domains.
+Legacy shared workbench classes are scoped under `data-workbench-shell` and are
+limited to compatibility utilities; new visual surfaces should use the shared
+workbench primitives plus route-level CSS modules for domain-specific layout.
 
 ## API Boundary
 
@@ -126,6 +129,7 @@ UI tests should mock the narrow domain boundary or the HTTP route relevant to th
 - Global CSS is limited to tokens, base rules, utilities, and application-shell primitives.
 - Route and component styling uses CSS modules.
 - A feature module should not depend on selectors owned by another feature.
+- Authenticated workbench panels, status labels, toolbars, and metric cards should use `components/workbench` primitives before adding page-local variants.
 - Stable boards, score bars, tabs, and tool layouts need explicit responsive dimensions so dynamic data cannot shift controls or overlap text.
 - Grid and flex children that own technical content use `min-width: 0`; paths, identifiers, queries, and evidence wrap safely or use a deliberate local scroll region. Do not mask a child overflow at the page root.
 - Reusable controls placed inside nested panels must respond to their available container width. Viewport breakpoints alone are insufficient for split workbench layouts.

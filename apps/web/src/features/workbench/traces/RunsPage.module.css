@@ -111,41 +111,6 @@
   overflow-wrap: anywhere;
 }
 
-.pill,
-.strong,
-.medium,
-.weak {
-  display: inline-flex;
-  width: fit-content;
-  min-height: 1.65rem;
-  align-items: center;
-  border: 1px solid var(--color-ink-200);
-  border-radius: 999px;
-  color: var(--color-ink-700);
-  font-size: 0.72rem;
-  font-weight: 850;
-  padding: 0 0.55rem;
-  text-transform: capitalize;
-}
-
-.strong {
-  border-color: #9dc6a0;
-  background: #f0faef;
-  color: #315b33;
-}
-
-.medium {
-  border-color: #d6c78d;
-  background: #fff9df;
-  color: #66521f;
-}
-
-.weak {
-  border-color: #e5b7a5;
-  background: #fff4ef;
-  color: #7c3925;
-}
-
 .empty,
 .error {
   display: grid;

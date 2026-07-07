@@ -1,5 +1,6 @@
 import { Database, ServerCog, ShieldCheck, Users } from "lucide-react";
 
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
 import { getCurrentUser } from "../../../../lib/api/auth";
 import { getProductConfig } from "../../../../lib/api/config";
 import styles from "../SettingsPage.module.css";
@@ -10,14 +11,12 @@ export function WorkspaceSettingsPanel({
   user: Awaited<ReturnType<typeof getCurrentUser>>["user"] | undefined;
 }) {
   return (
-    <section className={`panel ${styles.panel}`}>
-      <div className={styles.panelHeading}>
-        <div>
-          <h2>Workspace</h2>
-          <p>Your active team and access level.</p>
-        </div>
-        <Users aria-hidden="true" size={18} />
-      </div>
+    <WorkbenchPanel
+      className={styles.panel}
+      description="Your active team and access level."
+      icon={Users}
+      title="Workspace"
+    >
       <dl className={styles.definitionList}>
         <Definition
           label="Workspace"
@@ -33,7 +32,7 @@ export function WorkspaceSettingsPanel({
           value={user?.user.email ?? "Loading…"}
         />
       </dl>
-    </section>
+    </WorkbenchPanel>
   );
 }
 
@@ -98,14 +97,12 @@ export function RuntimeSettingsPanel({
 
 export function PrivacySettingsPanel() {
   return (
-    <section className={`panel ${styles.panel}`}>
-      <div className={styles.panelHeading}>
-        <div>
-          <h2>Privacy posture</h2>
-          <p>What CorpusLab stores and what remains outside the system.</p>
-        </div>
-        <ShieldCheck aria-hidden="true" size={18} />
-      </div>
+    <WorkbenchPanel
+      className={styles.panel}
+      description="What CorpusLab stores and what remains outside the system."
+      icon={ShieldCheck}
+      title="Privacy posture"
+    >
       <div className={styles.privacyList}>
         <PrivacyItem
           title="Original files are not retained"
@@ -120,7 +117,7 @@ export function PrivacySettingsPanel() {
           detail="Database URLs, password hashes, sessions, and API-key hashes are never exposed by runtime config."
         />
       </div>
-    </section>
+    </WorkbenchPanel>
   );
 }
 
@@ -134,17 +131,13 @@ function ConfigPanel({
   items: Array<[string, string]>;
 }) {
   return (
-    <section className={`panel ${styles.panel}`}>
-      <div className={styles.panelHeading}>
-        <h2>{title}</h2>
-        <Icon aria-hidden="true" size={18} />
-      </div>
+    <WorkbenchPanel className={styles.panel} icon={Icon} title={title}>
       <dl className={styles.definitionList}>
         {items.map(([label, value]) => (
           <Definition key={label} label={label} value={value} />
         ))}
       </dl>
-    </section>
+    </WorkbenchPanel>
   );
 }
 

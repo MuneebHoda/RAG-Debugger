@@ -1,6 +1,9 @@
 import { GitBranch } from "lucide-react";
 
 import { WorkbenchEmptyState } from "../../../../components/workbench/WorkbenchEmptyState";
+import { WorkbenchMetricCard } from "../../../../components/workbench/WorkbenchMetricCard";
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
 import type { CiEvalRun } from "../../../../lib/api/evalLab";
 import styles from "../QualityPage.module.css";
 
@@ -20,13 +23,11 @@ export function CreateDatasetPanel({
   onNameChange: (value: string) => void;
 }) {
   return (
-    <section className={styles.panel}>
-      <div className={styles.panelHeading}>
-        <div>
-          <h2>Create an eval dataset</h2>
-          <p>Group questions that must keep retrieving the right evidence.</p>
-        </div>
-      </div>
+    <WorkbenchPanel
+      className={styles.panel}
+      description="Group questions that must keep retrieving the right evidence."
+      title="Create an eval dataset"
+    >
       <div className={styles.form}>
         <div className={styles.formGrid}>
           <label>
@@ -55,7 +56,7 @@ export function CreateDatasetPanel({
           Create dataset
         </button>
       </div>
-    </section>
+    </WorkbenchPanel>
   );
 }
 
@@ -72,31 +73,38 @@ export function CiRunsView({
   return (
     <>
       <section className={styles.stats} aria-label="CI runs summary">
-        <QualityStat label="Runs" value={String(runs.length)} />
-        <QualityStat label="Passed" value={String(passed)} />
-        <QualityStat label="Failed" value={String(failed)} />
-        <QualityStat
+        <WorkbenchMetricCard label="Runs" value={String(runs.length)} />
+        <WorkbenchMetricCard
+          label="Passed"
+          tone="success"
+          value={String(passed)}
+        />
+        <WorkbenchMetricCard
+          label="Failed"
+          tone={failed > 0 ? "danger" : "neutral"}
+          value={String(failed)}
+        />
+        <WorkbenchMetricCard
           label="Latest gate"
+          tone={gateTone(runs[0]?.gate_status)}
           value={runs[0]?.gate_status ?? "Not run"}
         />
       </section>
-      <section className={styles.panel}>
-        <div className={styles.panelHeading}>
-          <div>
-            <h2>Automated quality gates</h2>
-            <p>Dataset checks submitted by branches, commits, and CI jobs.</p>
-          </div>
-          <GitBranch aria-hidden="true" size={18} />
-        </div>
+      <WorkbenchPanel
+        className={styles.panel}
+        description="Dataset checks submitted by branches, commits, and CI jobs."
+        icon={GitBranch}
+        title="Automated quality gates"
+      >
         <div className={styles.list}>
           {isLoading ? <p className={styles.empty}>Loading CI runs…</p> : null}
           {runs.map((run) => (
             <article className={styles.experimentCard} key={run.id}>
               <div className={styles.cardHeader}>
                 <strong>{run.dataset_name}</strong>
-                <span className={styles[run.gate_status]}>
+                <WorkbenchStatusPill tone={gateTone(run.gate_status)}>
                   {run.gate_status}
-                </span>
+                </WorkbenchStatusPill>
               </div>
               <p>
                 {run.branch ?? "manual"} ·{" "}
@@ -117,16 +125,15 @@ export function CiRunsView({
             />
           ) : null}
         </div>
-      </section>
+      </WorkbenchPanel>
     </>
   );
 }
 
-function QualityStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.stat}>
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </div>
-  );
+function gateTone(
+  status: string | null | undefined,
+): "success" | "danger" | "neutral" {
+  if (status === "passed") return "success";
+  if (status === "failed") return "danger";
+  return "neutral";
 }

@@ -10,6 +10,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import {
   listCiEvalRuns,
   listEvalLabExperiments,
@@ -102,23 +104,23 @@ export function ReportsPage() {
         onCreated={(reportId) => navigate(`/app/reports/${reportId}`)}
       />
 
-      <section
-        className={`panel ${styles.panel}`}
-        aria-labelledby="generated-reports"
+      <WorkbenchPanel
+        actions={
+          <WorkbenchStatusPill tone="info">
+            {reportsQuery.data?.length ?? 0}
+          </WorkbenchStatusPill>
+        }
+        className={styles.panel}
+        description="Saved report snapshots remain tied to their original source."
+        title="Generated reports"
+        titleId="generated-reports"
       >
-        <div className={styles.panelHeading}>
-          <div>
-            <h2 id="generated-reports">Generated reports</h2>
-            <p>Saved report snapshots remain tied to their original source.</p>
-          </div>
-          <span className={styles.count}>{reportsQuery.data?.length ?? 0}</span>
-        </div>
         {reportsQuery.isLoading ? (
           <p className={styles.empty}>Loading audit reports…</p>
         ) : (
           <ReportList reports={reportsQuery.data ?? []} />
         )}
-      </section>
+      </WorkbenchPanel>
 
       <div className={styles.sectionHeading}>
         <div>
@@ -146,7 +148,7 @@ export function ReportsPage() {
             <article className={styles.reportRow} key={run.id}>
               <div className={styles.rowTop}>
                 <strong>{run.report.title}</strong>
-                <span className={styles.failed}>Failed</span>
+                <WorkbenchStatusPill tone="danger">Failed</WorkbenchStatusPill>
               </div>
               <p>{run.report.summary}</p>
               <small>
@@ -180,7 +182,11 @@ export function ReportsPage() {
             >
               <div className={styles.rowTop}>
                 <strong>{trace.query}</strong>
-                <span className={styles.risk}>{trace.evidence_strength}</span>
+                <WorkbenchStatusPill
+                  tone={evidenceTone(trace.evidence_strength)}
+                >
+                  {trace.evidence_strength}
+                </WorkbenchStatusPill>
               </div>
               <p>
                 {trace.failure_labels.length > 0
@@ -214,7 +220,9 @@ export function ReportsPage() {
           >
             <div className={styles.rowTop}>
               <strong>{document.path}</strong>
-              <span className={styles.risk}>{document.extraction_quality}</span>
+              <WorkbenchStatusPill tone="warning">
+                {document.extraction_quality}
+              </WorkbenchStatusPill>
             </div>
             <p>
               {document.warnings
@@ -248,25 +256,23 @@ function CandidatePanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className={`panel ${styles.panel}`}>
-      <div className={styles.panelHeading}>
-        <div className={styles.panelTitle}>
-          <Icon aria-hidden="true" size={17} />
-          <div>
-            <h2>{title}</h2>
-            <p>{description}</p>
-          </div>
-        </div>
-        {action ? (
+    <WorkbenchPanel
+      actions={
+        action ? (
           <Link className={styles.textLink} to={action}>
             Open <ArrowRight aria-hidden="true" size={14} />
           </Link>
         ) : (
-          <span className={styles.count}>{count}</span>
-        )}
-      </div>
+          <WorkbenchStatusPill tone="info">{count}</WorkbenchStatusPill>
+        )
+      }
+      className={styles.panel}
+      description={description}
+      icon={Icon}
+      title={title}
+    >
       <div className={styles.list}>{children}</div>
-    </section>
+    </WorkbenchPanel>
   );
 }
 
@@ -280,4 +286,10 @@ function Empty({ text }: { text: string }) {
 
 function prettyLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function evidenceTone(strength: string): "success" | "warning" | "neutral" {
+  if (strength === "strong") return "success";
+  if (strength === "weak") return "warning";
+  return "neutral";
 }

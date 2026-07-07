@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 import type { DemoQueryId, DemoStatus } from "../../../../lib/api/demo";
 import type { RetrievalMode } from "../../../../lib/api/retrieval";
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
 import styles from "../RetrievalPage.module.css";
 
 const RETRIEVAL_MODES: RetrievalMode[] = ["hybrid", "vector", "lexical"];
@@ -37,14 +39,15 @@ export function RetrievalQueryPanel({
   onTopKChange: (value: number) => void;
 }) {
   return (
-    <div className={`panel ${styles.controls}`}>
-      <div className="panel-heading">
-        <h2>Question</h2>
-        <span className="status-pill">
+    <WorkbenchPanel
+      actions={
+        <WorkbenchStatusPill tone={isLoadingSources ? "info" : "neutral"}>
           {isLoadingSources ? "Loading" : `${documentCount} documents`}
-        </span>
-      </div>
-
+        </WorkbenchStatusPill>
+      }
+      className={styles.controls}
+      title="Question"
+    >
       {demoStatus?.progress.sample_corpus_loaded ? (
         <div
           className={styles.suggestedQueries}
@@ -125,6 +128,6 @@ export function RetrievalQueryPanel({
           {advancedControls}
         </div>
       </details>
-    </div>
+    </WorkbenchPanel>
   );
 }

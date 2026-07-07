@@ -1,3 +1,4 @@
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
 import type { Trace } from "../../../../lib/api/traces";
 import styles from "../TraceDetailPage.module.css";
 import { SaveToQualityPanel } from "./SaveToQualityPanel";
@@ -18,19 +19,17 @@ export function TraceSummaryPanel({ trace }: { trace: Trace }) {
         </section>
       )}
 
-      <section className={styles.panel}>
-        <div className={styles.panelHeading}>
-          <div>
-            <h2>Evidence summary</h2>
-            <p>The answer produced from the strongest retrieved excerpts.</p>
-          </div>
-        </div>
+      <WorkbenchPanel
+        className={styles.panel}
+        description="The answer produced from the strongest retrieved excerpts."
+        title="Evidence summary"
+      >
         <p className={styles.answer}>
           {trace.output ??
             trace.retrieval?.answer.text ??
             "No answer was produced."}
         </p>
-      </section>
+      </WorkbenchPanel>
 
       <SaveToQualityPanel trace={trace} />
     </div>

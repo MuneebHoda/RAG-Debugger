@@ -10,11 +10,12 @@ import {
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
-import { ActivityList } from "../../../components/dashboard/ActivityList";
-import { MetricTile } from "../../../components/dashboard/MetricTile";
 import { ProgressBar } from "../../../components/dashboard/ProgressBar";
 import { RiskList } from "../../../components/dashboard/RiskList";
+import { ActivityList } from "../../../components/dashboard/ActivityList";
+import { WorkbenchMetricCard } from "../../../components/workbench/WorkbenchMetricCard";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
 import {
   getOverview,
   type OverviewMetric,
@@ -129,10 +130,13 @@ function HomeContent({
 
       <section className={styles.metrics} aria-label="Workspace metrics">
         {primaryMetrics.map((metric) => (
-          <MetricTile
+          <WorkbenchMetricCard
             key={metric.id}
-            metric={metric}
+            detail={metric.detail}
             icon={metricIcon(metric)}
+            label={metric.label}
+            tone={metric.tone}
+            value={metric.value}
           />
         ))}
       </section>
@@ -146,25 +150,26 @@ function HomeContent({
         <summary>System details</summary>
         <div className={styles.detailsGrid}>
           <DocumentMix overview={overview} />
-          <section className={`panel ${styles.panel}`}>
-            <div className={styles.panelHeading}>
-              <div>
-                <p>Corpus totals</p>
-                <h2>Storage and quality signals</h2>
-              </div>
-            </div>
+          <WorkbenchPanel
+            className={styles.panel}
+            eyebrow="Corpus totals"
+            title="Storage and quality signals"
+          >
             <div className={styles.secondaryMetrics}>
               {overview.metrics
                 .filter((metric) => !primaryMetricIds.has(metric.id))
                 .map((metric) => (
-                  <MetricTile
+                  <WorkbenchMetricCard
                     key={metric.id}
-                    metric={metric}
+                    detail={metric.detail}
                     icon={metricIcon(metric)}
+                    label={metric.label}
+                    tone={metric.tone}
+                    value={metric.value}
                   />
                 ))}
             </div>
-          </section>
+          </WorkbenchPanel>
         </div>
       </details>
     </>
@@ -188,18 +193,13 @@ function DocumentMix({ overview }: { overview: OverviewResponse }) {
   );
 
   return (
-    <section
-      className={`panel ${styles.panel}`}
-      aria-labelledby="document-mix-title"
+    <WorkbenchPanel
+      actions={<span>{totalDocuments} documents</span>}
+      className={styles.panel}
+      eyebrow="Document mix"
+      title="Profiles"
+      titleId="document-mix-title"
     >
-      <div className={styles.panelHeading}>
-        <div>
-          <p>Document mix</p>
-          <h2 id="document-mix-title">Profiles</h2>
-        </div>
-        <span>{totalDocuments} documents</span>
-      </div>
-
       <div className={styles.profileList}>
         {overview.document_mix.length === 0 ? (
           <div className={styles.noProfiles}>
@@ -222,7 +222,7 @@ function DocumentMix({ overview }: { overview: OverviewResponse }) {
           ))
         )}
       </div>
-    </section>
+    </WorkbenchPanel>
   );
 }
 

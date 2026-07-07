@@ -34,6 +34,24 @@ must contain their technical strings after a viewport resize.
 
 Feature-level Vitest tests remain responsible for loading, error, empty, success, and mutation states. Playwright is reserved for layout, navigation, responsive behavior, and workflows that cross a real route or HTTP boundary.
 
+## Visual System Primitives
+
+Authenticated workbench pages share a small primitive set in
+`apps/web/src/components/workbench`:
+
+- `WorkbenchPageHeader`: one page title, explanation, metadata, actions, and back-link.
+- `WorkbenchPanel`: section/card surfaces with optional heading, icon, description, and actions.
+- `WorkbenchToolbar`: filter/action rows that wrap safely inside narrow panels.
+- `WorkbenchStatusPill`: text-first status labels for evidence, gate, privacy, readiness, and count states.
+- `WorkbenchMetricCard`: compact metric summaries for dashboard and quality totals.
+- `WorkbenchEmptyState`: one explanation plus primary and secondary recovery actions.
+
+Use these primitives for repeated workbench structure before adding a page-local
+variant. Domain CSS modules still own workflow-specific grids, evidence cards,
+forms, score bars, timelines, and intentionally scrollable technical previews.
+Do not reintroduce global `.panel`, `.status-pill`, or feature-specific badge
+systems for new workbench UI.
+
 ## Deterministic Stress Fixtures
 
 The fixtures under `apps/web/tests/e2e/fixtures` intentionally include:

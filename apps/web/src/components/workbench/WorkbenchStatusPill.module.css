@@ -1,0 +1,66 @@
+.pill {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 1.6rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid var(--color-ink-200);
+  border-radius: 999px;
+  background: white;
+  color: var(--color-ink-700);
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  padding: 0.2rem 0.55rem;
+  text-align: center;
+}
+
+.neutral {
+  border-color: var(--color-ink-200);
+  color: var(--color-ink-700);
+}
+
+.info {
+  border-color: color-mix(
+    in srgb,
+    var(--color-blue-500) 35%,
+    var(--color-ink-200)
+  );
+  background: color-mix(in srgb, var(--color-blue-500) 8%, white);
+  color: #23558d;
+}
+
+.success {
+  border-color: color-mix(
+    in srgb,
+    var(--color-teal-500) 35%,
+    var(--color-ink-200)
+  );
+  background: color-mix(in srgb, var(--color-teal-500) 8%, white);
+  color: var(--color-teal-900);
+}
+
+.warning {
+  border-color: #d6c78d;
+  background: #fff9df;
+  color: #66521f;
+}
+
+.danger {
+  border-color: #e5b7a5;
+  background: #fff4ef;
+  color: #7c3925;
+}
+
+.accent {
+  border-color: color-mix(
+    in srgb,
+    var(--color-citron-500) 65%,
+    var(--color-ink-200)
+  );
+  background: color-mix(in srgb, var(--color-citron-300) 22%, white);
+  color: var(--color-ink-900);
+}

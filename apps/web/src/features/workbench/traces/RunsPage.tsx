@@ -6,6 +6,7 @@ import { Link } from "react-router-dom";
 import { listTraces } from "../../../lib/api/traces";
 import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchToolbar } from "../../../components/workbench/WorkbenchToolbar";
 import { TraceList } from "./components/TraceList";
 import styles from "./RunsPage.module.css";
 import { filterRuns, type RunFilter } from "./utils/runFilters";
@@ -36,7 +37,7 @@ export function RunsPage() {
         titleId="runs-title"
       />
 
-      <div className={styles.toolbar}>
+      <WorkbenchToolbar className={styles.toolbar} label="Run filters">
         <label className={styles.search}>
           <Search aria-hidden="true" size={16} />
           <input
@@ -57,7 +58,7 @@ export function RunsPage() {
           <option value="attention">Needs attention</option>
           <option value="strong">Strong evidence</option>
         </select>
-      </div>
+      </WorkbenchToolbar>
 
       {runsQuery.isLoading ? (
         <div className={styles.empty}>Loading runs…</div>

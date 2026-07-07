@@ -1,6 +1,7 @@
 import { Database, Loader2, RefreshCw } from "lucide-react";
 
 import type { EmbeddingStatus } from "../../../../lib/api/embeddings";
+import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
 import styles from "../RetrievalPage.module.css";
 
 export function EmbeddingPanel({
@@ -27,7 +28,9 @@ export function EmbeddingPanel({
             : "Status unavailable"}
         </small>
       </div>
-      <span className="status-pill">{readiness}</span>
+      <WorkbenchStatusPill tone={readiness === "Ready" ? "success" : "warning"}>
+        {readiness}
+      </WorkbenchStatusPill>
       <button
         className="secondary-button"
         disabled={isIndexing || status?.total_chunks === 0}

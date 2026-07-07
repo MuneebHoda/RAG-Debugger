@@ -1,18 +1,18 @@
 import type { RetrievalQueryHit } from "../../../../lib/api/retrieval";
 import type { Trace } from "../../../../lib/api/traces";
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
 import styles from "../TraceDetailPage.module.css";
 import { TraceScoreBars } from "./TraceMetrics";
 
 export function TraceEvidencePanel({ trace }: { trace: Trace }) {
   const hits = trace.retrieval?.hits ?? [];
   return (
-    <section className={styles.panel}>
-      <div className={styles.panelHeading}>
-        <div>
-          <h2>Ranked evidence</h2>
-          <p>{hits.length} chunks were returned for this run.</p>
-        </div>
-      </div>
+    <WorkbenchPanel
+      className={styles.panel}
+      description={`${hits.length} chunks were returned for this run.`}
+      title="Ranked evidence"
+    >
       {hits.length === 0 ? (
         <p className={styles.answer}>No evidence was retrieved.</p>
       ) : (
@@ -31,7 +31,7 @@ export function TraceEvidencePanel({ trace }: { trace: Trace }) {
           })}
         </div>
       )}
-    </section>
+    </WorkbenchPanel>
   );
 }
 
@@ -49,9 +49,9 @@ function EvidenceCard({
         <strong>
           #{hit.rank} {hit.document.path}
         </strong>
-        <span className={styles[hit.evidence_strength]}>
+        <WorkbenchStatusPill tone={evidenceTone(hit.evidence_strength)}>
           {hit.evidence_strength}
-        </span>
+        </WorkbenchStatusPill>
       </div>
       <p>{hit.snippet}</p>
       <div
@@ -79,6 +79,14 @@ function EvidenceCard({
       <TraceScoreBars explanation={explanation} hit={hit} />
     </article>
   );
+}
+
+function evidenceTone(
+  strength: RetrievalQueryHit["evidence_strength"],
+): "success" | "warning" | "neutral" {
+  if (strength === "strong") return "success";
+  if (strength === "weak") return "warning";
+  return "neutral";
 }
 
 function formatSupportReason(reason: string): string {

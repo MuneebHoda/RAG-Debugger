@@ -1,6 +1,7 @@
 import { FilePlus2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
 import type { RetrievalEvalExperiment } from "../../../../lib/api/evalLab";
 import type { DebugReportPrivacyMode } from "../../../../lib/api/reports";
 import type { TraceSummary } from "../../../../lib/api/traces";
@@ -44,21 +45,14 @@ export function ReportCreationPanel({
   }
 
   return (
-    <section
-      className={`panel ${styles.creationPanel}`}
+    <WorkbenchPanel
+      className={styles.creationPanel}
+      description="Turn a saved run or Eval Lab experiment into a reviewable diagnosis."
+      icon={FilePlus2}
       id="create-report-panel"
-      aria-labelledby="create-report"
+      title="Create an audit report"
+      titleId="create-report"
     >
-      <div className={styles.panelHeading}>
-        <div>
-          <h2 id="create-report">Create an audit report</h2>
-          <p>
-            Turn a saved run or Eval Lab experiment into a reviewable diagnosis.
-          </p>
-        </div>
-        <FilePlus2 aria-hidden="true" size={18} />
-      </div>
-
       <form className={styles.creationForm} onSubmit={submit}>
         <div className={styles.formField}>
           <label htmlFor="report-source-type">Report source</label>
@@ -120,7 +114,7 @@ export function ReportCreationPanel({
             : "The report could not be created."}
         </p>
       ) : null}
-    </section>
+    </WorkbenchPanel>
   );
 }
 

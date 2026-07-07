@@ -10,7 +10,10 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
+import { WorkbenchMetricCard } from "../../../components/workbench/WorkbenchMetricCard";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import {
   createEvalLabDataset,
   listCiEvalRuns,
@@ -106,10 +109,20 @@ export function QualityPage() {
       ) : (
         <>
           <section className={styles.stats} aria-label="Eval Lab summary">
-            <Stat label="Datasets" value={String(datasets.length)} />
-            <Stat label="Cases" value={String(totalCases)} />
-            <Stat label="Experiments" value={String(experiments.length)} />
-            <Stat label="Latest gate" value={latestGate?.status ?? "Not run"} />
+            <WorkbenchMetricCard
+              label="Datasets"
+              value={String(datasets.length)}
+            />
+            <WorkbenchMetricCard label="Cases" value={String(totalCases)} />
+            <WorkbenchMetricCard
+              label="Experiments"
+              value={String(experiments.length)}
+            />
+            <WorkbenchMetricCard
+              label="Latest gate"
+              tone={gateTone(latestGate?.status)}
+              value={latestGate?.status ?? "Not run"}
+            />
           </section>
 
           {createOpen ? (
@@ -124,13 +137,11 @@ export function QualityPage() {
           ) : null}
 
           <div className={styles.grid}>
-            <section className={styles.panel}>
-              <div className={styles.panelHeading}>
-                <div>
-                  <h2>Datasets</h2>
-                  <p>Manage expected evidence and run retrieval experiments.</p>
-                </div>
-              </div>
+            <WorkbenchPanel
+              className={styles.panel}
+              description="Manage expected evidence and run retrieval experiments."
+              title="Datasets"
+            >
               <div className={styles.list}>
                 {datasetsQuery.isLoading ? (
                   <p className={styles.empty}>Loading datasets…</p>
@@ -143,13 +154,11 @@ export function QualityPage() {
                   >
                     <div className={styles.cardHeader}>
                       <strong>{dataset.name}</strong>
-                      <span
-                        className={
-                          styles[dataset.latest_gate?.status ?? "neutral"]
-                        }
+                      <WorkbenchStatusPill
+                        tone={gateTone(dataset.latest_gate?.status)}
                       >
                         {dataset.latest_gate?.status ?? "Not run"}
-                      </span>
+                      </WorkbenchStatusPill>
                     </div>
                     <p>{dataset.description ?? "No description"}</p>
                     <p>
@@ -174,15 +183,13 @@ export function QualityPage() {
                   />
                 ) : null}
               </div>
-            </section>
+            </WorkbenchPanel>
 
-            <section className={styles.panel}>
-              <div className={styles.panelHeading}>
-                <div>
-                  <h2>Recent experiments</h2>
-                  <p>Latest mode comparisons and release-gate decisions.</p>
-                </div>
-              </div>
+            <WorkbenchPanel
+              className={styles.panel}
+              description="Latest mode comparisons and release-gate decisions."
+              title="Recent experiments"
+            >
               <div className={styles.list}>
                 {experiments.slice(0, 5).map((experiment) => (
                   <Link
@@ -192,14 +199,16 @@ export function QualityPage() {
                   >
                     <div className={styles.cardHeader}>
                       <strong>{experiment.name}</strong>
-                      <span className={styles[experiment.gate.status]}>
-                        {experiment.gate.status === "passed" ? (
-                          <CheckCircle2 aria-hidden="true" size={13} />
-                        ) : (
-                          <XCircle aria-hidden="true" size={13} />
-                        )}
+                      <WorkbenchStatusPill
+                        icon={
+                          experiment.gate.status === "passed"
+                            ? CheckCircle2
+                            : XCircle
+                        }
+                        tone={gateTone(experiment.gate.status)}
+                      >
                         {experiment.gate.status}
-                      </span>
+                      </WorkbenchStatusPill>
                     </div>
                     <p>
                       {experiment.dataset_name} · {experiment.modes.join(", ")}
@@ -229,7 +238,7 @@ export function QualityPage() {
                   />
                 ) : null}
               </div>
-            </section>
+            </WorkbenchPanel>
           </div>
         </>
       )}
@@ -237,11 +246,10 @@ export function QualityPage() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.stat}>
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </div>
-  );
+function gateTone(
+  status: string | null | undefined,
+): "success" | "danger" | "neutral" {
+  if (status === "passed") return "success";
+  if (status === "failed") return "danger";
+  return "neutral";
 }

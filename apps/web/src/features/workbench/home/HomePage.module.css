@@ -3,13 +3,6 @@
   gap: 1rem;
 }
 
-.panelHeading p {
-  color: var(--color-teal-900);
-  font-size: 0.7rem;
-  font-weight: 900;
-  text-transform: uppercase;
-}
-
 .alert {
   display: flex;
   flex-wrap: wrap;
@@ -132,31 +125,6 @@
   display: grid;
   min-width: 0;
   gap: 0.85rem;
-}
-
-.panelHeading {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.panelHeading p,
-.panelHeading h2 {
-  margin: 0;
-}
-
-.panelHeading h2 {
-  color: var(--color-ink-950);
-  font-size: 1rem;
-}
-
-.panelHeading span {
-  color: var(--color-ink-600);
-  font-size: 0.75rem;
-  font-weight: 850;
 }
 
 .profileList {

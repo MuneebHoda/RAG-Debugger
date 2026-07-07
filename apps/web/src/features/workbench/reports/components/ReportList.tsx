@@ -2,6 +2,7 @@ import { ArrowRight, FileCheck2 } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { WorkbenchEmptyState } from "../../../../components/workbench/WorkbenchEmptyState";
+import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
 import type { DebugReport } from "../../../../lib/api/reports";
 import { formatDateTime } from "../../../../lib/dateTime";
 import styles from "../ReportsPage.module.css";
@@ -33,9 +34,9 @@ export function ReportList({ reports }: { reports: DebugReport[] }) {
             <p>{report.executive_summary}</p>
           </div>
           <footer>
-            <span className={styles[privacyTone(report.privacy_mode)]}>
+            <WorkbenchStatusPill tone={privacyTone(report.privacy_mode)}>
               {prettyLabel(report.privacy_mode)}
-            </span>
+            </WorkbenchStatusPill>
             <small>{formatDateTime(report.created_at)}</small>
             <ArrowRight aria-hidden="true" size={15} />
           </footer>
@@ -49,8 +50,8 @@ function sourceLabel(report: DebugReport) {
   return prettyLabel(report.source.type);
 }
 
-function privacyTone(mode: DebugReport["privacy_mode"]) {
-  return mode === "full_local_only" ? "localBadge" : "privacyBadge";
+function privacyTone(mode: DebugReport["privacy_mode"]): "warning" | "success" {
+  return mode === "full_local_only" ? "warning" : "success";
 }
 
 function prettyLabel(value: string) {

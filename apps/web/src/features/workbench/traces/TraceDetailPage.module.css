@@ -3,44 +3,6 @@
   gap: 1rem;
 }
 
-.strong,
-.medium,
-.weak,
-.mixed,
-.failing {
-  text-transform: capitalize;
-}
-
-.strong {
-  border-color: #9dc6a0;
-  background: #f0faef;
-  color: #315b33;
-}
-
-.medium {
-  border-color: #d6c78d;
-  background: #fff9df;
-  color: #66521f;
-}
-
-.weak {
-  border-color: #e5b7a5;
-  background: #fff4ef;
-  color: #7c3925;
-}
-
-.mixed {
-  border-color: #d6c78d;
-  background: #fff9df;
-  color: #66521f;
-}
-
-.failing {
-  border-color: #dda8a8;
-  background: #fff0f0;
-  color: #8f2626;
-}
-
 .tabs {
   display: flex;
   gap: 0.2rem;

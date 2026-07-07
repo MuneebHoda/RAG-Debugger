@@ -2,7 +2,10 @@ import { AlertTriangle, FileText } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
+import { WorkbenchMetricCard } from "../../../components/workbench/WorkbenchMetricCard";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import { listDocumentChunks, listSources } from "../../../lib/api/sources";
 import { ChunkList } from "./SourcesPanels";
 import styles from "./DocumentDetailPage.module.css";
@@ -55,14 +58,16 @@ export function DocumentDetailPage() {
         description="Inspect extraction metadata, warnings, and the exact chunks available to retrieval."
         metadata={
           <>
-            <span className="status-pill">{prettyLabel(document.profile)}</span>
-            <span className="status-pill">
+            <WorkbenchStatusPill tone="info">
+              {prettyLabel(document.profile)}
+            </WorkbenchStatusPill>
+            <WorkbenchStatusPill tone="neutral">
               {document.extraction_quality} extraction
-            </span>
+            </WorkbenchStatusPill>
             {(document.warnings ?? []).length > 0 ? (
-              <span className={`status-pill ${styles.warning}`}>
+              <WorkbenchStatusPill tone="warning">
                 {(document.warnings ?? []).length} warnings
-              </span>
+              </WorkbenchStatusPill>
             ) : null}
           </>
         }
@@ -72,31 +77,36 @@ export function DocumentDetailPage() {
       />
 
       <section className={styles.summary} aria-label="Document summary">
-        <Metric label="Type" value={document.mime_type ?? "Unknown"} />
-        <Metric label="Size" value={formatBytes(document.byte_size)} />
-        <Metric label="Chunks" value={String(chunkCount)} />
-        <Metric label="Checksum" value={document.checksum.slice(0, 12)} />
+        <WorkbenchMetricCard
+          label="Type"
+          value={document.mime_type ?? "Unknown"}
+        />
+        <WorkbenchMetricCard
+          label="Size"
+          value={formatBytes(document.byte_size)}
+        />
+        <WorkbenchMetricCard
+          label="Chunks"
+          tone="info"
+          value={String(chunkCount)}
+        />
+        <WorkbenchMetricCard
+          label="Checksum"
+          value={document.checksum.slice(0, 12)}
+        />
       </section>
 
-      <section className={`panel ${styles.panel}`}>
-        <div className={styles.panelHeading}>
-          <h2>
-            <FileText aria-hidden="true" size={17} /> Chunks
-          </h2>
-          <span className="status-pill">{chunkCount}</span>
-        </div>
+      <WorkbenchPanel
+        actions={
+          <WorkbenchStatusPill tone="info">{chunkCount}</WorkbenchStatusPill>
+        }
+        className={styles.panel}
+        icon={FileText}
+        title="Chunks"
+      >
         <ChunkList chunks={chunksQuery.data ?? []} isLoading={false} />
-      </section>
+      </WorkbenchPanel>
     </section>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className={styles.metric}>
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </div>
   );
 }
 

@@ -7,6 +7,7 @@ import {
   revokeApiKey,
   type ApiKey,
 } from "../../../../lib/api/apiKeys";
+import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
 import { formatDateTime } from "../../../../lib/dateTime";
 import styles from "../SettingsPage.module.css";
 
@@ -30,18 +31,13 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
   });
 
   return (
-    <section
-      className={`panel ${styles.panel}`}
-      aria-labelledby="api-keys-title"
+    <WorkbenchPanel
+      className={styles.panel}
+      description="Create workspace-scoped credentials for CI quality gates."
+      icon={KeyRound}
+      title="API keys"
+      titleId="api-keys-title"
     >
-      <div className={styles.panelHeading}>
-        <div>
-          <h2 id="api-keys-title">API keys</h2>
-          <p>Create workspace-scoped credentials for CI quality gates.</p>
-        </div>
-        <KeyRound aria-hidden="true" size={18} />
-      </div>
-
       {createdSecret ? (
         <div className={styles.secretBox} aria-label="Created API key secret">
           <span>This secret is shown once</span>
@@ -110,6 +106,6 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
           <p className={styles.empty}>No API keys yet.</p>
         ) : null}
       </div>
-    </section>
+    </WorkbenchPanel>
   );
 }

@@ -9,6 +9,7 @@ import {
 import { Link } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import { TraceEvidencePanel } from "./components/TraceEvidencePanel";
 import { TraceRerunPanel } from "./components/TraceRerunPanel";
@@ -63,18 +64,20 @@ export function TraceDetailPage() {
         description={trace.summary}
         metadata={
           <>
-            <span className="status-pill">{trace.status}</span>
-            <span
-              className={`status-pill ${styles[trace.evidence_strength ?? "weak"]}`}
+            <WorkbenchStatusPill tone="neutral">
+              {trace.status}
+            </WorkbenchStatusPill>
+            <WorkbenchStatusPill
+              tone={evidenceTone(trace.evidence_strength ?? "weak")}
             >
               {trace.evidence_strength ?? "weak"} evidence
-            </span>
-            <span className="status-pill">
+            </WorkbenchStatusPill>
+            <WorkbenchStatusPill tone="info">
               {trace.retrieval?.run.retrieval_mode ?? "unknown"}
-            </span>
-            <span className="status-pill">
+            </WorkbenchStatusPill>
+            <WorkbenchStatusPill tone="neutral">
               {trace.retrieval?.run.latency_ms ?? 0} ms
-            </span>
+            </WorkbenchStatusPill>
           </>
         }
         section="Saved retrieval run"
@@ -103,4 +106,12 @@ export function TraceDetailPage() {
       {activeTab === "compare" ? <TraceRerunPanel trace={trace} /> : null}
     </section>
   );
+}
+
+function evidenceTone(
+  strength: "strong" | "medium" | "weak",
+): "success" | "warning" | "neutral" {
+  if (strength === "strong") return "success";
+  if (strength === "weak") return "warning";
+  return "neutral";
 }
