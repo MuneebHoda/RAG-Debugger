@@ -58,6 +58,9 @@ describe("guided Eval Lab workflow", () => {
       await screen.findByRole("heading", { name: "Eval Lab" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByText(/eval lab is the measurement step/i),
+    ).toBeInTheDocument();
+    expect(
       await screen.findByText("Production corpus gate"),
     ).toBeInTheDocument();
     expect(await screen.findAllByText("failed")).not.toHaveLength(0);
@@ -76,6 +79,9 @@ describe("guided Eval Lab workflow", () => {
     expect(await screen.findByText("No CI quality runs")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /Manage API keys/ }),
+    ).toHaveAttribute("href", "/app/settings?tab=api-keys");
+    expect(
+      screen.getByRole("link", { name: /Open API key setup/ }),
     ).toHaveAttribute("href", "/app/settings?tab=api-keys");
   });
 

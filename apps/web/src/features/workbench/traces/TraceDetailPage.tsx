@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import { TraceEvidencePanel } from "./components/TraceEvidencePanel";
 import { TraceRerunPanel } from "./components/TraceRerunPanel";
@@ -83,6 +84,13 @@ export function TraceDetailPage() {
         section="Saved retrieval run"
         title={trace.input}
         titleId="run-title"
+      />
+
+      <WorkbenchWorkflowGuide
+        currentStep="trace"
+        impact="Use the diagnosis to decide whether the fix belongs in corpus coverage, chunking, embeddings, ranking mode, citations, or eval coverage."
+        nextAction={{ label: "Add to Quality", href: "#quality" }}
+        purpose="Run detail explains what happened, which evidence caused it, and what to try before turning the run into an eval or audit report."
       />
 
       <div className={styles.tabs} role="tablist" aria-label="Run details">

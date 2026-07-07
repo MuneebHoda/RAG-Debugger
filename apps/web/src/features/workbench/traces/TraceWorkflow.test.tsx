@@ -66,6 +66,9 @@ describe("guided run workflow", () => {
 
     expect(await screen.findByText(traceSummary.query)).toBeInTheDocument();
     expect(
+      screen.getByText(/trace debugger is the diagnosis step/i),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("link", { name: /gpu embedding workers/i }),
     ).toHaveAttribute("href", `/app/traces/${traceId}`);
   });
@@ -80,6 +83,9 @@ describe("guided run workflow", () => {
     );
 
     expect(await screen.findByText(/primary diagnosis/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/run detail explains what happened/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /evidence is too weak/i }),
     ).toBeInTheDocument();

@@ -35,48 +35,56 @@ const routeCases = [
     heading: "Home",
     nav: "Home",
     primary: { role: "button", name: "Load sample corpus" },
+    workflow: /home is the command center/i,
   },
   {
     path: "/app/sources",
     heading: "Corpus",
     nav: "Corpus",
     primary: { role: "button", name: "Ingest files" },
+    workflow: /corpus is the build step/i,
   },
   {
     path: "/app/retrieval",
     heading: "Retrieval",
     nav: "Retrieval",
     primary: { role: "button", name: "Run retrieval" },
+    workflow: /retrieval is the test step/i,
   },
   {
     path: "/app/traces",
     heading: "Trace Debugger",
     nav: "Trace Debugger",
     primary: { role: "link", name: "New retrieval test" },
+    workflow: /trace debugger is the diagnosis step/i,
   },
   {
     path: "/app/evals",
     heading: "Eval Lab",
     nav: "Eval Lab",
     primary: { role: "button", name: "New dataset" },
+    workflow: /eval lab is the measurement step/i,
   },
   {
     path: "/app/evals?view=ci-runs",
     heading: "CI Runs",
     nav: "CI Runs",
     primary: { role: "link", name: "Manage API keys" },
+    workflow: /ci runs show automated eval lab decisions/i,
   },
   {
     path: "/app/reports",
     heading: "Audit Reports",
     nav: "Audit Reports",
     primary: { role: "link", name: "Create audit report" },
+    workflow: /audit reports are the share step/i,
   },
   {
     path: "/app/settings",
     heading: "Settings",
     nav: "Settings",
     primary: { role: "tab", name: "Workspace" },
+    workflow: /settings is the admin step/i,
   },
 ] as const;
 
@@ -103,6 +111,8 @@ for (const viewport of viewports) {
           exact: true,
         });
         await expect(primary.first()).toBeVisible();
+        await expect(page.getByText(routeCase.workflow)).toBeVisible();
+        await expect(page.getByLabel("RAG quality loop").first()).toBeVisible();
 
         const navigation = page.getByRole("complementary", {
           name: "Workspace navigation",

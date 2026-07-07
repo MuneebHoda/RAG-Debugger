@@ -2,6 +2,7 @@ import { Search } from "lucide-react";
 
 import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import { EmbeddingPanel } from "./components/EmbeddingPanel";
 import { RetrievalFiltersPanel } from "./components/RetrievalFiltersPanel";
 import { RetrievalQueryPanel } from "./components/RetrievalQueryPanel";
@@ -33,6 +34,23 @@ export function RetrievalPage() {
           title="Add a corpus before testing retrieval"
         />
       ) : null}
+
+      <WorkbenchWorkflowGuide
+        currentStep="retrieval"
+        impact="Retrieval can rank broad candidates, but the Evidence Summary only answers when chunk body text passes answerability."
+        nextAction={
+          workbench.response
+            ? {
+                disabled: workbench.isSavingTrace,
+                label: workbench.isSavingTrace
+                  ? "Saving run"
+                  : "Save run for diagnosis",
+                onClick: () => void workbench.saveTrace(),
+              }
+            : { label: "Run retrieval", href: "#retrieval-question" }
+        }
+        purpose="Retrieval is the test step: ask one question, compare ranking modes, and inspect which chunks can actually support an answer."
+      />
 
       <section className={styles.layout}>
         <RetrievalQueryPanel

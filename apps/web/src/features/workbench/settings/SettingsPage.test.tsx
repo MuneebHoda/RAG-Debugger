@@ -31,6 +31,7 @@ describe("SettingsPage", () => {
     expect(
       await screen.findByRole("heading", { name: "Settings" }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/settings is the admin step/i)).toBeInTheDocument();
     const apiKeysTab = screen.getByRole("tab", { name: "API keys" });
     apiKeysTab.focus();
     expect(apiKeysTab).toHaveFocus();

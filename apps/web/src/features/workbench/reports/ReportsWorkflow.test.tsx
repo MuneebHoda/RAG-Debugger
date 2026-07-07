@@ -59,6 +59,9 @@ describe("audit reports workbench", () => {
     );
 
     expect(await screen.findByText(report.title)).toBeInTheDocument();
+    expect(
+      screen.getByText(/audit reports are the share step/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("Run diagnoses")).toBeInTheDocument();
     expect(screen.getAllByText(traceSummary.query)).toHaveLength(2);
     expect(screen.getByText("Corpus findings")).toBeInTheDocument();

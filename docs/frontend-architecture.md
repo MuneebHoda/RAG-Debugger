@@ -105,6 +105,11 @@ than the viewport alone. `WorkbenchPanel`, `WorkbenchToolbar`,
 `WorkbenchStatusPill`, and `WorkbenchMetricCard` own the common authenticated
 workspace surfaces, filter/action rows, state labels, and dense metrics. Pages
 keep workflow-specific controls and data fetching inside their feature domains.
+`WorkbenchWorkflowGuide` is the shared first-time-user orientation layer. It
+connects a page to the Corpus → Chunks → Embeddings → Retrieval → Trace → Eval
+→ CI gate → Report loop, explains why the page affects retrieval quality, and
+surfaces one recommended next action. Do not re-create this guidance with
+page-local cards unless the workflow is genuinely domain-specific.
 Legacy shared workbench classes are scoped under `data-workbench-shell` and are
 limited to compatibility utilities; new visual surfaces should use the shared
 workbench primitives plus route-level CSS modules for domain-specific layout.

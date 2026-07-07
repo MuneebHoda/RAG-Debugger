@@ -7,6 +7,7 @@ import { listTraces } from "../../../lib/api/traces";
 import { WorkbenchEmptyState } from "../../../components/workbench/WorkbenchEmptyState";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { WorkbenchToolbar } from "../../../components/workbench/WorkbenchToolbar";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import { TraceList } from "./components/TraceList";
 import styles from "./RunsPage.module.css";
 import { filterRuns, type RunFilter } from "./utils/runFilters";
@@ -35,6 +36,20 @@ export function RunsPage() {
         section="Debug"
         title="Trace Debugger"
         titleId="runs-title"
+      />
+
+      <WorkbenchWorkflowGuide
+        currentStep="trace"
+        impact="A saved run freezes the query, ranking, answerability, failure labels, and score explanations so the team can debug the same evidence."
+        nextAction={
+          runsQuery.data && runsQuery.data.length > 0
+            ? {
+                label: "Open latest run",
+                to: `/app/traces/${runsQuery.data[0].id}`,
+              }
+            : { label: "Test retrieval", to: "/app/retrieval" }
+        }
+        purpose="Trace Debugger is the diagnosis step: turn a retrieval attempt into an inspectable run with causes and next actions."
       />
 
       <WorkbenchToolbar className={styles.toolbar} label="Run filters">

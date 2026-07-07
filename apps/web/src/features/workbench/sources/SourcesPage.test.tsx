@@ -29,6 +29,12 @@ describe("SourcesPage", () => {
     expect(
       await screen.findByRole("heading", { name: /corpus/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/corpus is the build step/i)).toBeInTheDocument();
+    expect(
+      screen
+        .getAllByText("Corpus")
+        .find((element) => element.getAttribute("aria-current") === "step"),
+    ).toBeTruthy();
     expect(screen.getByLabelText(/choose files/i)).toBeInTheDocument();
     expect(screen.getByText(/advanced chunking/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/chunking strategy/i)).toHaveValue(
