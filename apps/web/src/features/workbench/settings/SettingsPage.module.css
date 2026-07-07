@@ -3,11 +3,6 @@
   gap: 1rem;
 }
 
-.panelHeading h2,
-.panelHeading p {
-  margin: 0;
-}
-
 .tabs {
   display: flex;
   gap: 0.25rem;
@@ -66,24 +61,6 @@
 
 .grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.panelHeading {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.panelHeading h2 {
-  color: var(--color-ink-950);
-  font-size: 1rem;
-}
-
-.panelHeading p {
-  margin-top: 0.2rem;
-  color: var(--color-ink-600);
-  font-size: 0.78rem;
 }
 
 .definitionList {

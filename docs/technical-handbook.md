@@ -34,6 +34,7 @@ The web app lives in `apps/web/src`.
 - `features/auth` owns the login and signup entry surfaces.
 - `components/brand` owns the CorpusLab mark and wordmark.
 - `components/ui` owns reusable marketing and product primitives such as buttons, feature cards, pricing cards, and product mockups. Landing-specific interaction state remains local to its section instead of expanding shared primitives prematurely.
+- `components/workbench` owns authenticated-workbench primitives: page headers, recoverable empty states, panels, toolbars, status pills, and metric cards. These primitives keep dense corpus, retrieval, trace, Eval Lab, report, and settings surfaces visually consistent without creating a standalone design-system package.
 - `lib/apiClient.ts` is a compatibility barrel for the API boundary. New code should prefer domain exports under `lib/api`, such as `lib/api/sources`, `lib/api/retrieval`, `lib/api/traces`, and `lib/api/evalLab`.
 - Domain files under `pages` are thin route wrappers or compatibility re-exports. Product implementation belongs under `features`, following `docs/frontend-architecture.md`.
 - `pages/OverviewPage.tsx` and `pages/SettingsPage.tsx` are thin compatibility exports; their implementations live under `features/workbench/home` and `features/workbench/settings`.
@@ -44,7 +45,7 @@ The web app lives in `apps/web/src`.
 - `features/workbench/reports` owns audit report creation, generated report lists, focused `/app/reports/:reportId` detail, privacy classification, and Markdown copy. Existing CI failures, run diagnoses, and corpus findings remain visible as report candidates.
 - `features/workbench/settings` owns Workspace, API keys, Runtime, and Privacy tabs.
 
-The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`. A typed shell manifest defines the canonical Setup, Debug, Quality, Share, and Admin navigation groups, active parent routes, linked breadcrumbs, help copy, and product-loop ordering. Shared page-header and empty-state primitives keep explanations and next actions consistent, while route errors remain inside a recoverable workbench boundary.
+The authenticated workbench follows the guided workflow documented in `docs/guided-workbench.md`. Home derives a live setup checklist from `/api/v1/overview`. A typed shell manifest defines the canonical Setup, Debug, Quality, Share, and Admin navigation groups, active parent routes, linked breadcrumbs, help copy, and product-loop ordering. Shared page-header, panel, toolbar, status, metric, and empty-state primitives keep hierarchy and density consistent, while route errors remain inside a recoverable workbench boundary.
 
 Generated `apps/web/dist` files should not be edited by hand. Run `cd apps/web && npm run build`.
 

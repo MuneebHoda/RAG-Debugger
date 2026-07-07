@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import { getProductConfig, type ProductConfig } from "../../../lib/api/config";
 import {
   ingestFiles,
@@ -124,16 +126,17 @@ export function SourcesPage() {
       ) : null}
 
       <section className={styles.layout}>
-        <div className="panel upload-panel" id="add-documents">
-          <div className="panel-heading">
-            <h2>Add documents</h2>
-            <span className="status-pill">
+        <WorkbenchPanel
+          actions={
+            <WorkbenchStatusPill tone="info">
               {productConfig
                 ? productConfig.ingestion?.supported_extensions?.join(", ")
                 : "PDF, HTML, MD, TXT"}
-            </span>
-          </div>
-
+            </WorkbenchStatusPill>
+          }
+          id="add-documents"
+          title="Add documents"
+        >
           <label
             className={styles.uploadZone}
             htmlFor="source-files"
@@ -233,31 +236,33 @@ export function SourcesPage() {
             )}
             Ingest files
           </button>
-        </div>
+        </WorkbenchPanel>
 
-        <div className="panel results-panel">
-          <div className="panel-heading">
-            <h2>Last Run</h2>
-            {uploadResponse ? (
-              <span className="status-pill">
+        <WorkbenchPanel
+          actions={
+            uploadResponse ? (
+              <WorkbenchStatusPill tone="success">
                 {uploadResponse.totals.documents_created} documents
-              </span>
-            ) : null}
-          </div>
+              </WorkbenchStatusPill>
+            ) : null
+          }
+          title="Last Run"
+        >
           <UploadResults results={uploadResponse?.documents ?? []} />
-        </div>
+        </WorkbenchPanel>
       </section>
 
       <section className={`${styles.layout} ${styles.library}`}>
-        <div className="panel document-panel">
-          <div className="panel-heading">
-            <h2>Document library</h2>
-            <span className="status-pill">
+        <WorkbenchPanel
+          actions={
+            <WorkbenchStatusPill tone={isLoadingSources ? "info" : "success"}>
               {isLoadingSources ? "Loading" : `${documents.length} indexed`}
-            </span>
-          </div>
+            </WorkbenchStatusPill>
+          }
+          title="Document library"
+        >
           <DocumentList documents={documents} />
-        </div>
+        </WorkbenchPanel>
       </section>
     </section>
   );

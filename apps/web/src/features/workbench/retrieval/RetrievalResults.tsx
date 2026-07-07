@@ -4,6 +4,8 @@ import type {
   RetrievalQueryHit,
   RetrievalQueryResponse,
 } from "../../../lib/api/retrieval";
+import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
+import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
 import styles from "./RetrievalPage.module.css";
 
 const EVIDENCE_LABELS = {
@@ -46,14 +48,17 @@ export function AnswerPanel({
   onSaveTrace: () => void;
 }) {
   return (
-    <div className="panel answer-panel">
-      <div className="panel-heading">
-        <h2>Evidence Summary</h2>
-        <div className="panel-actions">
+    <WorkbenchPanel
+      actions={
+        <>
           {response ? (
             <>
-              <span className="status-pill">{response.run.retrieval_mode}</span>
-              <span className="status-pill">{response.run.latency_ms} ms</span>
+              <WorkbenchStatusPill tone="info">
+                {response.run.retrieval_mode}
+              </WorkbenchStatusPill>
+              <WorkbenchStatusPill tone="neutral">
+                {response.run.latency_ms} ms
+              </WorkbenchStatusPill>
             </>
           ) : null}
           <button
@@ -70,9 +75,10 @@ export function AnswerPanel({
             )}
             Debug this run
           </button>
-        </div>
-      </div>
-
+        </>
+      }
+      title="Evidence Summary"
+    >
       {isQuerying ? (
         <p>Retrieving local evidence...</p>
       ) : response ? (
@@ -117,7 +123,7 @@ export function AnswerPanel({
       ) : (
         <p>Run a query to see the strongest local evidence.</p>
       )}
-    </div>
+    </WorkbenchPanel>
   );
 }
 
@@ -129,14 +135,16 @@ export function HitsPanel({
   isQuerying: boolean;
 }) {
   return (
-    <div className="panel hits-panel">
-      <div className="panel-heading">
-        <h2>Ranked Evidence</h2>
-        {response ? (
-          <span className="status-pill">{response.hits.length} hits</span>
-        ) : null}
-      </div>
-
+    <WorkbenchPanel
+      actions={
+        response ? (
+          <WorkbenchStatusPill tone="info">
+            {response.hits.length} hits
+          </WorkbenchStatusPill>
+        ) : null
+      }
+      title="Ranked Evidence"
+    >
       {isQuerying ? (
         <p>Scoring chunks...</p>
       ) : response && response.hits.length > 0 ? (
@@ -146,7 +154,7 @@ export function HitsPanel({
       ) : (
         <p>Matching chunks will appear here with score breakdowns.</p>
       )}
-    </div>
+    </WorkbenchPanel>
   );
 }
 
@@ -210,10 +218,12 @@ function HitCard({ hit }: { hit: RetrievalQueryHit }) {
         <strong>
           {hit.citation.label} Rank {hit.rank}
         </strong>
-        <span className={`strength-pill ${hit.evidence_strength ?? "medium"}`}>
+        <WorkbenchStatusPill
+          tone={evidenceTone(hit.evidence_strength ?? "medium")}
+        >
           {EVIDENCE_LABELS[hit.evidence_strength ?? "medium"]} ·{" "}
           {formatScore(hit.score)}
-        </span>
+        </WorkbenchStatusPill>
       </header>
 
       <div className={styles.hitSource}>
@@ -239,27 +249,28 @@ function HitCard({ hit }: { hit: RetrievalQueryHit }) {
       </div>
 
       <div className="quality-badges">
-        <span
+        <WorkbenchStatusPill
           className={`${styles.supportBadge} ${
             support.status === "supported"
               ? styles.supported
               : styles.unsupported
           }`}
+          tone={support.status === "supported" ? "success" : "warning"}
         >
           {support.status === "supported"
             ? "Supports answer"
             : "Candidate only"}
           {` · ${ANSWER_SUPPORT_LABELS[support.reason] ?? support.reason}`}
-        </span>
+        </WorkbenchStatusPill>
         {(hit.quality_flags ?? []).map((flag) => (
-          <span className="quality-badge" key={flag}>
+          <WorkbenchStatusPill key={flag} tone="neutral">
             {RETRIEVAL_QUALITY_LABELS[flag] ?? flag}
-          </span>
+          </WorkbenchStatusPill>
         ))}
         {(hit.duplicate_count ?? 1) > 1 ? (
-          <span className="quality-badge warning">
+          <WorkbenchStatusPill tone="warning">
             {hit.duplicate_count} duplicates
-          </span>
+          </WorkbenchStatusPill>
         ) : null}
       </div>
 
@@ -330,4 +341,12 @@ function normalizeBreakdown(breakdown: RetrievalQueryHit["score_breakdown"]) {
 
 function formatScore(score: number) {
   return score.toFixed(2);
+}
+
+function evidenceTone(
+  strength: keyof typeof EVIDENCE_LABELS,
+): "success" | "warning" | "neutral" {
+  if (strength === "strong") return "success";
+  if (strength === "weak") return "warning";
+  return "neutral";
 }
