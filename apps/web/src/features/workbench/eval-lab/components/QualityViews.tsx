@@ -1,10 +1,18 @@
 import { GitBranch } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { WorkbenchEmptyState } from "../../../../components/workbench/WorkbenchEmptyState";
 import { WorkbenchMetricCard } from "../../../../components/workbench/WorkbenchMetricCard";
 import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
 import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
-import type { CiEvalRun } from "../../../../lib/api/evalLab";
+import type {
+  CiEvalRun,
+  RetrievalEvalExperimentSummary,
+  RetrievalEvalRegressionClassification,
+  RetrievalEvalRegressionComparison,
+  RetrievalEvalTrendSummary,
+} from "../../../../lib/api/evalLab";
+import { formatDateTime } from "../../../../lib/dateTime";
 import styles from "../QualityPage.module.css";
 
 export function CreateDatasetPanel({
@@ -128,6 +136,224 @@ export function CiRunsView({
       </WorkbenchPanel>
     </>
   );
+}
+
+export function TrendSummaryPanel({
+  trend,
+}: {
+  trend: RetrievalEvalTrendSummary | null | undefined;
+}) {
+  const latest = trend?.points.at(-1);
+  const regression = trend?.latest_regression;
+
+  return (
+    <WorkbenchPanel
+      className={styles.panel}
+      description="Track quality movement across recent Eval Lab experiments."
+      title="Quality trend"
+    >
+      <div className={styles.stats}>
+        <TrendMetric
+          label="Latest gate"
+          value={trend?.latest_gate_status ?? "Not run"}
+        />
+        <TrendMetric
+          label="Recall@k"
+          value={latest ? percentage(latest.average_recall_at_k) : "—"}
+        />
+        <TrendMetric
+          label="Precision@k"
+          value={latest ? percentage(latest.average_precision_at_k) : "—"}
+        />
+        <TrendMetric
+          label="Regression"
+          value={regression?.classification ?? "No baseline"}
+        />
+      </div>
+      {regression ? (
+        <div className={styles.details}>
+          <WorkbenchStatusPill
+            tone={classificationTone(regression.classification)}
+          >
+            {regression.classification}
+          </WorkbenchStatusPill>
+          <p>{regression.summary}</p>
+          <small>
+            Newly failed {regression.newly_failed_cases.length} · recovered{" "}
+            {regression.recovered_cases.length}
+          </small>
+        </div>
+      ) : (
+        <p className={styles.empty}>
+          Run at least two comparable experiments to see trend movement.
+        </p>
+      )}
+    </WorkbenchPanel>
+  );
+}
+
+export function ExperimentHistoryPanel({
+  experiments,
+  isLoading,
+}: {
+  experiments: RetrievalEvalExperimentSummary[];
+  isLoading: boolean;
+}) {
+  return (
+    <WorkbenchPanel
+      className={styles.panel}
+      description="Recent runs for this dataset, ordered newest first."
+      title="Experiment history"
+    >
+      <div className={styles.list}>
+        {isLoading ? (
+          <p className={styles.empty}>Loading experiment history…</p>
+        ) : null}
+        {experiments.map((experiment) => (
+          <Link
+            className={styles.experimentCard}
+            key={experiment.id}
+            to={`/app/evals/experiments/${experiment.id}`}
+          >
+            <div className={styles.cardHeader}>
+              <strong>{experiment.name}</strong>
+              <WorkbenchStatusPill tone={gateTone(experiment.gate_status)}>
+                {experiment.gate_status}
+              </WorkbenchStatusPill>
+            </div>
+            <p>
+              {formatDateTime(experiment.created_at)} · best{" "}
+              {experiment.best_mode ?? "none"} · R{" "}
+              {percentage(experiment.average_recall_at_k)} · P{" "}
+              {percentage(experiment.average_precision_at_k)}
+            </p>
+          </Link>
+        ))}
+        {!isLoading && experiments.length === 0 ? (
+          <WorkbenchEmptyState
+            description="Run this dataset once to create the first quality baseline."
+            icon={GitBranch}
+            title="No experiment history"
+          />
+        ) : null}
+      </div>
+    </WorkbenchPanel>
+  );
+}
+
+export function RegressionPanel({
+  regression,
+}: {
+  regression: RetrievalEvalRegressionComparison | null | undefined;
+}) {
+  if (!regression) {
+    return null;
+  }
+
+  return (
+    <section className={styles.panel} aria-labelledby="regression-title">
+      <div className={styles.panelHeading}>
+        <div>
+          <h2 id="regression-title">Regression history</h2>
+          <p>{regression.summary}</p>
+        </div>
+        <WorkbenchStatusPill
+          tone={classificationTone(regression.classification)}
+        >
+          {regression.classification}
+        </WorkbenchStatusPill>
+      </div>
+      <div className={styles.metricRows}>
+        {regression.metric_deltas.slice(0, 4).map((delta) => (
+          <span key={delta.metric}>
+            {delta.metric.replaceAll("_", " ")}
+            <strong>
+              {metricValue(delta.metric, delta.current)}{" "}
+              {delta.baseline === null
+                ? "No baseline"
+                : signedDelta(delta.delta)}
+            </strong>
+          </span>
+        ))}
+      </div>
+      <div className={styles.grid}>
+        <CaseRegressionList
+          cases={regression.newly_failed_cases}
+          title="Newly failed"
+        />
+        <CaseRegressionList
+          cases={regression.recovered_cases}
+          title="Recovered"
+        />
+      </div>
+    </section>
+  );
+}
+
+function CaseRegressionList({
+  cases,
+  title,
+}: {
+  cases: RetrievalEvalRegressionComparison["newly_failed_cases"];
+  title: string;
+}) {
+  return (
+    <div className={styles.list}>
+      <h3>{title}</h3>
+      {cases.slice(0, 5).map((entry) => (
+        <article
+          className={styles.failureCard}
+          key={`${title}-${entry.case_id}-${entry.retrieval_mode}`}
+        >
+          <strong>{entry.query}</strong>
+          <small>
+            {entry.retrieval_mode} · rank {entry.baseline_top_hit_rank ?? "—"} →{" "}
+            {entry.current_top_hit_rank ?? "—"}
+          </small>
+        </article>
+      ))}
+      {cases.length === 0 ? (
+        <p className={styles.empty}>None detected.</p>
+      ) : null}
+    </div>
+  );
+}
+
+function TrendMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.stat}>
+      <small>{label}</small>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function classificationTone(
+  classification: RetrievalEvalRegressionClassification | null | undefined,
+): "success" | "danger" | "neutral" {
+  if (classification === "improved") return "success";
+  if (classification === "regressed") return "danger";
+  return "neutral";
+}
+
+function metricValue(metric: string, value: number) {
+  if (metric === "latency_p95_ms") return `${Math.round(value)} ms`;
+  if (metric === "missing_embedding_failures") return String(Math.round(value));
+  return percentage(value);
+}
+
+function percentage(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function signedDelta(value: number) {
+  if (Math.abs(value) < 0.005) return "0";
+  return value > 0 ? `+${formatDelta(value)}` : formatDelta(value);
+}
+
+function formatDelta(value: number) {
+  if (Math.abs(value) > 2) return `${Math.round(value)}`;
+  return `${Math.round(value * 100)} pts`;
 }
 
 function gateTone(

@@ -57,6 +57,8 @@ Metrics are deterministic from stored results:
 
 The default gate passes only when the best mode reaches at least `0.80` average recall, has no critical failures, and has no more than a `0.20` weak-evidence rate. Gate decisions and reasons must be stored with the experiment so later configuration changes cannot rewrite history.
 
+Regression history compares a current experiment with an explicit baseline or the latest earlier compatible experiment for the same dataset, `top_k`, and sorted retrieval-mode set. Backend comparison logic is authoritative: UI and reports must not reimplement their own trend or regression classification. The comparison must preserve gate transitions, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels in deterministic order.
+
 ## Failure Labels
 
 Trace labels cover:

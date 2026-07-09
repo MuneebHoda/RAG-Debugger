@@ -137,6 +137,10 @@ pub trait EvalRepository: Send + Sync {
     async fn list_retrieval_eval_experiments(
         &self,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError>;
+    async fn list_retrieval_eval_experiments_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+    ) -> Result<Vec<RetrievalEvalExperiment>, StorageError>;
     async fn get_retrieval_eval_experiment(
         &self,
         experiment_id: RetrievalEvalExperimentId,

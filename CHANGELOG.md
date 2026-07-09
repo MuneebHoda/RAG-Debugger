@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Eval Lab v2 regression history with dataset experiment timelines, trend summaries, baseline comparisons, newly failed/recovered case detection, and regression-aware audit reports.
 - Shared workbench workflow guidance that explains each page's purpose, position in the RAG quality loop, recommended next action, and retrieval-quality impact.
 - Shared authenticated-workbench visual primitives for panels, toolbars, status pills, and dense metric cards, with focused component tests.
 - Dependency-free workbench UI quality gates covering semantic route contracts, desktop/tablet/mobile overflow, keyboard navigation, reduced motion, hostile technical strings, and opt-in review screenshots.

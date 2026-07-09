@@ -15,7 +15,9 @@ import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPage
 import {
   createEvalLabCase,
   deleteEvalLabCase,
+  getEvalLabDatasetTrends,
   getEvalLabDataset,
+  listEvalLabDatasetExperiments,
   runEvalLabExperiment,
   updateEvalLabCase,
   type RetrievalEvalCase,
@@ -27,6 +29,10 @@ import {
   type ChunkPreview,
 } from "../../../lib/api/sources";
 import { formatDateTime } from "../../../lib/dateTime";
+import {
+  ExperimentHistoryPanel,
+  TrendSummaryPanel,
+} from "./components/QualityViews";
 import styles from "./QualityPage.module.css";
 
 const retrievalModes: RetrievalMode[] = ["lexical", "vector", "hybrid"];
@@ -48,6 +54,16 @@ export function DatasetDetailPage() {
   const datasetQuery = useQuery({
     queryKey: ["eval-dataset", datasetId],
     queryFn: ({ signal }) => getEvalLabDataset(datasetId!, signal),
+    enabled: Boolean(datasetId),
+  });
+  const datasetExperimentsQuery = useQuery({
+    queryKey: ["eval-dataset-experiments", datasetId],
+    queryFn: ({ signal }) => listEvalLabDatasetExperiments(datasetId!, signal),
+    enabled: Boolean(datasetId),
+  });
+  const trendQuery = useQuery({
+    queryKey: ["eval-dataset-trends", datasetId],
+    queryFn: ({ signal }) => getEvalLabDatasetTrends(datasetId!, 10, signal),
     enabled: Boolean(datasetId),
   });
   const sourcesQuery = useQuery({
@@ -96,6 +112,12 @@ export function DatasetDetailPage() {
     onSuccess: (experiment) => {
       void queryClient.invalidateQueries({ queryKey: ["eval-datasets"] });
       void queryClient.invalidateQueries({ queryKey: ["eval-experiments"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["eval-dataset-experiments", datasetId],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["eval-dataset-trends", datasetId],
+      });
       navigate(`/app/evals/experiments/${experiment.id}`);
     },
   });
@@ -152,6 +174,14 @@ export function DatasetDetailPage() {
         <Stat label="Updated" value={formatDateTime(dataset.updated_at)} />
         <Stat label="Expected evidence" value="Required" />
       </section>
+
+      <div className={styles.grid}>
+        <TrendSummaryPanel trend={trendQuery.data} />
+        <ExperimentHistoryPanel
+          experiments={datasetExperimentsQuery.data ?? []}
+          isLoading={datasetExperimentsQuery.isLoading}
+        />
+      </div>
 
       {caseFormOpen ? (
         <section className={styles.panel} aria-labelledby="new-case-title">

@@ -17,12 +17,17 @@ import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStat
 import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import {
   createEvalLabDataset,
+  getEvalLabDatasetTrends,
   listCiEvalRuns,
   listEvalLabDatasets,
   listEvalLabExperiments,
 } from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
-import { CiRunsView, CreateDatasetPanel } from "./components/QualityViews";
+import {
+  CiRunsView,
+  CreateDatasetPanel,
+  TrendSummaryPanel,
+} from "./components/QualityViews";
 import styles from "./QualityPage.module.css";
 
 export function QualityPage() {
@@ -60,6 +65,15 @@ export function QualityPage() {
   const datasets = datasetsQuery.data ?? [];
   const experiments = experimentsQuery.data ?? [];
   const ciRuns = ciRunsQuery.data ?? [];
+  const trendDatasetId =
+    datasets.find((dataset) => dataset.latest_experiment_id)?.id ??
+    datasets[0]?.id;
+  const trendQuery = useQuery({
+    queryKey: ["eval-dataset-trends", trendDatasetId],
+    queryFn: ({ signal }) =>
+      getEvalLabDatasetTrends(trendDatasetId!, 10, signal),
+    enabled: Boolean(trendDatasetId) && !ciRunsView,
+  });
   const totalCases = datasets.reduce(
     (sum, dataset) => sum + dataset.case_count,
     0,
@@ -153,6 +167,10 @@ export function QualityPage() {
               value={latestGate?.status ?? "Not run"}
             />
           </section>
+
+          {trendDatasetId ? (
+            <TrendSummaryPanel trend={trendQuery.data} />
+          ) : null}
 
           {createOpen ? (
             <CreateDatasetPanel

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     Json,
 };
 use rag_debugger_core::{
@@ -7,18 +7,21 @@ use rag_debugger_core::{
     CreateRetrievalEvalLabCaseRequest, RetrievalEvalCase, RetrievalEvalCaseId,
     RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
     RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
-    RetrievalEvalRun, RetrievalEvalRunId, RetrievalMode, RetrievalQueryRequest,
+    RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
+    RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
     RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
     evals::{
-        compare_mode_results, evaluate_gate, evaluate_retrieval_eval_case_with_config,
-        summarize_mode_result,
+        build_trend_summary, compare_experiment_regression, compare_mode_results, evaluate_gate,
+        evaluate_retrieval_eval_case_with_config, previous_comparable_experiment,
+        summarize_experiment, summarize_mode_result,
     },
     retrieval::LocalHybridRetriever,
     RagError,
 };
+use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -263,6 +266,40 @@ pub async fn list_experiments(
     Ok(Json(repository.list_retrieval_eval_experiments().await?))
 }
 
+pub async fn list_dataset_experiments(
+    State(state): State<AppState>,
+    Path(dataset_id): Path<Uuid>,
+) -> Result<Json<Vec<RetrievalEvalExperimentSummary>>, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let dataset_id = RetrievalEvalDatasetId(dataset_id);
+    let experiments = repository
+        .list_retrieval_eval_experiments_for_dataset(dataset_id)
+        .await?;
+    Ok(Json(
+        experiments
+            .iter()
+            .map(summarize_experiment)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+pub async fn dataset_trends(
+    State(state): State<AppState>,
+    Path(dataset_id): Path<Uuid>,
+    Query(query): Query<TrendQuery>,
+) -> Result<Json<RetrievalEvalTrendSummary>, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let dataset_id = RetrievalEvalDatasetId(dataset_id);
+    let experiments = repository
+        .list_retrieval_eval_experiments_for_dataset(dataset_id)
+        .await?;
+    Ok(Json(build_trend_summary(
+        dataset_id,
+        &experiments,
+        query.limit,
+    )))
+}
+
 pub async fn get_experiment(
     State(state): State<AppState>,
     Path(experiment_id): Path<Uuid>,
@@ -274,6 +311,41 @@ pub async fn get_experiment(
             .await
             .map_err(not_found_to_api("eval experiment"))?,
     ))
+}
+
+pub async fn experiment_regression(
+    State(state): State<AppState>,
+    Path(experiment_id): Path<Uuid>,
+    Query(query): Query<RegressionQuery>,
+) -> Result<Json<RetrievalEvalRegressionComparison>, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let current = repository
+        .get_retrieval_eval_experiment(RetrievalEvalExperimentId(experiment_id))
+        .await
+        .map_err(not_found_to_api("eval experiment"))?;
+    let baseline = if let Some(baseline_id) = query.baseline_id {
+        let baseline = repository
+            .get_retrieval_eval_experiment(RetrievalEvalExperimentId(baseline_id))
+            .await
+            .map_err(not_found_to_api("baseline eval experiment"))?;
+        if baseline.dataset_id != current.dataset_id {
+            return Err(ApiError::BadRequest(
+                "baseline experiment must belong to the same dataset".to_owned(),
+            ));
+        }
+        Some(baseline)
+    } else {
+        None
+    };
+    let dataset_experiments = repository
+        .list_retrieval_eval_experiments_for_dataset(current.dataset_id)
+        .await?;
+    let experiment_refs = dataset_experiments.iter().collect::<Vec<_>>();
+    let baseline_ref = baseline
+        .as_ref()
+        .or_else(|| previous_comparable_experiment(&current, &experiment_refs));
+
+    Ok(Json(compare_experiment_regression(&current, baseline_ref)))
 }
 
 pub async fn compare_experiment(
@@ -328,6 +400,16 @@ fn eval_case_from_request(
         notes: request.notes,
         created_at: OffsetDateTime::now_utc(),
     })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TrendQuery {
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RegressionQuery {
+    pub baseline_id: Option<Uuid>,
 }
 
 fn merge_case_update(

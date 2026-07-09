@@ -1,17 +1,25 @@
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 
 use rag_debugger_core::{
     DebuggerConfig, EvidenceStrength, RetrievalEmbeddingReadiness, RetrievalEvalCase,
-    RetrievalEvalCaseEvaluation, RetrievalEvalComparison, RetrievalEvalFailure,
-    RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity, RetrievalEvalGate,
-    RetrievalEvalGateStatus, RetrievalEvalModeResult, RetrievalEvalResult, RetrievalMode,
-    RetrievalQualityFlag, RetrievalQueryResponse,
+    RetrievalEvalCaseEvaluation, RetrievalEvalCaseId, RetrievalEvalCaseRegression,
+    RetrievalEvalComparison, RetrievalEvalDatasetId, RetrievalEvalExperiment,
+    RetrievalEvalExperimentSummary, RetrievalEvalFailure, RetrievalEvalFailureLabel,
+    RetrievalEvalFailureSeverity, RetrievalEvalGate, RetrievalEvalGateStatus,
+    RetrievalEvalMetricDelta, RetrievalEvalModeResult, RetrievalEvalRegressionClassification,
+    RetrievalEvalRegressionComparison, RetrievalEvalRegressionMetric, RetrievalEvalResult,
+    RetrievalEvalTrendPoint, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQualityFlag,
+    RetrievalQueryResponse,
 };
 
 use crate::diagnosis::{diagnose_retrieval, ExpectedEvidence};
 
 const DEFAULT_RECALL_THRESHOLD: f32 = 0.80;
 const DEFAULT_WEAK_EVIDENCE_LIMIT: f32 = 0.20;
+const REGRESSION_RATIO_THRESHOLD: f32 = 0.01;
+const LATENCY_REGRESSION_THRESHOLD_MS: f32 = 10.0;
+const DEFAULT_TREND_LIMIT: usize = 10;
+const MAX_TREND_LIMIT: usize = 50;
 
 pub fn score_retrieval_eval_case(
     case: &RetrievalEvalCase,
@@ -382,6 +390,541 @@ pub fn evaluate_gate(mode_results: &[RetrievalEvalModeResult]) -> RetrievalEvalG
     }
 }
 
+pub fn summarize_experiment(
+    experiment: &RetrievalEvalExperiment,
+) -> RetrievalEvalExperimentSummary {
+    let best = headline_mode_result(experiment);
+    RetrievalEvalExperimentSummary {
+        id: experiment.id,
+        dataset_id: experiment.dataset_id,
+        dataset_name: experiment.dataset_name.clone(),
+        name: experiment.name.clone(),
+        modes: experiment.modes.clone(),
+        top_k: experiment.top_k,
+        best_mode: best.map(|result| result.retrieval_mode),
+        gate_status: experiment.gate.status,
+        average_recall_at_k: best.map_or(0.0, |result| result.average_recall_at_k),
+        average_precision_at_k: best.map_or(0.0, |result| result.average_precision_at_k),
+        mean_reciprocal_rank: best.map_or(0.0, |result| result.mean_reciprocal_rank),
+        citation_coverage: best.map_or(0.0, |result| result.citation_coverage),
+        weak_evidence_case_rate: best.map_or(0.0, weak_evidence_case_rate),
+        missing_embedding_failures: best.map_or(0, |result| result.missing_embedding_failures),
+        latency_p50_ms: best.map_or(0, |result| result.latency_p50_ms),
+        latency_p95_ms: best.map_or(0, |result| result.latency_p95_ms),
+        failure_count: experiment.failures.len() as u32,
+        created_at: experiment.created_at,
+    }
+}
+
+pub fn build_trend_summary(
+    dataset_id: RetrievalEvalDatasetId,
+    experiments: &[RetrievalEvalExperiment],
+    limit: Option<usize>,
+) -> RetrievalEvalTrendSummary {
+    let limit = normalize_trend_limit(limit);
+    let mut dataset_experiments = experiments
+        .iter()
+        .filter(|experiment| experiment.dataset_id == dataset_id)
+        .collect::<Vec<_>>();
+    dataset_experiments.sort_by_key(|experiment| std::cmp::Reverse(experiment.created_at));
+
+    let latest = dataset_experiments.first().copied();
+    let latest_regression = latest.map(|current| {
+        compare_experiment_regression(
+            current,
+            previous_comparable_experiment(current, &dataset_experiments),
+        )
+    });
+
+    let mut points = dataset_experiments
+        .iter()
+        .take(limit)
+        .map(|experiment| trend_point(experiment))
+        .collect::<Vec<_>>();
+    points.reverse();
+
+    RetrievalEvalTrendSummary {
+        dataset_id,
+        experiment_count: dataset_experiments.len() as u32,
+        window_limit: limit as u32,
+        latest_experiment_id: latest.map(|experiment| experiment.id),
+        latest_gate_status: latest.map(|experiment| experiment.gate.status),
+        points,
+        latest_regression,
+    }
+}
+
+pub fn compare_experiment_regression(
+    current: &RetrievalEvalExperiment,
+    baseline: Option<&RetrievalEvalExperiment>,
+) -> RetrievalEvalRegressionComparison {
+    let Some(baseline) = baseline else {
+        let current_summary = summarize_experiment(current);
+        return RetrievalEvalRegressionComparison {
+            current_experiment_id: current.id,
+            baseline_experiment_id: None,
+            classification: RetrievalEvalRegressionClassification::Unchanged,
+            current_gate_status: current.gate.status,
+            baseline_gate_status: None,
+            metric_deltas: metric_deltas(&current_summary, None),
+            newly_failed_cases: Vec::new(),
+            recovered_cases: Vec::new(),
+            changed_top_evidence_cases: Vec::new(),
+            changed_failure_label_cases: Vec::new(),
+            summary:
+                "No prior comparable experiment was found for this dataset, top-k, and mode set."
+                    .to_owned(),
+        };
+    };
+
+    let current_summary = summarize_experiment(current);
+    let baseline_summary = summarize_experiment(baseline);
+    let metric_deltas = metric_deltas(&current_summary, Some(&baseline_summary));
+    let newly_failed_cases = case_regressions(
+        current,
+        baseline,
+        RegressionCaseKind::NewlyFailed,
+        RetrievalEvalRegressionClassification::Regressed,
+    );
+    let recovered_cases = case_regressions(
+        current,
+        baseline,
+        RegressionCaseKind::Recovered,
+        RetrievalEvalRegressionClassification::Improved,
+    );
+    let changed_top_evidence_cases = case_regressions(
+        current,
+        baseline,
+        RegressionCaseKind::ChangedTopEvidence,
+        RetrievalEvalRegressionClassification::Unchanged,
+    );
+    let changed_failure_label_cases = case_regressions(
+        current,
+        baseline,
+        RegressionCaseKind::ChangedFailureLabels,
+        RetrievalEvalRegressionClassification::Unchanged,
+    );
+    let classification = classify_regression(
+        current.gate.status,
+        baseline.gate.status,
+        &metric_deltas,
+        !newly_failed_cases.is_empty(),
+        !recovered_cases.is_empty(),
+    );
+
+    RetrievalEvalRegressionComparison {
+        current_experiment_id: current.id,
+        baseline_experiment_id: Some(baseline.id),
+        classification,
+        current_gate_status: current.gate.status,
+        baseline_gate_status: Some(baseline.gate.status),
+        metric_deltas,
+        newly_failed_cases,
+        recovered_cases,
+        changed_top_evidence_cases,
+        changed_failure_label_cases,
+        summary: regression_summary(classification, current, baseline),
+    }
+}
+
+pub fn previous_comparable_experiment<'a>(
+    current: &RetrievalEvalExperiment,
+    experiments: &'a [&'a RetrievalEvalExperiment],
+) -> Option<&'a RetrievalEvalExperiment> {
+    experiments
+        .iter()
+        .copied()
+        .filter(|candidate| candidate.id != current.id)
+        .filter(|candidate| candidate.dataset_id == current.dataset_id)
+        .filter(|candidate| candidate.created_at < current.created_at)
+        .filter(|candidate| candidate.top_k == current.top_k)
+        .filter(|candidate| same_mode_set(&candidate.modes, &current.modes))
+        .max_by_key(|candidate| candidate.created_at)
+}
+
+fn normalize_trend_limit(limit: Option<usize>) -> usize {
+    limit
+        .unwrap_or(DEFAULT_TREND_LIMIT)
+        .clamp(1, MAX_TREND_LIMIT)
+}
+
+fn trend_point(experiment: &RetrievalEvalExperiment) -> RetrievalEvalTrendPoint {
+    let summary = summarize_experiment(experiment);
+    RetrievalEvalTrendPoint {
+        experiment_id: summary.id,
+        name: summary.name,
+        best_mode: summary.best_mode,
+        gate_status: summary.gate_status,
+        average_recall_at_k: summary.average_recall_at_k,
+        average_precision_at_k: summary.average_precision_at_k,
+        mean_reciprocal_rank: summary.mean_reciprocal_rank,
+        citation_coverage: summary.citation_coverage,
+        weak_evidence_case_rate: summary.weak_evidence_case_rate,
+        latency_p95_ms: summary.latency_p95_ms,
+        failure_count: summary.failure_count,
+        created_at: summary.created_at,
+    }
+}
+
+fn headline_mode_result(experiment: &RetrievalEvalExperiment) -> Option<&RetrievalEvalModeResult> {
+    experiment
+        .comparison
+        .best_mode
+        .and_then(|mode| {
+            experiment
+                .mode_results
+                .iter()
+                .find(|result| result.retrieval_mode == mode)
+        })
+        .or_else(|| {
+            experiment.mode_results.iter().max_by(|left, right| {
+                left.average_recall_at_k
+                    .partial_cmp(&right.average_recall_at_k)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| {
+                        left.average_precision_at_k
+                            .partial_cmp(&right.average_precision_at_k)
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    })
+                    .then_with(|| right.latency_p50_ms.cmp(&left.latency_p50_ms))
+            })
+        })
+}
+
+fn weak_evidence_case_rate(result: &RetrievalEvalModeResult) -> f32 {
+    if result.case_count == 0 {
+        return 0.0;
+    }
+    let weak_cases = result
+        .case_results
+        .iter()
+        .filter(|case| {
+            case.failures
+                .iter()
+                .any(|failure| failure.label == RetrievalEvalFailureLabel::WeakEvidence)
+        })
+        .count() as f32;
+    weak_cases / result.case_count as f32
+}
+
+fn metric_deltas(
+    current: &RetrievalEvalExperimentSummary,
+    baseline: Option<&RetrievalEvalExperimentSummary>,
+) -> Vec<RetrievalEvalMetricDelta> {
+    let metrics = [
+        (
+            RetrievalEvalRegressionMetric::RecallAtK,
+            current.average_recall_at_k,
+            baseline.map(|value| value.average_recall_at_k),
+            MetricDirection::HigherIsBetter,
+            REGRESSION_RATIO_THRESHOLD,
+        ),
+        (
+            RetrievalEvalRegressionMetric::PrecisionAtK,
+            current.average_precision_at_k,
+            baseline.map(|value| value.average_precision_at_k),
+            MetricDirection::HigherIsBetter,
+            REGRESSION_RATIO_THRESHOLD,
+        ),
+        (
+            RetrievalEvalRegressionMetric::MeanReciprocalRank,
+            current.mean_reciprocal_rank,
+            baseline.map(|value| value.mean_reciprocal_rank),
+            MetricDirection::HigherIsBetter,
+            REGRESSION_RATIO_THRESHOLD,
+        ),
+        (
+            RetrievalEvalRegressionMetric::CitationCoverage,
+            current.citation_coverage,
+            baseline.map(|value| value.citation_coverage),
+            MetricDirection::HigherIsBetter,
+            REGRESSION_RATIO_THRESHOLD,
+        ),
+        (
+            RetrievalEvalRegressionMetric::WeakEvidenceCaseRate,
+            current.weak_evidence_case_rate,
+            baseline.map(|value| value.weak_evidence_case_rate),
+            MetricDirection::LowerIsBetter,
+            REGRESSION_RATIO_THRESHOLD,
+        ),
+        (
+            RetrievalEvalRegressionMetric::MissingEmbeddingFailures,
+            current.missing_embedding_failures as f32,
+            baseline.map(|value| value.missing_embedding_failures as f32),
+            MetricDirection::LowerIsBetter,
+            0.0,
+        ),
+        (
+            RetrievalEvalRegressionMetric::LatencyP95Ms,
+            current.latency_p95_ms as f32,
+            baseline.map(|value| value.latency_p95_ms as f32),
+            MetricDirection::LowerIsBetter,
+            LATENCY_REGRESSION_THRESHOLD_MS,
+        ),
+    ];
+
+    metrics
+        .into_iter()
+        .map(|(metric, current, baseline, direction, threshold)| {
+            let delta = baseline.map_or(0.0, |baseline| current - baseline);
+            RetrievalEvalMetricDelta {
+                metric,
+                current,
+                baseline,
+                delta,
+                classification: baseline
+                    .map_or(RetrievalEvalRegressionClassification::Unchanged, |_| {
+                        classify_metric_delta(delta, direction, threshold)
+                    }),
+            }
+        })
+        .collect()
+}
+
+#[derive(Clone, Copy)]
+enum MetricDirection {
+    HigherIsBetter,
+    LowerIsBetter,
+}
+
+fn classify_metric_delta(
+    delta: f32,
+    direction: MetricDirection,
+    threshold: f32,
+) -> RetrievalEvalRegressionClassification {
+    if delta.abs() <= threshold {
+        return RetrievalEvalRegressionClassification::Unchanged;
+    }
+    match direction {
+        MetricDirection::HigherIsBetter if delta > 0.0 => {
+            RetrievalEvalRegressionClassification::Improved
+        }
+        MetricDirection::HigherIsBetter => RetrievalEvalRegressionClassification::Regressed,
+        MetricDirection::LowerIsBetter if delta < 0.0 => {
+            RetrievalEvalRegressionClassification::Improved
+        }
+        MetricDirection::LowerIsBetter => RetrievalEvalRegressionClassification::Regressed,
+    }
+}
+
+fn classify_regression(
+    current_gate: RetrievalEvalGateStatus,
+    baseline_gate: RetrievalEvalGateStatus,
+    metric_deltas: &[RetrievalEvalMetricDelta],
+    has_newly_failed_cases: bool,
+    has_recovered_cases: bool,
+) -> RetrievalEvalRegressionClassification {
+    if baseline_gate == RetrievalEvalGateStatus::Passed
+        && current_gate == RetrievalEvalGateStatus::Failed
+    {
+        return RetrievalEvalRegressionClassification::Regressed;
+    }
+    if has_newly_failed_cases
+        || metric_deltas
+            .iter()
+            .any(|delta| delta.classification == RetrievalEvalRegressionClassification::Regressed)
+    {
+        return RetrievalEvalRegressionClassification::Regressed;
+    }
+    if baseline_gate == RetrievalEvalGateStatus::Failed
+        && current_gate == RetrievalEvalGateStatus::Passed
+    {
+        return RetrievalEvalRegressionClassification::Improved;
+    }
+    if has_recovered_cases
+        || metric_deltas
+            .iter()
+            .any(|delta| delta.classification == RetrievalEvalRegressionClassification::Improved)
+    {
+        return RetrievalEvalRegressionClassification::Improved;
+    }
+    RetrievalEvalRegressionClassification::Unchanged
+}
+
+#[derive(Clone, Copy)]
+enum RegressionCaseKind {
+    NewlyFailed,
+    Recovered,
+    ChangedTopEvidence,
+    ChangedFailureLabels,
+}
+
+fn case_regressions(
+    current: &RetrievalEvalExperiment,
+    baseline: &RetrievalEvalExperiment,
+    kind: RegressionCaseKind,
+    classification: RetrievalEvalRegressionClassification,
+) -> Vec<RetrievalEvalCaseRegression> {
+    let mut regressions = Vec::new();
+    for current_case in all_case_results(current) {
+        let baseline_case = find_case_result(
+            baseline,
+            current_case.retrieval_mode,
+            current_case.case.case_id,
+        );
+        let include = match kind {
+            RegressionCaseKind::NewlyFailed => {
+                case_failed(current_case) && baseline_case.is_some_and(|case| !case_failed(case))
+            }
+            RegressionCaseKind::Recovered => {
+                !case_failed(current_case) && baseline_case.is_some_and(case_failed)
+            }
+            RegressionCaseKind::ChangedTopEvidence => baseline_case.is_some_and(|case| {
+                current_case.case.top_hit_rank != case.case.top_hit_rank
+                    || first_chunk_id(current_case) != first_chunk_id(case)
+            }),
+            RegressionCaseKind::ChangedFailureLabels => baseline_case
+                .is_some_and(|case| failure_labels(current_case) != failure_labels(case)),
+        };
+        if include {
+            regressions.push(case_regression(current_case, baseline_case, classification));
+        }
+    }
+    sort_case_regressions(&mut regressions);
+    regressions
+}
+
+fn all_case_results(
+    experiment: &RetrievalEvalExperiment,
+) -> impl Iterator<Item = CaseResultWithMode<'_>> {
+    experiment.mode_results.iter().flat_map(|mode| {
+        mode.case_results.iter().map(|case| CaseResultWithMode {
+            retrieval_mode: mode.retrieval_mode,
+            case,
+        })
+    })
+}
+
+#[derive(Clone, Copy)]
+struct CaseResultWithMode<'a> {
+    retrieval_mode: RetrievalMode,
+    case: &'a RetrievalEvalCaseEvaluation,
+}
+
+fn find_case_result(
+    experiment: &RetrievalEvalExperiment,
+    retrieval_mode: RetrievalMode,
+    case_id: RetrievalEvalCaseId,
+) -> Option<CaseResultWithMode<'_>> {
+    experiment
+        .mode_results
+        .iter()
+        .find(|mode| mode.retrieval_mode == retrieval_mode)
+        .and_then(|mode| {
+            mode.case_results
+                .iter()
+                .find(|case| case.case_id == case_id)
+                .map(|case| CaseResultWithMode {
+                    retrieval_mode,
+                    case,
+                })
+        })
+}
+
+fn case_failed(case: CaseResultWithMode<'_>) -> bool {
+    !case.case.passed || !case.case.failures.is_empty()
+}
+
+fn case_regression(
+    current: CaseResultWithMode<'_>,
+    baseline: Option<CaseResultWithMode<'_>>,
+    classification: RetrievalEvalRegressionClassification,
+) -> RetrievalEvalCaseRegression {
+    RetrievalEvalCaseRegression {
+        case_id: current.case.case_id,
+        retrieval_mode: current.retrieval_mode,
+        query: current.case.query.clone(),
+        classification,
+        current_passed: Some(current.case.passed),
+        baseline_passed: baseline.map(|case| case.case.passed),
+        current_top_hit_rank: current.case.top_hit_rank,
+        baseline_top_hit_rank: baseline.and_then(|case| case.case.top_hit_rank),
+        current_retrieved_chunk_ids: current.case.retrieved_chunk_ids.clone(),
+        baseline_retrieved_chunk_ids: baseline
+            .map(|case| case.case.retrieved_chunk_ids.clone())
+            .unwrap_or_default(),
+        current_failure_labels: failure_labels(current),
+        baseline_failure_labels: baseline.map(failure_labels).unwrap_or_default(),
+    }
+}
+
+fn failure_labels(case: CaseResultWithMode<'_>) -> Vec<RetrievalEvalFailureLabel> {
+    let mut labels = case
+        .case
+        .failures
+        .iter()
+        .map(|failure| failure.label)
+        .collect::<Vec<_>>();
+    labels.sort_by_key(|label| failure_label_code(*label));
+    labels.dedup();
+    labels
+}
+
+fn first_chunk_id(case: CaseResultWithMode<'_>) -> Option<String> {
+    case.case
+        .retrieved_chunk_ids
+        .first()
+        .map(|chunk_id| chunk_id.0.to_string())
+}
+
+fn sort_case_regressions(regressions: &mut [RetrievalEvalCaseRegression]) {
+    regressions.sort_by(|left, right| {
+        left.case_id
+            .0
+            .to_string()
+            .cmp(&right.case_id.0.to_string())
+            .then_with(|| mode_code(left.retrieval_mode).cmp(mode_code(right.retrieval_mode)))
+    });
+}
+
+fn same_mode_set(left: &[RetrievalMode], right: &[RetrievalMode]) -> bool {
+    mode_set(left) == mode_set(right)
+}
+
+fn mode_set(modes: &[RetrievalMode]) -> BTreeSet<&'static str> {
+    modes.iter().map(|mode| mode_code(*mode)).collect()
+}
+
+fn mode_code(mode: RetrievalMode) -> &'static str {
+    match mode {
+        RetrievalMode::Lexical => "lexical",
+        RetrievalMode::Vector => "vector",
+        RetrievalMode::Hybrid => "hybrid",
+    }
+}
+
+fn failure_label_code(label: RetrievalEvalFailureLabel) -> &'static str {
+    match label {
+        RetrievalEvalFailureLabel::ExpectedEvidenceMissing => "expected_evidence_missing",
+        RetrievalEvalFailureLabel::CorrectDocumentWrongChunk => "correct_document_wrong_chunk",
+        RetrievalEvalFailureLabel::LowPrecision => "low_precision",
+        RetrievalEvalFailureLabel::WeakEvidence => "weak_evidence",
+        RetrievalEvalFailureLabel::MissingEmbeddings => "missing_embeddings",
+        RetrievalEvalFailureLabel::HeadingOnlyEvidence => "heading_only_evidence",
+        RetrievalEvalFailureLabel::DuplicateEvidence => "duplicate_evidence",
+    }
+}
+
+fn regression_summary(
+    classification: RetrievalEvalRegressionClassification,
+    current: &RetrievalEvalExperiment,
+    baseline: &RetrievalEvalExperiment,
+) -> String {
+    match classification {
+        RetrievalEvalRegressionClassification::Improved => {
+            format!("{} improved compared with {}.", current.name, baseline.name)
+        }
+        RetrievalEvalRegressionClassification::Regressed => format!(
+            "{} regressed compared with {}.",
+            current.name, baseline.name
+        ),
+        RetrievalEvalRegressionClassification::Unchanged => format!(
+            "{} stayed within regression thresholds compared with {}.",
+            current.name, baseline.name
+        ),
+    }
+}
+
 fn failure(
     case: &RetrievalEvalCase,
     retrieval_mode: RetrievalMode,
@@ -437,12 +980,15 @@ mod tests {
         ByteRange, ChunkId, ChunkPreview, ChunkSplitReason, ChunkingStrategy, Document, DocumentId,
         DocumentProfile, EmbeddingModelInfo, EvidenceStrength, ExtractionQuality, ExtractiveAnswer,
         ExtractiveAnswerStatus, ProjectId, RetrievalCitation, RetrievalEmbeddingReadiness,
-        RetrievalEmbeddingStatus, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalMatchedTerm,
-        RetrievalMode, RetrievalQueryHit, RetrievalQueryResponse, RetrievalQueryRun,
-        RetrievalQueryRunId, RetrievalScoreBreakdown, Source, SourceId, SourceKind,
-        SourceSyncPolicy,
+        RetrievalEmbeddingStatus, RetrievalEvalCase, RetrievalEvalCaseEvaluation,
+        RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDatasetId,
+        RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalFailure,
+        RetrievalEvalFailureSeverity, RetrievalEvalGateStatus,
+        RetrievalEvalRegressionClassification, RetrievalMatchedTerm, RetrievalMode,
+        RetrievalQueryHit, RetrievalQueryResponse, RetrievalQueryRun, RetrievalQueryRunId,
+        RetrievalScoreBreakdown, Source, SourceId, SourceKind, SourceSyncPolicy,
     };
-    use time::OffsetDateTime;
+    use time::{Duration, OffsetDateTime};
     use uuid::Uuid;
 
     use super::*;
@@ -558,6 +1104,130 @@ mod tests {
                 RetrievalEvalFailureLabel::ExpectedEvidenceMissing,
                 RetrievalEvalFailureLabel::LowPrecision,
             ]
+        );
+    }
+
+    #[test]
+    fn experiment_regression_detects_newly_failed_gate() {
+        let case_id = RetrievalEvalCaseId(Uuid::now_v7());
+        let expected_chunk = ChunkId(Uuid::now_v7());
+        let wrong_chunk = ChunkId(Uuid::now_v7());
+        let baseline = experiment(
+            "Baseline",
+            OffsetDateTime::now_utc() - Duration::minutes(5),
+            vec![case_evaluation(
+                case_id,
+                expected_chunk,
+                expected_chunk,
+                true,
+            )],
+        );
+        let current = experiment(
+            "Current",
+            OffsetDateTime::now_utc(),
+            vec![case_evaluation(case_id, expected_chunk, wrong_chunk, false)],
+        );
+
+        let comparison = compare_experiment_regression(&current, Some(&baseline));
+
+        assert_eq!(
+            comparison.classification,
+            RetrievalEvalRegressionClassification::Regressed
+        );
+        assert_eq!(comparison.baseline_experiment_id, Some(baseline.id));
+        assert_eq!(
+            comparison.current_gate_status,
+            RetrievalEvalGateStatus::Failed
+        );
+        assert_eq!(
+            comparison.baseline_gate_status,
+            Some(RetrievalEvalGateStatus::Passed)
+        );
+        assert_eq!(comparison.newly_failed_cases.len(), 1);
+        assert_eq!(comparison.recovered_cases.len(), 0);
+        assert!(comparison
+            .metric_deltas
+            .iter()
+            .any(|delta| delta.classification == RetrievalEvalRegressionClassification::Regressed));
+    }
+
+    #[test]
+    fn trend_summary_finds_previous_comparable_experiment() {
+        let case_id = RetrievalEvalCaseId(Uuid::now_v7());
+        let expected_chunk = ChunkId(Uuid::now_v7());
+        let wrong_chunk = ChunkId(Uuid::now_v7());
+        let dataset_id = RetrievalEvalDatasetId(Uuid::now_v7());
+        let older = experiment_with_dataset(
+            dataset_id,
+            "Older",
+            OffsetDateTime::now_utc() - Duration::minutes(10),
+            vec![case_evaluation(
+                case_id,
+                expected_chunk,
+                expected_chunk,
+                true,
+            )],
+        );
+        let latest = experiment_with_dataset(
+            dataset_id,
+            "Latest",
+            OffsetDateTime::now_utc(),
+            vec![case_evaluation(case_id, expected_chunk, wrong_chunk, false)],
+        );
+
+        let trend = build_trend_summary(dataset_id, &[latest.clone(), older.clone()], Some(99));
+
+        assert_eq!(trend.window_limit, 50);
+        assert_eq!(trend.points.len(), 2);
+        assert_eq!(trend.points[0].experiment_id, older.id);
+        assert_eq!(trend.latest_experiment_id, Some(latest.id));
+        assert_eq!(
+            trend
+                .latest_regression
+                .as_ref()
+                .map(|value| value.classification),
+            Some(RetrievalEvalRegressionClassification::Regressed)
+        );
+    }
+
+    #[test]
+    fn regression_tracks_changed_top_evidence_and_failure_labels() {
+        let case_id = RetrievalEvalCaseId(Uuid::now_v7());
+        let expected_chunk = ChunkId(Uuid::now_v7());
+        let first_wrong_chunk = ChunkId(Uuid::now_v7());
+        let second_wrong_chunk = ChunkId(Uuid::now_v7());
+        let baseline = experiment(
+            "Baseline",
+            OffsetDateTime::now_utc() - Duration::minutes(5),
+            vec![case_evaluation_with_failure(
+                case_id,
+                expected_chunk,
+                first_wrong_chunk,
+                RetrievalEvalFailureLabel::LowPrecision,
+            )],
+        );
+        let current = experiment(
+            "Current",
+            OffsetDateTime::now_utc(),
+            vec![case_evaluation_with_failure(
+                case_id,
+                expected_chunk,
+                second_wrong_chunk,
+                RetrievalEvalFailureLabel::ExpectedEvidenceMissing,
+            )],
+        );
+
+        let comparison = compare_experiment_regression(&current, Some(&baseline));
+
+        assert_eq!(comparison.changed_top_evidence_cases.len(), 1);
+        assert_eq!(comparison.changed_failure_label_cases.len(), 1);
+        assert_eq!(
+            comparison.changed_failure_label_cases[0].baseline_failure_labels,
+            vec![RetrievalEvalFailureLabel::LowPrecision]
+        );
+        assert_eq!(
+            comparison.changed_failure_label_cases[0].current_failure_labels,
+            vec![RetrievalEvalFailureLabel::ExpectedEvidenceMissing]
         );
     }
 
@@ -699,6 +1369,115 @@ mod tests {
             evidence_strength: EvidenceStrength::Strong,
             duplicate_count: 1,
             answer_support: Default::default(),
+        }
+    }
+
+    fn experiment(
+        name: &str,
+        created_at: OffsetDateTime,
+        case_results: Vec<RetrievalEvalCaseEvaluation>,
+    ) -> RetrievalEvalExperiment {
+        experiment_with_dataset(
+            RetrievalEvalDatasetId(Uuid::now_v7()),
+            name,
+            created_at,
+            case_results,
+        )
+    }
+
+    fn experiment_with_dataset(
+        dataset_id: RetrievalEvalDatasetId,
+        name: &str,
+        created_at: OffsetDateTime,
+        case_results: Vec<RetrievalEvalCaseEvaluation>,
+    ) -> RetrievalEvalExperiment {
+        let mode_results = vec![summarize_mode_result(RetrievalMode::Hybrid, case_results)];
+        let comparison = compare_mode_results(&mode_results);
+        let gate = evaluate_gate(&mode_results);
+        let failures = mode_results
+            .iter()
+            .flat_map(|mode| &mode.case_results)
+            .flat_map(|result| result.failures.iter().cloned())
+            .collect::<Vec<_>>();
+        RetrievalEvalExperiment {
+            id: RetrievalEvalExperimentId(Uuid::now_v7()),
+            dataset_id,
+            dataset_name: "Regression dataset".to_owned(),
+            name: name.to_owned(),
+            modes: vec![RetrievalMode::Hybrid],
+            top_k: 5,
+            config_snapshot: RetrievalEvalConfigSnapshot {
+                top_k: 5,
+                scoring_weights: Default::default(),
+                embedding_model: EmbeddingModelInfo::default(),
+                dataset_case_count: 1,
+            },
+            mode_results,
+            comparison,
+            gate,
+            failures,
+            created_at,
+        }
+    }
+
+    fn case_evaluation(
+        case_id: RetrievalEvalCaseId,
+        expected_chunk: ChunkId,
+        retrieved_chunk: ChunkId,
+        passed: bool,
+    ) -> RetrievalEvalCaseEvaluation {
+        let failures = if passed {
+            Vec::new()
+        } else {
+            vec![eval_failure(
+                case_id,
+                RetrievalEvalFailureLabel::ExpectedEvidenceMissing,
+            )]
+        };
+        RetrievalEvalCaseEvaluation {
+            case_id,
+            query: "Which evidence should be retrieved?".to_owned(),
+            top_k: 5,
+            recall_at_k: if passed { 1.0 } else { 0.0 },
+            precision_at_k: if passed { 1.0 } else { 0.0 },
+            mrr: if passed { 1.0 } else { 0.0 },
+            top_hit_rank: if passed { Some(1) } else { Some(4) },
+            citation_coverage: if passed { 1.0 } else { 0.0 },
+            weak_evidence_count: 0,
+            missing_embedding_failures: 0,
+            passed,
+            expected_chunk_ids: vec![expected_chunk],
+            expected_document_ids: Vec::new(),
+            retrieved_chunk_ids: vec![retrieved_chunk],
+            latency_ms: if passed { 20 } else { 35 },
+            failures,
+            diagnosis: None,
+        }
+    }
+
+    fn case_evaluation_with_failure(
+        case_id: RetrievalEvalCaseId,
+        expected_chunk: ChunkId,
+        retrieved_chunk: ChunkId,
+        label: RetrievalEvalFailureLabel,
+    ) -> RetrievalEvalCaseEvaluation {
+        let mut evaluation = case_evaluation(case_id, expected_chunk, retrieved_chunk, false);
+        evaluation.failures = vec![eval_failure(case_id, label)];
+        evaluation
+    }
+
+    fn eval_failure(
+        case_id: RetrievalEvalCaseId,
+        label: RetrievalEvalFailureLabel,
+    ) -> RetrievalEvalFailure {
+        RetrievalEvalFailure {
+            case_id,
+            query: "Which evidence should be retrieved?".to_owned(),
+            retrieval_mode: RetrievalMode::Hybrid,
+            label,
+            severity: RetrievalEvalFailureSeverity::Critical,
+            message: "Expected evidence was not retrieved.".to_owned(),
+            top_hit_rank: Some(4),
         }
     }
 }

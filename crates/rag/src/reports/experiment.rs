@@ -4,6 +4,7 @@ use rag_debugger_core::{
     DebugReport, DebugReportFinding, DebugReportSeverity, DebugReportSource,
     DiagnosisRecommendation, EvidenceDiagnosisSummary, RetrievalEvalExperiment,
     RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity, RetrievalEvalGateStatus,
+    RetrievalEvalRegressionClassification, RetrievalEvalRegressionComparison,
 };
 
 use super::{
@@ -19,6 +20,14 @@ use super::{
 pub fn build_eval_experiment_debug_report(
     context: DebugReportBuildContext,
     experiment: &RetrievalEvalExperiment,
+) -> DebugReport {
+    build_eval_experiment_debug_report_with_regression(context, experiment, None)
+}
+
+pub fn build_eval_experiment_debug_report_with_regression(
+    context: DebugReportBuildContext,
+    experiment: &RetrievalEvalExperiment,
+    regression: Option<&RetrievalEvalRegressionComparison>,
 ) -> DebugReport {
     let (evidence, case_evidence) = experiment_evidence(experiment);
     let diagnosis = experiment_diagnosis(experiment);
@@ -74,6 +83,56 @@ pub fn build_eval_experiment_debug_report(
         });
     }
 
+    if let Some(regression) = regression {
+        findings.push(DebugReportFinding {
+            code: "eval_regression_comparison".to_owned(),
+            severity: match regression.classification {
+                RetrievalEvalRegressionClassification::Regressed => DebugReportSeverity::Warning,
+                RetrievalEvalRegressionClassification::Improved => DebugReportSeverity::Info,
+                RetrievalEvalRegressionClassification::Unchanged => DebugReportSeverity::Info,
+            },
+            title: format!(
+                "Experiment {}",
+                classification_label(regression.classification)
+            ),
+            summary: format!(
+                "{} Newly failed: {}. Recovered: {}.",
+                regression.summary,
+                regression.newly_failed_cases.len(),
+                regression.recovered_cases.len()
+            ),
+            failure_labels: if regression.classification
+                == RetrievalEvalRegressionClassification::Regressed
+            {
+                vec!["eval_regression".to_owned()]
+            } else {
+                Vec::new()
+            },
+            evidence_refs: Vec::new(),
+        });
+        for case in regression.newly_failed_cases.iter().take(5) {
+            findings.push(DebugReportFinding {
+                code: format!("newly_failed_case:{}", case.case_id.0),
+                severity: DebugReportSeverity::Warning,
+                title: if permits_content(context.privacy_mode) {
+                    case.query.clone()
+                } else {
+                    format!("Eval case {}", case.case_id.0)
+                },
+                summary: format!(
+                    "{} newly failed compared with the baseline experiment.",
+                    retrieval_mode_label(case.retrieval_mode)
+                ),
+                failure_labels: case
+                    .current_failure_labels
+                    .iter()
+                    .map(|label| eval_failure_code(*label).to_owned())
+                    .collect(),
+                evidence_refs: Vec::new(),
+            });
+        }
+    }
+
     let mut recommendations = diagnosis.as_ref().map_or_else(
         || recommendations_for_failure_codes(&failure_codes),
         |diagnosis| debug_report_recommendations(&diagnosis.recommendations),
@@ -100,8 +159,8 @@ pub fn build_eval_experiment_debug_report(
             experiment_id: experiment.id,
         },
         privacy_mode: context.privacy_mode,
-        executive_summary: eval_summary(experiment),
-        context: experiment_context(experiment),
+        executive_summary: eval_summary_with_regression(experiment, regression),
+        context: experiment_context_with_regression(experiment, regression),
         findings,
         recommendations,
         evidence,
@@ -158,7 +217,10 @@ fn experiment_diagnosis(experiment: &RetrievalEvalExperiment) -> Option<Evidence
     })
 }
 
-fn experiment_context(experiment: &RetrievalEvalExperiment) -> BTreeMap<String, String> {
+fn experiment_context_with_regression(
+    experiment: &RetrievalEvalExperiment,
+    regression: Option<&RetrievalEvalRegressionComparison>,
+) -> BTreeMap<String, String> {
     let mut context = BTreeMap::new();
     context.insert(
         "dataset_case_count".to_owned(),
@@ -203,21 +265,61 @@ fn experiment_context(experiment: &RetrievalEvalExperiment) -> BTreeMap<String, 
             result.latency_p95_ms.to_string(),
         );
     }
+    if let Some(regression) = regression {
+        context.insert(
+            "regression_classification".to_owned(),
+            classification_label(regression.classification).to_owned(),
+        );
+        if let Some(baseline_id) = regression.baseline_experiment_id {
+            context.insert(
+                "baseline_experiment_id".to_owned(),
+                baseline_id.0.to_string(),
+            );
+        }
+        context.insert(
+            "newly_failed_cases".to_owned(),
+            regression.newly_failed_cases.len().to_string(),
+        );
+        context.insert(
+            "recovered_cases".to_owned(),
+            regression.recovered_cases.len().to_string(),
+        );
+    }
     context
 }
 
 fn eval_summary(experiment: &RetrievalEvalExperiment) -> String {
+    eval_summary_with_regression(experiment, None)
+}
+
+fn eval_summary_with_regression(
+    experiment: &RetrievalEvalExperiment,
+    regression: Option<&RetrievalEvalRegressionComparison>,
+) -> String {
+    let regression_sentence = regression
+        .map(|regression| format!(" {}", regression.summary))
+        .unwrap_or_default();
     match experiment.gate.status {
         RetrievalEvalGateStatus::Passed => format!(
-            "The evaluation gate passed across {} mode(s). {}",
+            "The evaluation gate passed across {} mode(s). {}{}",
             experiment.modes.len(),
-            experiment.comparison.summary
+            experiment.comparison.summary,
+            regression_sentence
         ),
         RetrievalEvalGateStatus::Failed => format!(
-            "The evaluation gate failed with {} diagnosed failure(s). {}",
+            "The evaluation gate failed with {} diagnosed failure(s). {}{}",
             experiment.failures.len(),
-            experiment.gate.reasons.join(" ")
+            experiment.gate.reasons.join(" "),
+            regression_sentence
         ),
+    }
+}
+
+fn classification_label(classification: RetrievalEvalRegressionClassification) -> &'static str {
+    match classification {
+        RetrievalEvalRegressionClassification::Improved => "improved",
+        RetrievalEvalRegressionClassification::Regressed => "regressed",
+        RetrievalEvalRegressionClassification::Unchanged => "unchanged",
     }
 }
 
