@@ -35,6 +35,10 @@ describe("OverviewPage", () => {
     expect(
       await screen.findByRole("heading", { name: /^home$/i }),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByText(/home is the command center/i),
+    ).toBeInTheDocument();
+    expect(activeStep("Report")).toBeTruthy();
     expect(await screen.findByText(/workflow ready/i)).toBeInTheDocument();
     expect(screen.getByText("Documents")).toBeInTheDocument();
     expect(screen.getByText("What needs attention")).toBeInTheDocument();
@@ -99,6 +103,7 @@ describe("OverviewPage", () => {
     expect(
       await screen.findByText(/from sample corpus to audit report/i),
     ).toBeInTheDocument();
+    expect(activeStep("Corpus")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /load sample corpus/i }),
     ).toBeInTheDocument();
@@ -197,6 +202,12 @@ function renderOverview() {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+function activeStep(label: string) {
+  return screen
+    .getAllByText(label)
+    .find((element) => element.getAttribute("aria-current") === "step");
 }
 
 function baseOverview() {

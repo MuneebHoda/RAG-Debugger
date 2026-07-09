@@ -86,6 +86,7 @@ Expected coverage in the scaffold:
 - Guided-demo UI tests for each checklist transition, source-scoped indexing, query-ID resolution, demo-source preselection, and Markdown copy/download privacy behavior.
 - The real Playwright demo flow covers login → load sample → index → suggested query → debug run → metadata-only report → copy/download Markdown.
 - Workbench shell tests treat canonical navigation order, active parent routes, breadcrumbs, actionable empty states, mobile focus recovery, and the dedicated CI Runs query view as compatibility contracts.
+- Workbench workflow tests verify that Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings explain their page purpose, quality-loop position, and recommended next action.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 

@@ -14,6 +14,7 @@ import { WorkbenchMetricCard } from "../../../components/workbench/WorkbenchMetr
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
 import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import {
   createEvalLabDataset,
   listCiEvalRuns,
@@ -105,9 +106,37 @@ export function QualityPage() {
       ) : null}
 
       {ciRunsView ? (
-        <CiRunsView isLoading={ciRunsQuery.isLoading} runs={ciRuns} />
+        <>
+          <WorkbenchWorkflowGuide
+            currentStep="ci"
+            impact="CI gates compare current retrieval quality against release thresholds before regressions reach production."
+            nextAction={{
+              label: "Open API key setup",
+              to: "/app/settings?tab=api-keys",
+            }}
+            purpose="CI Runs show automated Eval Lab decisions by branch, commit, and config label."
+          />
+          <CiRunsView isLoading={ciRunsQuery.isLoading} runs={ciRuns} />
+        </>
       ) : (
         <>
+          <WorkbenchWorkflowGuide
+            currentStep="quality"
+            impact="Eval cases turn good and bad evidence into repeatable checks, so chunking or retrieval changes can be measured instead of guessed."
+            nextAction={
+              datasets.length > 0
+                ? {
+                    label: "Open first dataset",
+                    to: `/app/evals/datasets/${datasets[0].id}`,
+                  }
+                : {
+                    label: "Create dataset",
+                    onClick: () => setCreateOpen(true),
+                  }
+            }
+            purpose="Eval Lab is the measurement step: define expected evidence, run experiments, and decide whether a change is safe."
+          />
+
           <section className={styles.stats} aria-label="Eval Lab summary">
             <WorkbenchMetricCard
               label="Datasets"

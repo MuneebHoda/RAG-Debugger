@@ -20,6 +20,7 @@ Every route check requires:
 
 - One visible level-one heading.
 - A visible primary action or useful empty-state action.
+- A visible workflow guide that states the page purpose and connects it to the RAG quality loop.
 - The correct active workspace navigation item.
 - A breadcrumb whose current item matches the page heading.
 - No heading/action overlap.
@@ -45,6 +46,7 @@ Authenticated workbench pages share a small primitive set in
 - `WorkbenchStatusPill`: text-first status labels for evidence, gate, privacy, readiness, and count states.
 - `WorkbenchMetricCard`: compact metric summaries for dashboard and quality totals.
 - `WorkbenchEmptyState`: one explanation plus primary and secondary recovery actions.
+- `WorkbenchWorkflowGuide`: first-time-user orientation for page purpose, quality-loop position, retrieval-quality impact, and one recommended next action.
 
 Use these primitives for repeated workbench structure before adding a page-local
 variant. Domain CSS modules still own workflow-specific grids, evidence cards,

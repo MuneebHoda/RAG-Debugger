@@ -12,6 +12,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
 import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import {
   listCiEvalRuns,
   listEvalLabExperiments,
@@ -96,6 +97,20 @@ export function ReportsPage() {
           </span>
         </div>
       ) : null}
+
+      <WorkbenchWorkflowGuide
+        currentStep="report"
+        impact="Reports package failure labels, evidence references, and recommendations into a privacy-classified handoff for engineering review."
+        nextAction={
+          reportsQuery.data && reportsQuery.data.length > 0
+            ? {
+                label: "Open latest report",
+                to: `/app/reports/${reportsQuery.data[0].id}`,
+              }
+            : { label: "Create audit report", href: "#create-report-panel" }
+        }
+        purpose="Audit Reports are the share step: convert a trace or experiment into a defensible debugging artifact."
+      />
 
       <ReportCreationPanel
         traces={traces}

@@ -122,7 +122,9 @@ test("completes the versioned sample demo through Markdown audit export", async 
     page.getByRole("checkbox", { name: /CorpusLab Sample Corpus/i }),
   ).toBeChecked();
   await page.getByRole("button", { name: "Run retrieval" }).click();
-  await expect(page.getByText("Evidence summary")).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Evidence Summary" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Debug this run" }).click();
   await expect(page).toHaveURL(/\/app\/traces\/[0-9a-f-]+$/);
 

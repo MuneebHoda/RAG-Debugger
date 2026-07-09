@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
 import { WorkbenchStatusPill } from "../../../components/workbench/WorkbenchStatusPill";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import { getProductConfig, type ProductConfig } from "../../../lib/api/config";
 import {
   ingestFiles,
@@ -125,6 +126,17 @@ export function SourcesPage() {
         </div>
       ) : null}
 
+      <WorkbenchWorkflowGuide
+        currentStep="corpus"
+        impact="Good retrieval starts here: extraction warnings, weak chunks, and duplicate text become ranking and citation problems later."
+        nextAction={
+          documents.length > 0
+            ? { label: "Test retrieval", to: "/app/retrieval" }
+            : { label: "Choose files", href: "#add-documents" }
+        }
+        purpose="Corpus is the build step: ingest documents, verify extraction, and inspect the chunks retrieval will search."
+      />
+
       <section className={styles.layout}>
         <WorkbenchPanel
           actions={
@@ -177,6 +189,11 @@ export function SourcesPage() {
 
           <details className={styles.advanced}>
             <summary>Advanced chunking</summary>
+            <p>
+              Structured chunking preserves headings, paragraphs, and bullet
+              groups. Whitespace is available as a baseline when debugging chunk
+              boundaries.
+            </p>
             <div className="config-grid">
               <label>
                 Strategy

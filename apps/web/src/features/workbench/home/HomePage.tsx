@@ -17,6 +17,11 @@ import { WorkbenchMetricCard } from "../../../components/workbench/WorkbenchMetr
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import { WorkbenchPanel } from "../../../components/workbench/WorkbenchPanel";
 import {
+  WorkbenchWorkflowGuide,
+  type WorkbenchWorkflowAction,
+  type WorkbenchWorkflowStepId,
+} from "../../../components/workbench/WorkbenchWorkflowGuide";
+import {
   getOverview,
   type OverviewMetric,
   type OverviewResponse,
@@ -100,9 +105,18 @@ function HomeContent({
   const primaryMetrics = overview.metrics.filter((metric) =>
     primaryMetricIds.has(metric.id),
   );
+  const workflow = homeWorkflow(overview);
 
   return (
     <>
+      <WorkbenchWorkflowGuide
+        currentStep={workflow.currentStep}
+        impact="The dashboard keeps the whole RAG quality loop visible: corpus health, embedding readiness, saved diagnoses, eval coverage, and audit evidence."
+        nextAction={workflow.nextAction}
+        purpose="Home is the command center for choosing the next concrete step instead of hunting through every tool."
+        title="Workspace workflow"
+      />
+
       <SetupChecklist
         error={
           demo.statusQuery.error ??
@@ -244,4 +258,32 @@ function profileLabel(profile: DocumentProfile) {
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function homeWorkflow(overview: OverviewResponse): {
+  currentStep: WorkbenchWorkflowStepId;
+  nextAction: WorkbenchWorkflowAction;
+} {
+  switch (overview.health.status) {
+    case "needs_documents":
+      return {
+        currentStep: "corpus",
+        nextAction: { label: "Add documents", to: "/app/sources" },
+      };
+    case "needs_indexing":
+      return {
+        currentStep: "embeddings",
+        nextAction: { label: "Index embeddings", to: "/app/retrieval" },
+      };
+    case "needs_eval_coverage":
+      return {
+        currentStep: "quality",
+        nextAction: { label: "Create eval coverage", to: "/app/evals" },
+      };
+    default:
+      return {
+        currentStep: "report",
+        nextAction: { label: "Review audit reports", to: "/app/reports" },
+      };
+  }
 }

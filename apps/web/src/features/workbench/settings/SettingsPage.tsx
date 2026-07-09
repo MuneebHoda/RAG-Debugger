@@ -10,6 +10,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
+import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchWorkflowGuide";
 import { listApiKeys } from "../../../lib/api/apiKeys";
 import { getCurrentUser } from "../../../lib/api/auth";
 import { getProductConfig } from "../../../lib/api/config";
@@ -52,6 +53,17 @@ export function SettingsPage() {
         section="Admin"
         title="Settings"
         titleId="settings-title"
+      />
+
+      <WorkbenchWorkflowGuide
+        currentStep="ci"
+        impact="Workspace settings control who can operate CorpusLab and which automation can run Eval Lab gates safely."
+        nextAction={
+          activeTab === "api-keys"
+            ? { label: "Create CI key", href: "#api-keys-title" }
+            : { label: "Open API keys", to: "/app/settings?tab=api-keys" }
+        }
+        purpose="Settings is the admin step for workspace membership, CI credentials, runtime limits, and privacy posture."
       />
 
       <div

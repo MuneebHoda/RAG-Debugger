@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Shared workbench workflow guidance that explains each page's purpose, position in the RAG quality loop, recommended next action, and retrieval-quality impact.
 - Shared authenticated-workbench visual primitives for panels, toolbars, status pills, and dense metric cards, with focused component tests.
 - Dependency-free workbench UI quality gates covering semantic route contracts, desktop/tablet/mobile overflow, keyboard navigation, reduced motion, hostile technical strings, and opt-in review screenshots.
 - A scenario-reactive SVG Evidence Reactor that projects document, chunk, ranking, answerability, CI-gate, and audit-report state around the landing command center with responsive and reduced-motion behavior.
@@ -39,6 +40,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings now make the Upload → Chunk → Embed → Retrieve → Trace → Eval → CI gate → Report loop explicit for first-time users.
 - Core workbench pages now use the shared visual-system primitives for panels, metrics, toolbars, and status labels, reducing one-off CSS and route-level styling drift.
 - Workbench panels now preserve readable empty states, visible mobile tabs, stable dense grids, and contained technical content across five responsive viewports, with populated detail screenshots and component-level geometry gates.
 - The authenticated workbench now follows one typed Setup → Debug → Quality → Share → Admin information architecture with canonical route labels, linked breadcrumbs, a focused CI Runs view, consistent page headers, actionable empty states, mobile focus management, and route-scoped legacy styles.

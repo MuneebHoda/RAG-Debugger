@@ -1,0 +1,50 @@
+.content {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.copyGrid {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.copyGrid p {
+  margin: 0;
+}
+
+.loop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+}
+
+.loop span {
+  border: 1px solid var(--color-ink-200);
+  border-radius: var(--radius-sm);
+  background: #f8fbfd;
+  color: var(--color-ink-600);
+  font-size: 0.68rem;
+  font-weight: 850;
+  padding: 0.35rem 0.42rem;
+  text-align: center;
+}
+
+.loop .activeStep {
+  border-color: var(--color-teal-500);
+  background: color-mix(in srgb, var(--color-teal-500) 10%, white);
+  color: var(--color-teal-900);
+}
+
+.nextAction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-teal-500) 18%, white);
+  padding-top: 0.75rem;
+}
+
+.nextAction > span {
+  flex: 1 1 16rem;
+}

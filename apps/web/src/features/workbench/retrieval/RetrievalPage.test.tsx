@@ -234,6 +234,10 @@ describe("RetrievalPage", () => {
     expect(
       await screen.findByRole("heading", { name: /^retrieval$/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/retrieval is the test step/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/combines semantic and lexical signals/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByLabelText(/what should the corpus answer/i),
     ).toBeInTheDocument();

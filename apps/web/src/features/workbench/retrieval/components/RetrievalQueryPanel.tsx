@@ -46,6 +46,7 @@ export function RetrievalQueryPanel({
         </WorkbenchStatusPill>
       }
       className={styles.controls}
+      id="retrieval-question"
       title="Question"
     >
       {demoStatus?.progress.sample_corpus_loaded ? (
@@ -93,6 +94,10 @@ export function RetrievalQueryPanel({
           </button>
         ))}
       </div>
+      <p>
+        <strong>{modeLabel(retrievalMode)}:</strong>{" "}
+        {modeDescription(retrievalMode)}
+      </p>
 
       <button
         className={`primary-button ${styles.primaryAction}`}
@@ -130,4 +135,19 @@ export function RetrievalQueryPanel({
       </details>
     </WorkbenchPanel>
   );
+}
+
+function modeLabel(mode: RetrievalMode) {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+function modeDescription(mode: RetrievalMode) {
+  switch (mode) {
+    case "lexical":
+      return "prioritizes exact terms and phrases so you can confirm whether the corpus says the words you expect.";
+    case "vector":
+      return "prioritizes semantic similarity, useful for broad discovery but not enough by itself to authorize an answer.";
+    default:
+      return "combines semantic and lexical signals, then still requires direct body-text support before citing an answer.";
+  }
 }

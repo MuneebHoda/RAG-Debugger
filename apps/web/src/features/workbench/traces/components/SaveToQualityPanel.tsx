@@ -40,7 +40,7 @@ export function SaveToQualityPanel({ trace }: { trace: Trace }) {
   const hits = trace.retrieval?.hits ?? [];
 
   return (
-    <section className={styles.qualityPanel}>
+    <section className={styles.qualityPanel} id="quality">
       <div className={styles.panelHeading}>
         <div>
           <h2>Add to Quality</h2>
