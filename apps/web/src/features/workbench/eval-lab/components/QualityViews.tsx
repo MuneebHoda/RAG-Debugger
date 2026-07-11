@@ -11,11 +11,13 @@ import type {
   RetrievalEvalExperimentSummary,
   RetrievalEvalRegressionClassification,
   RetrievalEvalRegressionComparison,
-  RetrievalEvalRegressionMetric,
   RetrievalEvalTrendSummary,
 } from "../../../../lib/api/evalLab";
 import { formatDateTime } from "../../../../lib/dateTime";
-import { classifyBaselineCompatibility } from "../evalRegression";
+import {
+  classifyBaselineCompatibility,
+  regressionExplanation,
+} from "../evalRegression";
 import styles from "../QualityPage.module.css";
 
 export function CreateDatasetPanel({
@@ -267,6 +269,13 @@ export function BaselineSelector({
   const selectedCompatibility = selectedCandidate
     ? classifyBaselineCompatibility(selectedCandidate, currentExperiment)
     : null;
+  const hasInvalidSelectedBaseline = Boolean(
+    selectedBaselineId &&
+    (!selectedCandidate || selectedCompatibility?.level === "incompatible"),
+  );
+  const selectValue = hasInvalidSelectedBaseline
+    ? "auto"
+    : (selectedBaselineId ?? "auto");
 
   return (
     <WorkbenchPanel
@@ -280,7 +289,7 @@ export function BaselineSelector({
           <select
             aria-label="Baseline experiment"
             disabled={isLoading}
-            value={selectedBaselineId ?? "auto"}
+            value={selectValue}
             onChange={(event) =>
               onBaselineChange(
                 event.currentTarget.value === "auto"
@@ -314,11 +323,13 @@ export function BaselineSelector({
         </label>
         <div className={styles.baselineSummary}>
           <strong>
-            {selectedCandidate
-              ? selectedCandidate.name
-              : automaticBaseline
-                ? `Automatic: ${automaticBaseline.name}`
-                : "No automatic baseline"}
+            {hasInvalidSelectedBaseline
+              ? "Invalid baseline selection"
+              : selectedCandidate
+                ? selectedCandidate.name
+                : automaticBaseline
+                  ? `Automatic: ${automaticBaseline.name}`
+                  : "No automatic baseline"}
           </strong>
           <span>
             {selectedCompatibility?.reason ??
@@ -343,6 +354,15 @@ export function BaselineSelector({
         </p>
       ) : null}
       {error ? <p className={styles.error}>{error}</p> : null}
+      {error && selectedBaselineId ? (
+        <button
+          className={styles.secondaryButton}
+          type="button"
+          onClick={() => onBaselineChange(null)}
+        >
+          Use Automatic comparison
+        </button>
+      ) : null}
     </WorkbenchPanel>
   );
 }
@@ -350,14 +370,36 @@ export function BaselineSelector({
 export function RegressionPanel({
   baselineExperiment,
   currentExperiment,
+  error,
   regression,
 }: {
   baselineExperiment: RetrievalEvalExperimentSummary | null;
   currentExperiment: RetrievalEvalExperimentSummary | null;
+  error?: string | null;
   regression: RetrievalEvalRegressionComparison | null | undefined;
 }) {
   if (!regression) {
-    return null;
+    if (!error) {
+      return null;
+    }
+    return (
+      <section className={styles.panel} aria-labelledby="regression-title">
+        <div className={styles.panelHeading}>
+          <div>
+            <h2 id="regression-title">Regression history</h2>
+            <p>{error}</p>
+          </div>
+          <WorkbenchStatusPill tone="danger">Unavailable</WorkbenchStatusPill>
+        </div>
+        {currentExperiment ? (
+          <ExperimentIdentity
+            experiment={currentExperiment}
+            label="Current"
+            status={null}
+          />
+        ) : null}
+      </section>
+    );
   }
 
   const hasBaseline = Boolean(regression.baseline_experiment_id);
@@ -457,7 +499,7 @@ function ExperimentIdentity({
       <strong>{experiment?.name ?? "No comparable baseline"}</strong>
       <span>
         {experiment ? formatDateTime(experiment.created_at) : "Not available"} ·
-        gate {status ?? "none"}
+        gate {status ?? experiment?.gate_status ?? "none"}
       </span>
       {experiment ? (
         <span>
@@ -572,43 +614,6 @@ function metricValue(metric: string, value: number) {
   return percentage(value);
 }
 
-function regressionExplanation(regression: RetrievalEvalRegressionComparison) {
-  if (!regression.baseline_experiment_id) {
-    return "No comparable baseline exists yet for this experiment.";
-  }
-
-  if (
-    regression.baseline_gate_status === "passed" &&
-    regression.current_gate_status === "failed"
-  ) {
-    return "Classification is regressed because the release gate moved from passed to failed.";
-  }
-
-  if (
-    regression.baseline_gate_status === "failed" &&
-    regression.current_gate_status === "passed"
-  ) {
-    return "Classification is improved because the release gate moved from failed to passed.";
-  }
-
-  if (regression.newly_failed_cases.length > 0) {
-    return `Classification is regressed because ${regression.newly_failed_cases.length} case${plural(regression.newly_failed_cases.length)} newly failed.`;
-  }
-
-  if (regression.recovered_cases.length > 0) {
-    return `Classification is improved because ${regression.recovered_cases.length} case${plural(regression.recovered_cases.length)} recovered.`;
-  }
-
-  const decisiveDelta = regression.metric_deltas.find(
-    (delta) => delta.classification !== "unchanged",
-  );
-  if (decisiveDelta) {
-    return `Classification is ${decisiveDelta.classification} because ${metricLabel(decisiveDelta.metric)} changed from ${metricValue(decisiveDelta.metric, decisiveDelta.baseline ?? 0)} to ${metricValue(decisiveDelta.metric, decisiveDelta.current)}.`;
-  }
-
-  return "Classification is unchanged because gate status, cases, and metric deltas stayed within thresholds.";
-}
-
 function compactIds(ids: string[]) {
   if (ids.length === 0) return "none";
   return ids.map((id) => id.slice(0, 8)).join(", ");
@@ -617,14 +622,6 @@ function compactIds(ids: string[]) {
 function formatLabels(labels: string[]) {
   if (labels.length === 0) return "none";
   return labels.map((label) => label.replaceAll("_", " ")).join(", ");
-}
-
-function metricLabel(metric: RetrievalEvalRegressionMetric) {
-  return metric.replaceAll("_", " ");
-}
-
-function plural(count: number) {
-  return count === 1 ? "" : "s";
 }
 
 function percentage(value: number) {

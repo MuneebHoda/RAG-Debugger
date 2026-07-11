@@ -14,6 +14,7 @@ import { BaselineSelector, RegressionPanel } from "./components/QualityViews";
 import {
   classifyBaselineCompatibility,
   findAutomaticBaseline,
+  summarizeExperimentForComparison,
 } from "./evalRegression";
 import styles from "./QualityPage.module.css";
 
@@ -45,6 +46,9 @@ export function ExperimentDetailPage() {
     historyQuery.isSuccess &&
     (!selectedBaseline || selectedCompatibility?.level === "incompatible"),
   );
+  const hasSelectedBaselinePendingValidation = Boolean(
+    selectedBaselineId && !historyQuery.isSuccess,
+  );
 
   const regressionQuery = useQuery({
     queryKey: [
@@ -58,7 +62,10 @@ export function ExperimentDetailPage() {
         selectedBaselineId ?? undefined,
         signal,
       ),
-    enabled: Boolean(experimentId) && !hasInvalidSelectedBaseline,
+    enabled:
+      Boolean(experimentQuery.data) &&
+      !hasInvalidSelectedBaseline &&
+      !hasSelectedBaselinePendingValidation,
   });
 
   if (experimentQuery.isLoading) {
@@ -92,7 +99,7 @@ export function ExperimentDetailPage() {
     ) ?? null;
   const currentSummary =
     historyQuery.data?.find((candidate) => candidate.id === experiment.id) ??
-    null;
+    summarizeExperimentForComparison(experiment);
 
   const updateBaseline = (baselineId: string | null) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -151,12 +158,10 @@ export function ExperimentDetailPage() {
             ? "Selected baseline cannot be compared with this experiment."
             : historyQuery.isError
               ? "Experiment history could not be loaded."
-              : regressionQuery.isError
-                ? "Regression comparison could not be loaded."
-                : null
+              : null
         }
         experiments={historyQuery.data ?? []}
-        isLoading={historyQuery.isLoading || regressionQuery.isLoading}
+        isLoading={historyQuery.isLoading}
         selectedBaselineId={selectedBaselineId}
         onBaselineChange={updateBaseline}
       />
@@ -164,6 +169,13 @@ export function ExperimentDetailPage() {
       <RegressionPanel
         baselineExperiment={regressionBaseline}
         currentExperiment={currentSummary}
+        error={
+          hasInvalidSelectedBaseline
+            ? "Choose Automatic or a compatible earlier experiment to view regression history."
+            : regressionQuery.isError
+              ? "Regression comparison could not be loaded."
+              : null
+        }
         regression={hasInvalidSelectedBaseline ? null : regressionQuery.data}
       />
 

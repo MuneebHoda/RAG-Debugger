@@ -17,9 +17,13 @@ const baselineId = "018f7a2a-6e2e-7000-a000-000000000307";
 const partialBaselineId = "018f7a2a-6e2e-7000-a000-000000000308";
 const newerExperimentId = "018f7a2a-6e2e-7000-a000-000000000309";
 const firstExperimentId = "018f7a2a-6e2e-7000-a000-000000000310";
+let historyShouldFail = false;
+let regressionShouldFail = false;
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
+    historyShouldFail = false;
+    regressionShouldFail = false;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -30,6 +34,9 @@ describe("guided Eval Lab workflow", () => {
         if (
           url.includes(`/api/v1/eval-lab/datasets/${datasetId}/experiments`)
         ) {
+          if (historyShouldFail) {
+            return responseError(500, "Experiment history failed");
+          }
           return responseJson(experimentHistory());
         }
         if (url.includes(`/api/v1/eval-lab/datasets/${datasetId}/trends`)) {
@@ -46,6 +53,9 @@ describe("guided Eval Lab workflow", () => {
             `/api/v1/eval-lab/experiments/${experimentId}/regression`,
           )
         ) {
+          if (regressionShouldFail) {
+            return responseError(500, "Regression comparison failed");
+          }
           return responseJson(regressionForUrl(url));
         }
         if (
@@ -160,7 +170,7 @@ describe("guided Eval Lab workflow", () => {
       screen.getByText(/expected evidence was not retrieved/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /regression history/i }),
+      await screen.findByRole("heading", { name: /regression history/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("combobox", { name: "Baseline experiment" }),
@@ -249,11 +259,86 @@ describe("guided Eval Lab workflow", () => {
       await screen.findByRole("heading", { name: "Initial retrieval gate" }),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText(/No comparable baseline/i).length,
+      (await screen.findAllByText(/No comparable baseline/i)).length,
     ).toBeGreaterThan(0);
     expect(
       screen.getByText(/Run another compatible experiment/i),
     ).toBeInTheDocument();
+  });
+
+  it("keeps the current experiment identity when experiment history fails", async () => {
+    historyShouldFail = true;
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Experiment history could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /regression history/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/modes hybrid, vector, lexical · top_k 5/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a visible regression error while keeping the selector usable", async () => {
+    regressionShouldFail = true;
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Regression comparison could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Baseline experiment" }),
+    ).toBeEnabled();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+  });
+
+  it("rejects an invalid baseline id from the URL before calling regression", async () => {
+    renderRoute(
+      `/app/evals/experiments/${experimentId}?baseline_id=${newerExperimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "Selected baseline cannot be compared with this experiment.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Choose Automatic or a compatible earlier experiment to view regression history.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /use automatic comparison/i }),
+    ).toBeInTheDocument();
+
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        input
+          .toString()
+          .includes(
+            `/api/v1/eval-lab/experiments/${experimentId}/regression?baseline_id=${newerExperimentId}`,
+          ),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -643,4 +728,11 @@ function noBaselineRegression() {
 
 function responseJson(json: unknown) {
   return Promise.resolve({ status: 200, json: async () => json } as Response);
+}
+
+function responseError(status: number, message: string) {
+  return Promise.resolve({
+    status,
+    text: async () => JSON.stringify({ error: { message } }),
+  } as Response);
 }
