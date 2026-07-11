@@ -7,12 +7,15 @@ import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel"
 import { WorkbenchStatusPill } from "../../../../components/workbench/WorkbenchStatusPill";
 import type {
   CiEvalRun,
+  RetrievalEvalExperiment,
   RetrievalEvalExperimentSummary,
   RetrievalEvalRegressionClassification,
   RetrievalEvalRegressionComparison,
+  RetrievalEvalRegressionMetric,
   RetrievalEvalTrendSummary,
 } from "../../../../lib/api/evalLab";
 import { formatDateTime } from "../../../../lib/dateTime";
+import { classifyBaselineCompatibility } from "../evalRegression";
 import styles from "../QualityPage.module.css";
 
 export function CreateDatasetPanel({
@@ -241,30 +244,167 @@ export function ExperimentHistoryPanel({
   );
 }
 
+export function BaselineSelector({
+  automaticBaseline,
+  currentExperiment,
+  error,
+  experiments,
+  isLoading,
+  onBaselineChange,
+  selectedBaselineId,
+}: {
+  automaticBaseline: RetrievalEvalExperimentSummary | null;
+  currentExperiment: RetrievalEvalExperiment;
+  error: string | null;
+  experiments: RetrievalEvalExperimentSummary[];
+  isLoading: boolean;
+  onBaselineChange: (baselineId: string | null) => void;
+  selectedBaselineId: string | null;
+}) {
+  const selectedCandidate =
+    experiments.find((candidate) => candidate.id === selectedBaselineId) ??
+    null;
+  const selectedCompatibility = selectedCandidate
+    ? classifyBaselineCompatibility(selectedCandidate, currentExperiment)
+    : null;
+
+  return (
+    <WorkbenchPanel
+      className={styles.panel}
+      description="Choose which earlier experiment this result should be compared against."
+      title="Comparison baseline"
+    >
+      <div className={styles.form}>
+        <label>
+          Baseline experiment
+          <select
+            aria-label="Baseline experiment"
+            disabled={isLoading}
+            value={selectedBaselineId ?? "auto"}
+            onChange={(event) =>
+              onBaselineChange(
+                event.currentTarget.value === "auto"
+                  ? null
+                  : event.currentTarget.value,
+              )
+            }
+          >
+            <option value="auto">
+              Automatic ·{" "}
+              {automaticBaseline
+                ? automaticBaseline.name
+                : "latest compatible run"}
+            </option>
+            {experiments.map((candidate) => {
+              const compatibility = classifyBaselineCompatibility(
+                candidate,
+                currentExperiment,
+              );
+              return (
+                <option
+                  disabled={compatibility.level === "incompatible"}
+                  key={candidate.id}
+                  value={candidate.id}
+                >
+                  {candidate.name} · {compatibility.label}
+                </option>
+              );
+            })}
+          </select>
+        </label>
+        <div className={styles.baselineSummary}>
+          <strong>
+            {selectedCandidate
+              ? selectedCandidate.name
+              : automaticBaseline
+                ? `Automatic: ${automaticBaseline.name}`
+                : "No automatic baseline"}
+          </strong>
+          <span>
+            {selectedCompatibility?.reason ??
+              (automaticBaseline
+                ? "Using the latest earlier experiment with the same top_k and retrieval modes."
+                : "Run another compatible experiment to enable regression comparison.")}
+          </span>
+          {selectedCandidate ? (
+            <small>
+              {formatDateTime(selectedCandidate.created_at)} · gate{" "}
+              {selectedCandidate.gate_status} · modes{" "}
+              {selectedCandidate.modes.join(", ")} · top_k{" "}
+              {selectedCandidate.top_k}
+            </small>
+          ) : null}
+        </div>
+      </div>
+      {selectedCompatibility?.level === "partially_compatible" ? (
+        <p className={styles.warning}>
+          Partial baseline: compare directionally, because top_k or mode
+          coverage differs.
+        </p>
+      ) : null}
+      {error ? <p className={styles.error}>{error}</p> : null}
+    </WorkbenchPanel>
+  );
+}
+
 export function RegressionPanel({
+  baselineExperiment,
+  currentExperiment,
   regression,
 }: {
+  baselineExperiment: RetrievalEvalExperimentSummary | null;
+  currentExperiment: RetrievalEvalExperimentSummary | null;
   regression: RetrievalEvalRegressionComparison | null | undefined;
 }) {
   if (!regression) {
     return null;
   }
 
+  const hasBaseline = Boolean(regression.baseline_experiment_id);
+  const displayClassification = hasBaseline
+    ? regression.classification
+    : "No comparable baseline";
+  const explanation = regressionExplanation(regression);
+
   return (
     <section className={styles.panel} aria-labelledby="regression-title">
       <div className={styles.panelHeading}>
         <div>
           <h2 id="regression-title">Regression history</h2>
-          <p>{regression.summary}</p>
+          <p>{hasBaseline ? regression.summary : explanation}</p>
         </div>
         <WorkbenchStatusPill
-          tone={classificationTone(regression.classification)}
+          tone={
+            hasBaseline
+              ? classificationTone(regression.classification)
+              : "neutral"
+          }
         >
-          {regression.classification}
+          {displayClassification}
         </WorkbenchStatusPill>
       </div>
+      <div className={styles.grid}>
+        <ExperimentIdentity
+          experiment={baselineExperiment}
+          label="Baseline"
+          status={regression.baseline_gate_status}
+        />
+        <ExperimentIdentity
+          experiment={currentExperiment}
+          label="Current"
+          status={regression.current_gate_status}
+        />
+      </div>
+      {hasBaseline ? (
+        <p className={styles.callout}>{explanation}</p>
+      ) : (
+        <p className={styles.callout}>
+          This experiment is the first compatible run for its dataset, top_k,
+          and retrieval modes.
+        </p>
+      )}
       <div className={styles.metricRows}>
-        {regression.metric_deltas.slice(0, 4).map((delta) => (
+        {regression.metric_deltas.map((delta) => (
           <span key={delta.metric}>
             {delta.metric.replaceAll("_", " ")}
             <strong>
@@ -279,22 +419,62 @@ export function RegressionPanel({
       <div className={styles.grid}>
         <CaseRegressionList
           cases={regression.newly_failed_cases}
+          kind="status"
           title="Newly failed"
         />
         <CaseRegressionList
           cases={regression.recovered_cases}
+          kind="status"
           title="Recovered"
+        />
+        <CaseRegressionList
+          cases={regression.changed_top_evidence_cases}
+          kind="evidence"
+          title="Changed top evidence"
+        />
+        <CaseRegressionList
+          cases={regression.changed_failure_label_cases}
+          kind="labels"
+          title="Changed failure labels"
         />
       </div>
     </section>
   );
 }
 
+function ExperimentIdentity({
+  experiment,
+  label,
+  status,
+}: {
+  experiment: RetrievalEvalExperimentSummary | null;
+  label: string;
+  status: string | null;
+}) {
+  return (
+    <article className={styles.identityCard}>
+      <small>{label}</small>
+      <strong>{experiment?.name ?? "No comparable baseline"}</strong>
+      <span>
+        {experiment ? formatDateTime(experiment.created_at) : "Not available"} ·
+        gate {status ?? "none"}
+      </span>
+      {experiment ? (
+        <span>
+          modes {experiment.modes.join(", ")} · top_k {experiment.top_k}
+        </span>
+      ) : null}
+    </article>
+  );
+}
+
 function CaseRegressionList({
   cases,
+  kind,
   title,
 }: {
   cases: RetrievalEvalRegressionComparison["newly_failed_cases"];
+  kind: "status" | "evidence" | "labels";
   title: string;
 }) {
   return (
@@ -306,16 +486,66 @@ function CaseRegressionList({
           key={`${title}-${entry.case_id}-${entry.retrieval_mode}`}
         >
           <strong>{entry.query}</strong>
-          <small>
-            {entry.retrieval_mode} · rank {entry.baseline_top_hit_rank ?? "—"} →{" "}
-            {entry.current_top_hit_rank ?? "—"}
-          </small>
+          <BeforeAfter entry={entry} kind={kind} />
         </article>
       ))}
       {cases.length === 0 ? (
         <p className={styles.empty}>None detected.</p>
       ) : null}
     </div>
+  );
+}
+
+function BeforeAfter({
+  entry,
+  kind,
+}: {
+  entry: RetrievalEvalRegressionComparison["newly_failed_cases"][number];
+  kind: "status" | "evidence" | "labels";
+}) {
+  if (kind === "evidence") {
+    return (
+      <div className={styles.metricRows}>
+        <span>
+          Before{" "}
+          <strong>{compactIds(entry.baseline_retrieved_chunk_ids)}</strong>
+        </span>
+        <span>
+          After <strong>{compactIds(entry.current_retrieved_chunk_ids)}</strong>
+        </span>
+      </div>
+    );
+  }
+
+  if (kind === "labels") {
+    return (
+      <div className={styles.metricRows}>
+        <span>
+          Before <strong>{formatLabels(entry.baseline_failure_labels)}</strong>
+        </span>
+        <span>
+          After <strong>{formatLabels(entry.current_failure_labels)}</strong>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <small>
+      {entry.retrieval_mode} · rank {entry.baseline_top_hit_rank ?? "—"} →{" "}
+      {entry.current_top_hit_rank ?? "—"} ·{" "}
+      {entry.baseline_passed === null
+        ? "no baseline"
+        : entry.baseline_passed
+          ? "passed"
+          : "failed"}{" "}
+      →{" "}
+      {entry.current_passed === null
+        ? "not run"
+        : entry.current_passed
+          ? "passed"
+          : "failed"}
+    </small>
   );
 }
 
@@ -340,6 +570,61 @@ function metricValue(metric: string, value: number) {
   if (metric === "latency_p95_ms") return `${Math.round(value)} ms`;
   if (metric === "missing_embedding_failures") return String(Math.round(value));
   return percentage(value);
+}
+
+function regressionExplanation(regression: RetrievalEvalRegressionComparison) {
+  if (!regression.baseline_experiment_id) {
+    return "No comparable baseline exists yet for this experiment.";
+  }
+
+  if (
+    regression.baseline_gate_status === "passed" &&
+    regression.current_gate_status === "failed"
+  ) {
+    return "Classification is regressed because the release gate moved from passed to failed.";
+  }
+
+  if (
+    regression.baseline_gate_status === "failed" &&
+    regression.current_gate_status === "passed"
+  ) {
+    return "Classification is improved because the release gate moved from failed to passed.";
+  }
+
+  if (regression.newly_failed_cases.length > 0) {
+    return `Classification is regressed because ${regression.newly_failed_cases.length} case${plural(regression.newly_failed_cases.length)} newly failed.`;
+  }
+
+  if (regression.recovered_cases.length > 0) {
+    return `Classification is improved because ${regression.recovered_cases.length} case${plural(regression.recovered_cases.length)} recovered.`;
+  }
+
+  const decisiveDelta = regression.metric_deltas.find(
+    (delta) => delta.classification !== "unchanged",
+  );
+  if (decisiveDelta) {
+    return `Classification is ${decisiveDelta.classification} because ${metricLabel(decisiveDelta.metric)} changed from ${metricValue(decisiveDelta.metric, decisiveDelta.baseline ?? 0)} to ${metricValue(decisiveDelta.metric, decisiveDelta.current)}.`;
+  }
+
+  return "Classification is unchanged because gate status, cases, and metric deltas stayed within thresholds.";
+}
+
+function compactIds(ids: string[]) {
+  if (ids.length === 0) return "none";
+  return ids.map((id) => id.slice(0, 8)).join(", ");
+}
+
+function formatLabels(labels: string[]) {
+  if (labels.length === 0) return "none";
+  return labels.map((label) => label.replaceAll("_", " ")).join(", ");
+}
+
+function metricLabel(metric: RetrievalEvalRegressionMetric) {
+  return metric.replaceAll("_", " ");
+}
+
+function plural(count: number) {
+  return count === 1 ? "" : "s";
 }
 
 function percentage(value: number) {
