@@ -47,6 +47,19 @@ describe("guided run workflow", () => {
             },
           ]);
         }
+        if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
+          return responseJson({
+            id: datasetId,
+            name: "Critical questions",
+            description: null,
+            cases: [],
+            created_at: "2026-06-27T10:46:19Z",
+            updated_at: "2026-06-27T10:46:19Z",
+          });
+        }
+        if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
+          return responseJson(evidenceLookup());
+        }
         if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}/cases`)) {
           return responseJson({ id: "case-1" });
         }
@@ -133,13 +146,10 @@ describe("guided run workflow", () => {
       target: { value: datasetId },
     });
     expect(datasetSelect).toHaveValue(datasetId);
-    const evidenceCheckbox = screen.getByRole("checkbox");
-    fireEvent.click(evidenceCheckbox);
-    await waitFor(() => expect(evidenceCheckbox).toBeChecked());
     const saveButton = screen.getByRole("button", {
       name: /save quality case/i,
     });
-    expect(saveButton).toBeEnabled();
+    await waitFor(() => expect(saveButton).toBeEnabled());
   });
 
   it("shows a loading state when navigating to a different trace", async () => {
@@ -399,6 +409,43 @@ const retrieval = {
     ],
   },
 };
+
+function evidenceLookup() {
+  return {
+    documents: [
+      {
+        id: "document-1",
+        source_id: "source-1",
+        source_name: "Corpus upload",
+        path: "platform-guide.md",
+        profile: "technical_docs",
+        extraction_quality: "high",
+        warnings: [],
+        chunk_count: 1,
+      },
+    ],
+    chunks: [
+      {
+        id: chunkId,
+        document_id: "document-1",
+        source_id: "source-1",
+        source_name: "Corpus upload",
+        document_path: "platform-guide.md",
+        ordinal: 0,
+        text: "GPU workers speed up embedding refreshes.",
+        token_count: 6,
+        checksum: "1234567890abcdef",
+        section_title: "Indexing",
+        quality_flags: ["good_evidence_candidate"],
+        is_duplicate: false,
+        text_density: 0.9,
+        evidence_score_hint: 0.8,
+      },
+    ],
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
+  };
+}
 
 const trace = {
   id: traceId,

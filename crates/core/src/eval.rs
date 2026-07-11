@@ -4,14 +4,14 @@ use uuid::Uuid;
 use time::OffsetDateTime;
 
 use crate::{
-    chunk::ChunkId,
+    chunk::{ChunkId, ChunkQualityFlag},
     config::RetrievalWeights,
     diagnosis::EvidenceDiagnosisSummary,
     embedding::EmbeddingModelInfo,
     model::ModelConfigId,
     project::ProjectId,
     retrieval::{RetrievalMode, DEFAULT_RETRIEVAL_TOP_K},
-    source::DocumentId,
+    source::{DocumentId, DocumentProfile, DocumentWarning, ExtractionQuality, SourceId},
     trace::TraceId,
 };
 
@@ -135,6 +135,56 @@ pub struct UpdateRetrievalEvalCaseRequest {
     pub expected_chunk_ids: Option<Vec<ChunkId>>,
     pub expected_document_ids: Option<Vec<DocumentId>>,
     pub notes: Option<Option<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct QueryEvalLabEvidenceRequest {
+    pub query: Option<String>,
+    #[serde(default)]
+    pub document_ids: Vec<DocumentId>,
+    #[serde(default)]
+    pub chunk_ids: Vec<ChunkId>,
+    pub limit: Option<u32>,
+    #[serde(default)]
+    pub include_chunks: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QueryEvalLabEvidenceResponse {
+    pub documents: Vec<EvalLabEvidenceDocument>,
+    pub chunks: Vec<EvalLabEvidenceChunk>,
+    pub unresolved_document_ids: Vec<DocumentId>,
+    pub unresolved_chunk_ids: Vec<ChunkId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct EvalLabEvidenceDocument {
+    pub id: DocumentId,
+    pub source_id: SourceId,
+    pub source_name: String,
+    pub path: String,
+    pub profile: DocumentProfile,
+    pub extraction_quality: ExtractionQuality,
+    pub warnings: Vec<DocumentWarning>,
+    pub chunk_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvalLabEvidenceChunk {
+    pub id: ChunkId,
+    pub document_id: DocumentId,
+    pub source_id: SourceId,
+    pub source_name: String,
+    pub document_path: String,
+    pub ordinal: u32,
+    pub text: String,
+    pub token_count: u32,
+    pub checksum: String,
+    pub section_title: Option<String>,
+    pub quality_flags: Vec<ChunkQualityFlag>,
+    pub is_duplicate: bool,
+    pub text_density: f32,
+    pub evidence_score_hint: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -543,6 +593,55 @@ mod tests {
         let round_trip: RetrievalEvalTrendSummary =
             serde_json::from_value(json).expect("trend deserializes");
         assert_eq!(round_trip, summary);
+    }
+
+    #[test]
+    fn evidence_lookup_contract_round_trips() {
+        let document_id = DocumentId(Uuid::now_v7());
+        let chunk_id = ChunkId(Uuid::now_v7());
+        let source_id = SourceId(Uuid::now_v7());
+        let response = QueryEvalLabEvidenceResponse {
+            documents: vec![EvalLabEvidenceDocument {
+                id: document_id,
+                source_id,
+                source_name: "Support KB".to_owned(),
+                path: "support/account-recovery.md".to_owned(),
+                profile: DocumentProfile::SupportKb,
+                extraction_quality: ExtractionQuality::High,
+                warnings: Vec::new(),
+                chunk_count: 2,
+            }],
+            chunks: vec![EvalLabEvidenceChunk {
+                id: chunk_id,
+                document_id,
+                source_id,
+                source_name: "Support KB".to_owned(),
+                document_path: "support/account-recovery.md".to_owned(),
+                ordinal: 0,
+                text: "Password reset links expire after fifteen minutes.".to_owned(),
+                token_count: 7,
+                checksum: "abc123".to_owned(),
+                section_title: Some("Account recovery".to_owned()),
+                quality_flags: vec![ChunkQualityFlag::GoodEvidenceCandidate],
+                is_duplicate: false,
+                text_density: 0.9,
+                evidence_score_hint: 0.8,
+            }],
+            unresolved_document_ids: vec![DocumentId(Uuid::now_v7())],
+            unresolved_chunk_ids: Vec::new(),
+        };
+
+        let json = serde_json::to_value(&response).expect("evidence serializes");
+        assert_eq!(json["documents"][0]["profile"], "support_kb");
+        assert_eq!(
+            json["chunks"][0]["quality_flags"][0],
+            "good_evidence_candidate"
+        );
+        assert!(json["unresolved_document_ids"][0].is_string());
+
+        let round_trip: QueryEvalLabEvidenceResponse =
+            serde_json::from_value(json).expect("evidence deserializes");
+        assert_eq!(round_trip, response);
     }
 
     #[test]

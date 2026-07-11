@@ -147,7 +147,7 @@ This helps users see whether lexical, vector, or hybrid retrieval is improving e
 - **Timeline** shows ordered query, retrieval, evidence, eval, and generation spans.
 - **Compare** reruns the same question with changed retrieval settings and shows score, latency, overlap, and rank movement.
 
-Summary also exposes **Add to Quality**. It requires an explicit dataset and expected chunk selection; CorpusLab never silently treats the first hit or first dataset as correct.
+Summary also exposes **Add to Quality**. It uses the shared Eval Lab evidence picker and requires an explicit dataset plus reviewed expected evidence before saving. CorpusLab may preselect the top retrieved chunk to reduce friction, but the user can remove it, add whole documents, search other chunks, and review stale or unresolved evidence before creating the Quality case. CorpusLab never silently treats the first dataset as correct.
 
 Trace Detail also exposes **Create audit report** above the debugger tabs. The action defaults to metadata-only output, requires privacy confirmation, and opens the generated report at `/app/reports/:reportId`.
 

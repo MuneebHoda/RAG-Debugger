@@ -3,13 +3,14 @@ use axum::{
     Json,
 };
 use rag_debugger_core::{
-    CompareRetrievalEvalExperimentRequest, CreateRetrievalEvalDatasetRequest,
-    CreateRetrievalEvalLabCaseRequest, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
+    Chunk, ChunkId, CompareRetrievalEvalExperimentRequest, CreateRetrievalEvalDatasetRequest,
+    CreateRetrievalEvalLabCaseRequest, DocumentId, EvalLabEvidenceChunk, EvalLabEvidenceDocument,
+    QueryEvalLabEvidenceRequest, QueryEvalLabEvidenceResponse, RetrievalEvalCase,
+    RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
     RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
     RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
     RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
-    RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest,
+    RunRetrievalEvalExperimentRequest, SourceSummary, UpdateRetrievalEvalCaseRequest,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
@@ -21,6 +22,7 @@ use rag_debugger_rag::{
     retrieval::LocalHybridRetriever,
     RagError,
 };
+use rag_debugger_storage::repository::AppRepository;
 use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -75,12 +77,30 @@ pub async fn get_dataset(
     ))
 }
 
+pub async fn query_evidence(
+    State(state): State<AppState>,
+    Json(request): Json<QueryEvalLabEvidenceRequest>,
+) -> Result<Json<QueryEvalLabEvidenceResponse>, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    Ok(Json(
+        build_evidence_response(repository.as_ref(), &request).await?,
+    ))
+}
+
 pub async fn create_case(
     State(state): State<AppState>,
     Path(dataset_id): Path<Uuid>,
-    Json(request): Json<CreateRetrievalEvalLabCaseRequest>,
+    Json(mut request): Json<CreateRetrievalEvalLabCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    request.expected_chunk_ids = dedupe_chunk_ids(request.expected_chunk_ids);
+    request.expected_document_ids = dedupe_document_ids(request.expected_document_ids);
+    validate_expected_evidence(
+        repository.as_ref(),
+        &request.expected_chunk_ids,
+        &request.expected_document_ids,
+    )
+    .await?;
     let eval_case = eval_case_from_request(
         request,
         state.config().product.retrieval.default_top_k,
@@ -97,9 +117,19 @@ pub async fn create_case(
 pub async fn update_case(
     State(state): State<AppState>,
     Path(case_id): Path<Uuid>,
-    Json(request): Json<UpdateRetrievalEvalCaseRequest>,
+    Json(mut request): Json<UpdateRetrievalEvalCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    if let Some(chunk_ids) = request.expected_chunk_ids.take() {
+        let chunk_ids = dedupe_chunk_ids(chunk_ids);
+        validate_expected_evidence(repository.as_ref(), &chunk_ids, &[]).await?;
+        request.expected_chunk_ids = Some(chunk_ids);
+    }
+    if let Some(document_ids) = request.expected_document_ids.take() {
+        let document_ids = dedupe_document_ids(document_ids);
+        validate_expected_evidence(repository.as_ref(), &[], &document_ids).await?;
+        request.expected_document_ids = Some(document_ids);
+    }
     let current = repository
         .list_retrieval_eval_cases()
         .await?
@@ -370,6 +400,191 @@ pub async fn compare_experiment(
     Ok(Json(compare_mode_results(&results)))
 }
 
+async fn build_evidence_response(
+    repository: &dyn AppRepository,
+    request: &QueryEvalLabEvidenceRequest,
+) -> Result<QueryEvalLabEvidenceResponse, ApiError> {
+    let sources = repository.list_sources().await?;
+    let limit = request.limit.unwrap_or(25).clamp(1, 100) as usize;
+    let query = normalized_search(request.query.as_deref());
+    let document_ids = dedupe_document_ids(request.document_ids.clone());
+    let chunk_ids = dedupe_chunk_ids(request.chunk_ids.clone());
+
+    let mut documents = Vec::new();
+    let mut chunks = Vec::new();
+    let mut found_document_ids = Vec::new();
+    let mut found_chunk_ids = Vec::new();
+    let requested_documents = document_ids
+        .iter()
+        .map(|document_id| document_id.0)
+        .collect::<Vec<_>>();
+    let requested_chunks = chunk_ids
+        .iter()
+        .map(|chunk_id| chunk_id.0)
+        .collect::<Vec<_>>();
+
+    for source in &sources {
+        for summary in &source.documents {
+            let document = &summary.document;
+            let requested_document = requested_documents.contains(&document.id.0);
+            let document_matches = requested_document
+                || query
+                    .as_deref()
+                    .is_none_or(|needle| document_matches_query(source, summary, needle));
+
+            let should_fetch_chunks = request.include_chunks
+                || !requested_chunks.is_empty()
+                || (query.is_some() && chunks.len() < limit);
+            let document_chunks = if should_fetch_chunks {
+                repository.list_document_chunks(document.id).await?
+            } else {
+                Vec::new()
+            };
+
+            if requested_document {
+                found_document_ids.push(document.id);
+            }
+
+            if document_matches && documents.len() < limit {
+                documents.push(evidence_document(source, summary));
+            }
+
+            for chunk in document_chunks {
+                let requested_chunk = requested_chunks.contains(&chunk.id.0);
+                if requested_chunk {
+                    found_chunk_ids.push(chunk.id);
+                }
+                if requested_chunk
+                    || (request.include_chunks
+                        && query.as_deref().is_none_or(|needle| {
+                            chunk_matches_query(&chunk, source, summary, needle)
+                        }))
+                {
+                    chunks.push(evidence_chunk(source, summary, &chunk));
+                }
+            }
+        }
+    }
+
+    chunks.truncate(limit);
+    let unresolved_document_ids = document_ids
+        .into_iter()
+        .filter(|document_id| !found_document_ids.contains(document_id))
+        .collect();
+    let unresolved_chunk_ids = chunk_ids
+        .into_iter()
+        .filter(|chunk_id| !found_chunk_ids.contains(chunk_id))
+        .collect();
+
+    Ok(QueryEvalLabEvidenceResponse {
+        documents,
+        chunks,
+        unresolved_document_ids,
+        unresolved_chunk_ids,
+    })
+}
+
+async fn validate_expected_evidence(
+    repository: &dyn AppRepository,
+    chunk_ids: &[ChunkId],
+    document_ids: &[DocumentId],
+) -> Result<(), ApiError> {
+    if chunk_ids.is_empty() && document_ids.is_empty() {
+        return Ok(());
+    }
+
+    let response = build_evidence_response(
+        repository,
+        &QueryEvalLabEvidenceRequest {
+            query: None,
+            document_ids: document_ids.to_vec(),
+            chunk_ids: chunk_ids.to_vec(),
+            limit: Some((chunk_ids.len() + document_ids.len()).max(1) as u32),
+            include_chunks: true,
+        },
+    )
+    .await?;
+
+    if response.unresolved_document_ids.is_empty() && response.unresolved_chunk_ids.is_empty() {
+        Ok(())
+    } else {
+        Err(ApiError::BadRequest(
+            "expected evidence is unavailable or outside this workspace".to_owned(),
+        ))
+    }
+}
+
+fn evidence_document(
+    source: &SourceSummary,
+    summary: &rag_debugger_core::DocumentSummary,
+) -> EvalLabEvidenceDocument {
+    EvalLabEvidenceDocument {
+        id: summary.document.id,
+        source_id: source.source.id,
+        source_name: source.source.name.clone(),
+        path: summary.document.path.clone(),
+        profile: summary.document.profile,
+        extraction_quality: summary.document.extraction_quality,
+        warnings: summary.document.warnings.clone(),
+        chunk_count: summary.chunk_count,
+    }
+}
+
+fn evidence_chunk(
+    source: &SourceSummary,
+    summary: &rag_debugger_core::DocumentSummary,
+    chunk: &Chunk,
+) -> EvalLabEvidenceChunk {
+    EvalLabEvidenceChunk {
+        id: chunk.id,
+        document_id: chunk.document_id,
+        source_id: source.source.id,
+        source_name: source.source.name.clone(),
+        document_path: summary.document.path.clone(),
+        ordinal: chunk.ordinal,
+        text: chunk.text.clone(),
+        token_count: chunk.token_count,
+        checksum: chunk.checksum.clone(),
+        section_title: chunk.section_title.clone(),
+        quality_flags: chunk.quality_flags.clone(),
+        is_duplicate: chunk.is_duplicate,
+        text_density: chunk.text_density,
+        evidence_score_hint: chunk.evidence_score_hint,
+    }
+}
+
+fn document_matches_query(
+    source: &SourceSummary,
+    summary: &rag_debugger_core::DocumentSummary,
+    needle: &str,
+) -> bool {
+    source.source.name.to_lowercase().contains(needle)
+        || summary.document.path.to_lowercase().contains(needle)
+        || summary.document.id.0.to_string().contains(needle)
+}
+
+fn chunk_matches_query(
+    chunk: &Chunk,
+    source: &SourceSummary,
+    summary: &rag_debugger_core::DocumentSummary,
+    needle: &str,
+) -> bool {
+    document_matches_query(source, summary, needle)
+        || chunk.text.to_lowercase().contains(needle)
+        || chunk
+            .section_title
+            .as_ref()
+            .is_some_and(|section| section.to_lowercase().contains(needle))
+        || chunk.id.0.to_string().contains(needle)
+}
+
+fn normalized_search(query: Option<&str>) -> Option<String> {
+    query
+        .map(str::trim)
+        .filter(|query| !query.is_empty())
+        .map(str::to_lowercase)
+}
+
 fn eval_case_from_request(
     request: CreateRetrievalEvalLabCaseRequest,
     default_top_k: u32,
@@ -395,11 +610,31 @@ fn eval_case_from_request(
             .unwrap_or_else(|| query.clone()),
         query,
         top_k: normalized_top_k(request.top_k, default_top_k, max_top_k),
-        expected_chunk_ids: request.expected_chunk_ids,
-        expected_document_ids: request.expected_document_ids,
+        expected_chunk_ids: dedupe_chunk_ids(request.expected_chunk_ids),
+        expected_document_ids: dedupe_document_ids(request.expected_document_ids),
         notes: request.notes,
         created_at: OffsetDateTime::now_utc(),
     })
+}
+
+fn dedupe_chunk_ids(ids: Vec<ChunkId>) -> Vec<ChunkId> {
+    let mut deduped = Vec::with_capacity(ids.len());
+    for id in ids {
+        if !deduped.contains(&id) {
+            deduped.push(id);
+        }
+    }
+    deduped
+}
+
+fn dedupe_document_ids(ids: Vec<DocumentId>) -> Vec<DocumentId> {
+    let mut deduped = Vec::with_capacity(ids.len());
+    for id in ids {
+        if !deduped.contains(&id) {
+            deduped.push(id);
+        }
+    }
+    deduped
 }
 
 #[derive(Debug, Deserialize)]

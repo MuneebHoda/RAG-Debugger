@@ -1,0 +1,135 @@
+import { X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+
+import { queryEvalLabEvidence } from "../../../../lib/api/evalLab";
+import {
+  compactId,
+  normalizeEvidenceSelection,
+  removeEvidenceChunk,
+  removeEvidenceDocument,
+  type EvidenceSelection,
+} from "./evidenceSelection";
+import styles from "./EvidencePicker.module.css";
+
+export function EvidenceSelectionReview({
+  selection,
+  onSelectionChange,
+}: {
+  selection: EvidenceSelection;
+  onSelectionChange: (selection: EvidenceSelection) => void;
+}) {
+  const normalizedSelection = normalizeEvidenceSelection(selection);
+  const evidenceQuery = useQuery({
+    queryKey: [
+      "eval-lab-evidence-review",
+      normalizedSelection.documentIds,
+      normalizedSelection.chunkIds,
+    ],
+    queryFn: ({ signal }) =>
+      queryEvalLabEvidence(
+        {
+          document_ids: normalizedSelection.documentIds,
+          chunk_ids: normalizedSelection.chunkIds,
+          include_chunks: true,
+          limit:
+            normalizedSelection.documentIds.length +
+            normalizedSelection.chunkIds.length +
+            10,
+        },
+        signal,
+      ),
+    enabled:
+      normalizedSelection.documentIds.length > 0 ||
+      normalizedSelection.chunkIds.length > 0,
+  });
+
+  if (
+    normalizedSelection.documentIds.length === 0 &&
+    normalizedSelection.chunkIds.length === 0
+  ) {
+    return (
+      <div className={styles.warning} role="status">
+        Select at least one expected document or chunk before saving. Good eval
+        cases need evidence they can measure.
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.review}>
+      <h3>Selected expected evidence</h3>
+      <div className={styles.selectedList}>
+        {(evidenceQuery.data?.documents ?? []).map((document) => (
+          <article className={styles.selectedItem} key={document.id}>
+            <div className={styles.selectedHeader}>
+              <strong>{document.path}</strong>
+              <button
+                aria-label={`Remove document ${document.path}`}
+                className="secondary-button compact"
+                type="button"
+                onClick={() =>
+                  onSelectionChange(
+                    removeEvidenceDocument(selection, document.id),
+                  )
+                }
+              >
+                <X aria-hidden="true" size={14} />
+                Remove
+              </button>
+            </div>
+            <span>
+              Document · {document.source_name} · {document.chunk_count} chunks
+            </span>
+          </article>
+        ))}
+        {(evidenceQuery.data?.chunks ?? []).map((chunk) => (
+          <article className={styles.selectedItem} key={chunk.id}>
+            <div className={styles.selectedHeader}>
+              <strong>
+                {chunk.document_path} · chunk {chunk.ordinal + 1}
+              </strong>
+              <button
+                aria-label={`Remove chunk ${chunk.ordinal + 1}`}
+                className="secondary-button compact"
+                type="button"
+                onClick={() =>
+                  onSelectionChange(removeEvidenceChunk(selection, chunk.id))
+                }
+              >
+                <X aria-hidden="true" size={14} />
+                Remove
+              </button>
+            </div>
+            <span>
+              {chunk.section_title ? `${chunk.section_title} · ` : ""}
+              checksum {chunk.checksum.slice(0, 12)}
+            </span>
+          </article>
+        ))}
+        {(evidenceQuery.data?.unresolved_document_ids ?? []).map((id) => (
+          <article
+            className={`${styles.selectedItem} ${styles.danger}`}
+            key={id}
+          >
+            <strong>Stale/deleted expected document</strong>
+            <span>{compactId(id)} is no longer resolvable.</span>
+          </article>
+        ))}
+        {(evidenceQuery.data?.unresolved_chunk_ids ?? []).map((id) => (
+          <article
+            className={`${styles.selectedItem} ${styles.danger}`}
+            key={id}
+          >
+            <strong>Stale/deleted expected chunk</strong>
+            <span>{compactId(id)} is no longer resolvable.</span>
+          </article>
+        ))}
+      </div>
+      {evidenceQuery.isError ? (
+        <p className={styles.error} role="alert">
+          Selected evidence could not be resolved.
+        </p>
+      ) : null}
+    </div>
+  );
+}

@@ -1,0 +1,92 @@
+import { useQuery } from "@tanstack/react-query";
+
+import { queryEvalLabEvidence } from "../../../../lib/api/evalLab";
+import {
+  deriveEvidenceStates,
+  normalizeEvidenceSelection,
+  type EvidenceHitRef,
+  type EvidenceSelection,
+} from "./evidenceSelection";
+import styles from "./EvidencePicker.module.css";
+
+export function EvidenceStateList({
+  title = "Evidence states",
+  selection,
+  retrievedHits = [],
+  failureLabels = [],
+}: {
+  title?: string;
+  selection: EvidenceSelection;
+  retrievedHits?: EvidenceHitRef[];
+  failureLabels?: Parameters<typeof deriveEvidenceStates>[0]["failureLabels"];
+}) {
+  const normalizedSelection = normalizeEvidenceSelection(selection);
+  const evidenceQuery = useQuery({
+    queryKey: [
+      "eval-lab-evidence-state",
+      normalizedSelection.documentIds,
+      normalizedSelection.chunkIds,
+      retrievedHits.map((hit) => hit.chunkId),
+    ],
+    queryFn: ({ signal }) =>
+      queryEvalLabEvidence(
+        {
+          document_ids: normalizedSelection.documentIds,
+          chunk_ids: normalizedSelection.chunkIds,
+          include_chunks: true,
+          limit:
+            normalizedSelection.documentIds.length +
+            normalizedSelection.chunkIds.length +
+            retrievedHits.length +
+            10,
+        },
+        signal,
+      ),
+    enabled:
+      normalizedSelection.documentIds.length > 0 ||
+      normalizedSelection.chunkIds.length > 0 ||
+      retrievedHits.length > 0,
+  });
+
+  const states = deriveEvidenceStates({
+    selection: normalizedSelection,
+    documents: evidenceQuery.data?.documents,
+    chunks: evidenceQuery.data?.chunks,
+    unresolvedDocumentIds: evidenceQuery.data?.unresolved_document_ids,
+    unresolvedChunkIds: evidenceQuery.data?.unresolved_chunk_ids,
+    retrievedHits,
+    failureLabels,
+  });
+
+  return (
+    <section className={styles.stateList} aria-label={title}>
+      <h3>{title}</h3>
+      {states.length > 0 ? (
+        states.map((state) => (
+          <article
+            className={`${styles.stateItem} ${styles[state.severity]}`}
+            key={`${state.kind}-${state.evidenceId}`}
+          >
+            <div className={styles.stateHeader}>
+              <strong>{state.label}</strong>
+              <span className={styles.badge}>
+                {state.kind.replaceAll("_", " ")}
+              </span>
+            </div>
+            <span>{state.description}</span>
+          </article>
+        ))
+      ) : (
+        <p className={styles.empty}>
+          Evidence states appear after expected and retrieved evidence are
+          available.
+        </p>
+      )}
+      {evidenceQuery.isError ? (
+        <p className={styles.error} role="alert">
+          Evidence state lookup failed.
+        </p>
+      ) : null}
+    </section>
+  );
+}

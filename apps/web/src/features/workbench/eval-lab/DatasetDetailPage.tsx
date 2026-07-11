@@ -8,7 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
@@ -23,16 +23,21 @@ import {
   type RetrievalEvalCase,
 } from "../../../lib/api/evalLab";
 import type { RetrievalMode } from "../../../lib/api/retrieval";
-import {
-  listDocumentChunks,
-  listSources,
-  type ChunkPreview,
-} from "../../../lib/api/sources";
 import { formatDateTime } from "../../../lib/dateTime";
 import {
   ExperimentHistoryPanel,
   TrendSummaryPanel,
 } from "./components/QualityViews";
+import { EvidencePicker } from "./evidence/EvidencePicker";
+import { EvidenceSelectionReview } from "./evidence/EvidenceSelectionReview";
+import { EvidenceStateList } from "./evidence/EvidenceStateList";
+import {
+  emptyEvidenceSelection,
+  hasExpectedEvidence,
+  normalizeEvidenceSelection,
+  selectionFromCase,
+  type EvidenceSelection,
+} from "./evidence/evidenceSelection";
 import styles from "./QualityPage.module.css";
 
 const retrievalModes: RetrievalMode[] = ["lexical", "vector", "hybrid"];
@@ -45,8 +50,9 @@ export function DatasetDetailPage() {
   const [query, setQuery] = useState("");
   const [caseName, setCaseName] = useState("");
   const [notes, setNotes] = useState("");
-  const [documentId, setDocumentId] = useState("");
-  const [chunkId, setChunkId] = useState("");
+  const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection>(
+    () => emptyEvidenceSelection(),
+  );
   const [experimentName, setExperimentName] = useState("");
   const [topK, setTopK] = useState(5);
   const [modes, setModes] = useState<RetrievalMode[]>(["hybrid"]);
@@ -66,22 +72,8 @@ export function DatasetDetailPage() {
     queryFn: ({ signal }) => getEvalLabDatasetTrends(datasetId!, 10, signal),
     enabled: Boolean(datasetId),
   });
-  const sourcesQuery = useQuery({
-    queryKey: ["sources"],
-    queryFn: ({ signal }) => listSources(signal),
-  });
-  const chunksQuery = useQuery({
-    queryKey: ["document-chunks", documentId],
-    queryFn: ({ signal }) => listDocumentChunks(documentId, signal),
-    enabled: Boolean(documentId),
-  });
-  const documents = useMemo(
-    () =>
-      (sourcesQuery.data ?? []).flatMap((source) =>
-        source.documents.map((entry) => entry.document),
-      ),
-    [sourcesQuery.data],
-  );
+  const normalizedEvidenceSelection =
+    normalizeEvidenceSelection(evidenceSelection);
 
   const createCaseMutation = useMutation({
     mutationFn: () =>
@@ -89,8 +81,8 @@ export function DatasetDetailPage() {
         name: caseName.trim() || query.trim(),
         query: query.trim(),
         top_k: topK,
-        expected_document_ids: documentId ? [documentId] : [],
-        expected_chunk_ids: chunkId ? [chunkId] : [],
+        expected_document_ids: normalizedEvidenceSelection.documentIds,
+        expected_chunk_ids: normalizedEvidenceSelection.chunkIds,
         notes: notes.trim() || null,
       }),
     onSuccess: () => {
@@ -134,7 +126,7 @@ export function DatasetDetailPage() {
         <button type="button" onClick={() => void datasetQuery.refetch()}>
           Retry
         </button>
-        <Link className={styles.secondaryButton} to="/app/evals">
+        <Link className="secondary-button" to="/app/evals">
           Back to Quality
         </Link>
       </section>
@@ -189,8 +181,7 @@ export function DatasetDetailPage() {
             <div>
               <h2 id="new-case-title">Add an important question</h2>
               <p>
-                Choose the document and chunk that a good retrieval run must
-                find.
+                Search and select the evidence a good retrieval run must find.
               </p>
             </div>
           </div>
@@ -211,39 +202,16 @@ export function DatasetDetailPage() {
                   onChange={(event) => setCaseName(event.currentTarget.value)}
                 />
               </label>
-              <label>
-                Expected document
-                <select
-                  value={documentId}
-                  onChange={(event) => {
-                    setDocumentId(event.currentTarget.value);
-                    setChunkId("");
-                  }}
-                >
-                  <option value="">Choose a document</option>
-                  {documents.map((document) => (
-                    <option key={document.id} value={document.id}>
-                      {document.path}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                Expected chunk
-                <select
-                  disabled={!documentId || chunksQuery.isLoading}
-                  value={chunkId}
-                  onChange={(event) => setChunkId(event.currentTarget.value)}
-                >
-                  <option value="">Choose a chunk</option>
-                  {(chunksQuery.data ?? []).map((chunk) => (
-                    <option key={chunk.id} value={chunk.id}>
-                      Chunk {chunk.ordinal + 1}: {chunkLabel(chunk)}
-                    </option>
-                  ))}
-                </select>
-              </label>
             </div>
+            <EvidencePicker
+              query={query}
+              selection={evidenceSelection}
+              onSelectionChange={setEvidenceSelection}
+            />
+            <EvidenceSelectionReview
+              selection={evidenceSelection}
+              onSelectionChange={setEvidenceSelection}
+            />
             <label>
               Notes <small>Optional</small>
               <textarea
@@ -252,11 +220,10 @@ export function DatasetDetailPage() {
               />
             </label>
             <button
-              className={styles.primaryButton}
+              className="primary-button"
               disabled={
                 !query.trim() ||
-                !documentId ||
-                !chunkId ||
+                !hasExpectedEvidence(normalizedEvidenceSelection) ||
                 createCaseMutation.isPending
               }
               type="button"
@@ -350,7 +317,7 @@ export function DatasetDetailPage() {
               />
             </label>
             <button
-              className={`${styles.primaryButton} ${styles.experimentAction}`}
+              className={`primary-button ${styles.experimentAction}`}
               disabled={
                 dataset.cases.length === 0 ||
                 modes.length === 0 ||
@@ -382,8 +349,7 @@ export function DatasetDetailPage() {
     setQuery("");
     setCaseName("");
     setNotes("");
-    setDocumentId("");
-    setChunkId("");
+    setEvidenceSelection(emptyEvidenceSelection());
   }
 }
 
@@ -398,11 +364,22 @@ function EditableCase({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(evalCase.name);
   const [query, setQuery] = useState(evalCase.query);
+  const [notes, setNotes] = useState(evalCase.notes ?? "");
+  const [topK, setTopK] = useState(evalCase.top_k);
+  const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection>(
+    () => selectionFromCase(evalCase),
+  );
+  const normalizedEvidenceSelection =
+    normalizeEvidenceSelection(evidenceSelection);
   const updateMutation = useMutation({
     mutationFn: () =>
       updateEvalLabCase(evalCase.id, {
         name: name.trim(),
         query: query.trim(),
+        top_k: topK,
+        expected_chunk_ids: normalizedEvidenceSelection.chunkIds,
+        expected_document_ids: normalizedEvidenceSelection.documentIds,
+        notes: notes.trim() || null,
       }),
     onSuccess: () => {
       setEditing(false);
@@ -439,11 +416,40 @@ function EditableCase({
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
           </label>
+          <label>
+            Results per question
+            <input
+              max={25}
+              min={1}
+              type="number"
+              value={topK}
+              onChange={(event) => setTopK(Number(event.currentTarget.value))}
+            />
+          </label>
+          <EvidencePicker
+            query={query}
+            selection={evidenceSelection}
+            onSelectionChange={setEvidenceSelection}
+          />
+          <EvidenceSelectionReview
+            selection={evidenceSelection}
+            onSelectionChange={setEvidenceSelection}
+          />
+          <label>
+            Notes
+            <textarea
+              value={notes}
+              onChange={(event) => setNotes(event.currentTarget.value)}
+            />
+          </label>
           <div className={styles.inlineActions}>
             <button
-              className={styles.primaryButton}
+              className="primary-button"
               disabled={
-                !name.trim() || !query.trim() || updateMutation.isPending
+                !name.trim() ||
+                !query.trim() ||
+                !hasExpectedEvidence(normalizedEvidenceSelection) ||
+                updateMutation.isPending
               }
               type="button"
               onClick={() => updateMutation.mutate()}
@@ -451,7 +457,7 @@ function EditableCase({
               Save changes
             </button>
             <button
-              className={styles.secondaryButton}
+              className="secondary-button"
               type="button"
               onClick={() => setEditing(false)}
             >
@@ -489,6 +495,10 @@ function EditableCase({
             expected document · {evalCase.expected_chunk_ids.length} expected
             chunk
           </small>
+          <EvidenceStateList
+            selection={selectionFromCase(evalCase)}
+            title="Expected evidence status"
+          />
           {evalCase.notes ? <small>{evalCase.notes}</small> : null}
         </>
       )}
@@ -503,10 +513,6 @@ function Stat({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
-}
-
-function chunkLabel(chunk: ChunkPreview) {
-  return (chunk.section_title ?? chunk.text).slice(0, 64);
 }
 
 function errorMessage(error: unknown) {

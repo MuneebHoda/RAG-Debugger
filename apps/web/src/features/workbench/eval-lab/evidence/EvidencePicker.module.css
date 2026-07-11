@@ -1,0 +1,36 @@
+.picker,
+.review,
+.stateList,
+.savePanel,
+.resultColumn,
+.selectedList {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.resultGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.option *,
+.selectedItem *,
+.stateItem *,
+.warning,
+.empty,
+.error {
+  overflow-wrap: anywhere;
+}
+
+.selectedHeader,
+.stateHeader,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.error,
+.danger {
+  color: #b42318;
+}

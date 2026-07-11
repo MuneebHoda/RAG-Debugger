@@ -67,6 +67,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
             "/eval-lab/datasets",
             get(eval_lab::list_datasets).post(eval_lab::create_dataset),
         )
+        .route("/eval-lab/evidence/query", post(eval_lab::query_evidence))
         .route("/eval-lab/datasets/:dataset_id", get(eval_lab::get_dataset))
         .route(
             "/eval-lab/datasets/:dataset_id/experiments",

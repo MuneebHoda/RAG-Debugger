@@ -33,6 +33,18 @@ fn test_app() -> axum::Router {
 #[tokio::test]
 async fn eval_lab_manages_datasets_and_cases() {
     let app = test_app();
+    let upload_body = upload_text_file(
+        &app,
+        "refund-policy.md",
+        "Refund Policy\nExceptions require manager approval.",
+    )
+    .await;
+    let document_id = upload_body["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("document id");
+    let chunk_id = upload_body["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("chunk id");
 
     let dataset = create_dataset(&app, "Support quality").await;
     let dataset_id = dataset["id"].as_str().expect("dataset id");
@@ -42,11 +54,35 @@ async fn eval_lab_manages_datasets_and_cases() {
         json!({
             "name": "Refund policy",
             "query": "refund exception",
-            "expected_document_ids": ["018f7a2a-6e2e-7000-a000-000000000101"]
+            "expected_document_ids": [document_id],
+            "expected_chunk_ids": [chunk_id, chunk_id]
         }),
     )
     .await;
     let case_id = case["id"].as_str().expect("case id");
+    assert_eq!(
+        case["expected_chunk_ids"].as_array().expect("chunks").len(),
+        1
+    );
+
+    let evidence = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/evidence/query",
+        json!({
+            "query": "refund",
+            "document_ids": [document_id],
+            "chunk_ids": [chunk_id],
+            "include_chunks": true
+        }),
+    )
+    .await;
+    assert_eq!(evidence["documents"][0]["path"], "refund-policy.md");
+    assert_eq!(evidence["chunks"][0]["id"], chunk_id);
+    assert!(evidence["unresolved_document_ids"]
+        .as_array()
+        .expect("unresolved docs")
+        .is_empty());
 
     let detail = get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
     assert_eq!(detail["cases"].as_array().expect("cases").len(), 1);
@@ -58,11 +94,25 @@ async fn eval_lab_manages_datasets_and_cases() {
         json!({
             "name": "Refund exception policy",
             "query": "refund policy exception",
-            "expected_document_ids": ["018f7a2a-6e2e-7000-a000-000000000101"]
+            "expected_document_ids": [document_id],
+            "expected_chunk_ids": [chunk_id]
         }),
     )
     .await;
     assert_eq!(updated["name"], "Refund exception policy");
+
+    let invalid_update = app
+        .clone()
+        .oneshot(json_request(
+            Method::PATCH,
+            &format!("/api/v1/eval-lab/cases/{case_id}"),
+            json!({
+                "expected_chunk_ids": ["018f7a2a-6e2e-7000-a000-000000000999"]
+            }),
+        ))
+        .await
+        .expect("invalid update response");
+    assert_eq!(invalid_update.status(), StatusCode::BAD_REQUEST);
 
     let delete_response = app
         .clone()
@@ -94,6 +144,15 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     let chunk_id = upload_body["documents"][0]["preview_chunks"][0]["id"]
         .as_str()
         .expect("chunk id");
+    let wrong_upload_body = upload_text_file(
+        &app,
+        "release-notes.md",
+        "Billing\n- Annual invoices are generated through finance approval.",
+    )
+    .await;
+    let wrong_chunk_id = wrong_upload_body["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("wrong chunk id");
     index_embeddings(&app).await;
 
     let dataset = create_dataset(&app, "Platform regression set").await;
@@ -159,7 +218,7 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
         Method::PATCH,
         &format!("/api/v1/eval-lab/cases/{case_id}"),
         json!({
-            "expected_chunk_ids": ["018f7a2a-6e2e-7000-a000-000000000404"],
+            "expected_chunk_ids": [wrong_chunk_id],
             "expected_document_ids": [document_id]
         }),
     )

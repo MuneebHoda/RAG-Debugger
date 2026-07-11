@@ -69,6 +69,18 @@ Heading-only chunks, duplicates, section-only matches, and chunks with weak evid
 
 After a query completes, the Retrieval page can save the run as a Trace Debugger record. `Save trace` calls `POST /api/v1/traces/from-retrieval-run` with the retrieval run id, then `/app/traces` shows the run timeline, failure labels, ranked evidence, and rerun comparison controls.
 
+## Add To Quality
+
+Retrieval results can also become Eval Lab coverage. The `Add to Quality` panel uses the shared expected-evidence picker:
+
+- choose the target Quality dataset;
+- review the retrieval query and selected top evidence;
+- add or remove expected chunks and whole documents;
+- see duplicate-question warnings for the selected dataset;
+- save the case with the selected expected evidence IDs.
+
+Candidate chunks stay visible for debugging even when the Evidence Summary abstains. The picker still requires the user to explicitly decide which retrieved chunks or documents should become expected evidence.
+
 ## Persistence
 
 Postgres stores local embeddings, retrieval playground runs, hits, and eval runs:

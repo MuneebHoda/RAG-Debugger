@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -225,11 +226,7 @@ describe("RetrievalPage", () => {
   });
 
   it("renders retrieval controls", async () => {
-    render(
-      <MemoryRouter>
-        <RetrievalPage />
-      </MemoryRouter>,
-    );
+    renderWithClient(<RetrievalPage />);
 
     expect(
       await screen.findByRole("heading", { name: /^retrieval$/i }),
@@ -249,7 +246,7 @@ describe("RetrievalPage", () => {
   });
 
   it("resolves a guided query id and preselects the demo source", async () => {
-    render(
+    renderWithClient(
       <MemoryRouter
         initialEntries={["/app/retrieval?demo_query=account_recovery"]}
       >
@@ -269,11 +266,7 @@ describe("RetrievalPage", () => {
   });
 
   it("submits a query and renders cited evidence", async () => {
-    render(
-      <MemoryRouter>
-        <RetrievalPage />
-      </MemoryRouter>,
-    );
+    renderWithClient(<RetrievalPage />);
 
     fireEvent.change(
       await screen.findByLabelText(/what should the corpus answer/i),
@@ -346,7 +339,7 @@ describe("RetrievalPage", () => {
   });
 
   it("saves the latest retrieval response and opens its debugger", async () => {
-    render(
+    renderWithClient(
       <MemoryRouter initialEntries={["/app/retrieval"]}>
         <Routes>
           <Route path="/app/retrieval" element={<RetrievalPage />} />
@@ -372,6 +365,30 @@ describe("RetrievalPage", () => {
     ).toBeInTheDocument();
   });
 });
+
+function renderWithClient(children: React.ReactNode) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      {isRouterElement(children) ? (
+        children
+      ) : (
+        <MemoryRouter>{children}</MemoryRouter>
+      )}
+    </QueryClientProvider>,
+  );
+}
+
+function isRouterElement(children: React.ReactNode): boolean {
+  return (
+    typeof children === "object" &&
+    children !== null &&
+    "type" in children &&
+    (children as React.ReactElement).type === MemoryRouter
+  );
+}
 
 function responseJson(json: unknown) {
   return Promise.resolve({

@@ -23,6 +23,7 @@ Eval Lab routes live under `/api/v1/eval-lab`.
 - `GET /datasets/:dataset_id`: load a dataset and its cases.
 - `GET /datasets/:dataset_id/experiments`: list dataset-scoped experiment history as compact summaries.
 - `GET /datasets/:dataset_id/trends?limit=10`: load recent quality trend points and latest regression comparison.
+- `POST /evidence/query`: search or resolve workspace-readable documents and chunks for the expected-evidence picker.
 - `POST /datasets/:dataset_id/cases`: create a case inside a dataset.
 - `PATCH /cases/:case_id`: update a case.
 - `DELETE /cases/:case_id`: delete a case.
@@ -101,7 +102,7 @@ The selected baseline is stored in the local URL as `baseline_id`. If no explici
 Quality starts at `/app/evals` and uses focused detail routes.
 
 1. Create or select a dataset from the Quality overview.
-2. Open `/app/evals/datasets/:datasetId` and add cases with an expected document and chunk, or add one explicitly from a saved run.
+2. Open `/app/evals/datasets/:datasetId` and add cases with the expected-evidence picker. Search by question text, path, section, chunk text, or compact IDs, then select one or more expected documents and chunks.
 3. Choose retrieval modes: lexical, vector, hybrid.
 4. Pick `top_k`.
 5. Run an experiment.
@@ -110,6 +111,22 @@ Quality starts at `/app/evals` and uses focused detail routes.
 8. Create a privacy-classified audit report from the experiment detail when the gate decision is ready for review.
 
 The Trace Debugger saves evidence into Quality with a note pointing back to the run. The user must choose both the target dataset and expected evidence. This prevents accidental labels and turns observed behavior into deliberate regression coverage.
+
+Retrieval and Trace Debugger use the same shared save-to-Quality workflow. The panel starts from retrieved chunks, lets the user choose the dataset, warns about duplicate normalized questions, shows readable document/chunk names, and submits only authenticated evidence IDs. It never asks users to manually paste UUIDs.
+
+Existing cases with stale or deleted expected evidence remain readable. When a case is edited, newly submitted evidence IDs are validated against evidence visible in the active workspace. Stale IDs are shown with `stale/deleted expected evidence` labels so the user can remove or replace them intentionally.
+
+Case and experiment views show evidence states with text labels, not color alone:
+
+- `expected and retrieved`
+- `expected but missing`
+- `retrieved but not expected`
+- `expected document retrieved, wrong chunk`
+- `duplicate evidence`
+- `weak evidence`
+- `stale/deleted expected evidence`
+
+When an experiment result does not contain full hit metadata, CorpusLab uses case-level failure labels such as `weak_evidence`, `duplicate_evidence`, or `correct_document_wrong_chunk` instead of inventing per-chunk details.
 
 Experiment Detail uses the same Reports-owned creation action as Trace Debugger. Metadata-only is the default; snippets or unrestricted local diagnostics require an explicit privacy selection before the report is generated.
 

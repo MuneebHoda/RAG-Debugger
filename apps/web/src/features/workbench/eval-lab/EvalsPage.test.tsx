@@ -74,6 +74,9 @@ describe("guided Eval Lab workflow", () => {
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
           return responseJson([]);
         }
+        if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
+          return responseJson(evidenceLookup());
+        }
         if (url.endsWith(`/api/v1/documents/${documentId}/chunks`)) {
           return responseJson([chunk()]);
         }
@@ -585,6 +588,43 @@ function chunk() {
     is_duplicate: false,
     text_density: 0.9,
     evidence_score_hint: 0.8,
+  };
+}
+
+function evidenceLookup() {
+  return {
+    documents: [
+      {
+        id: documentId,
+        source_id: sourceId,
+        source_name: "Platform docs",
+        path: "platform-guide.md",
+        profile: "technical_docs",
+        extraction_quality: "high",
+        warnings: [],
+        chunk_count: 1,
+      },
+    ],
+    chunks: [
+      {
+        id: chunkId,
+        document_id: documentId,
+        source_id: sourceId,
+        source_name: "Platform docs",
+        document_path: "platform-guide.md",
+        ordinal: 0,
+        text: "GPU workers accelerate embedding indexing.",
+        token_count: 5,
+        checksum: "1234567890abcdef",
+        section_title: "Indexing",
+        quality_flags: ["good_evidence_candidate"],
+        is_duplicate: false,
+        text_density: 0.9,
+        evidence_score_hint: 0.8,
+      },
+    ],
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
   };
 }
 

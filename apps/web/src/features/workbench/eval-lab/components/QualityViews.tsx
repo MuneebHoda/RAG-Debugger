@@ -61,7 +61,7 @@ export function CreateDatasetPanel({
           </label>
         </div>
         <button
-          className={styles.primaryButton}
+          className="primary-button"
           disabled={!name.trim() || isPending}
           type="button"
           onClick={onCreate}
@@ -356,7 +356,7 @@ export function BaselineSelector({
       {error ? <p className={styles.error}>{error}</p> : null}
       {error && selectedBaselineId ? (
         <button
-          className={styles.secondaryButton}
+          className="secondary-button"
           type="button"
           onClick={() => onBaselineChange(null)}
         >

@@ -54,7 +54,7 @@ test("completes the real guided workflow against the memory API", async ({
   await page
     .getByLabel("Quality dataset")
     .selectOption({ label: "Default retrieval dataset" });
-  await page.getByRole("checkbox").first().check();
+  await expect(page.getByText("Selected expected evidence")).toBeVisible();
   await page.getByRole("button", { name: "Save quality case" }).click();
   await expect(page.getByText("Quality case saved.")).toBeVisible();
 
