@@ -22,7 +22,7 @@ Expected coverage in the scaffold:
 - Public regression fixtures for support knowledge bases, policy documents, and technical documentation, with expected retrieval, trace, and Eval Lab outcomes under `fixtures/`.
 - API retrieval tests for all-doc search, document filtering, top-k, no-match response, embedding status/indexing, missing embeddings, lexical fallback mode, eval creation, eval run persistence, and request validation.
 - Trace tests for trace construction, legacy failure-label compatibility, legacy snapshot enrichment, rerun diagnosis comparison, trace creation from retrieval runs, trace listing/detail, rerun API behavior, and missing-trace errors.
-- Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, gate evaluation, and failure diagnosis.
+- Eval Lab API tests for dataset CRUD, case create/update/delete, legacy case backfill, cross-mode experiments, experiment comparison, regression history, trend summaries, gate evaluation, and failure diagnosis.
 - Auth and workspace tests for signup, login, logout, current-user, session cookies, duplicate email behavior, membership role, and protected workbench routes.
 - API key and CI eval tests for one-time secret generation, hashed storage, scoped authorization, revoke behavior, CI run persistence, gate failure status, and `fail_on_gate`.
 - API error contract tests for structured 400, 401, 404, and sanitized internal/storage responses.
@@ -87,6 +87,7 @@ Expected coverage in the scaffold:
 - The real Playwright demo flow covers login → load sample → index → suggested query → debug run → metadata-only report → copy/download Markdown.
 - Workbench shell tests treat canonical navigation order, active parent routes, breadcrumbs, actionable empty states, mobile focus recovery, and the dedicated CI Runs query view as compatibility contracts.
 - Workbench workflow tests verify that Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings explain their page purpose, quality-loop position, and recommended next action.
+- Eval Lab UI tests verify trend cards, dataset experiment history, experiment regression panels, failed-case diagnosis, and audit-report actions without duplicating backend regression logic.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 

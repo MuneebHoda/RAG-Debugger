@@ -170,6 +170,103 @@ export interface RetrievalEvalComparison {
   summary: string;
 }
 
+export type RetrievalEvalRegressionClassification =
+  | "improved"
+  | "regressed"
+  | "unchanged";
+
+export type RetrievalEvalRegressionMetric =
+  | "recall_at_k"
+  | "precision_at_k"
+  | "mean_reciprocal_rank"
+  | "citation_coverage"
+  | "weak_evidence_case_rate"
+  | "missing_embedding_failures"
+  | "latency_p95_ms";
+
+export interface RetrievalEvalExperimentSummary {
+  id: string;
+  dataset_id: string;
+  dataset_name: string;
+  name: string;
+  modes: RetrievalMode[];
+  top_k: number;
+  best_mode: RetrievalMode | null;
+  gate_status: RetrievalEvalGateStatus;
+  average_recall_at_k: number;
+  average_precision_at_k: number;
+  mean_reciprocal_rank: number;
+  citation_coverage: number;
+  weak_evidence_case_rate: number;
+  missing_embedding_failures: number;
+  latency_p50_ms: number;
+  latency_p95_ms: number;
+  failure_count: number;
+  created_at: string;
+}
+
+export interface RetrievalEvalTrendSummary {
+  dataset_id: string;
+  experiment_count: number;
+  window_limit: number;
+  latest_experiment_id: string | null;
+  latest_gate_status: RetrievalEvalGateStatus | null;
+  points: RetrievalEvalTrendPoint[];
+  latest_regression?: RetrievalEvalRegressionComparison | null;
+}
+
+export interface RetrievalEvalTrendPoint {
+  experiment_id: string;
+  name: string;
+  best_mode: RetrievalMode | null;
+  gate_status: RetrievalEvalGateStatus;
+  average_recall_at_k: number;
+  average_precision_at_k: number;
+  mean_reciprocal_rank: number;
+  citation_coverage: number;
+  weak_evidence_case_rate: number;
+  latency_p95_ms: number;
+  failure_count: number;
+  created_at: string;
+}
+
+export interface RetrievalEvalRegressionComparison {
+  current_experiment_id: string;
+  baseline_experiment_id: string | null;
+  classification: RetrievalEvalRegressionClassification;
+  current_gate_status: RetrievalEvalGateStatus;
+  baseline_gate_status: RetrievalEvalGateStatus | null;
+  metric_deltas: RetrievalEvalMetricDelta[];
+  newly_failed_cases: RetrievalEvalCaseRegression[];
+  recovered_cases: RetrievalEvalCaseRegression[];
+  changed_top_evidence_cases: RetrievalEvalCaseRegression[];
+  changed_failure_label_cases: RetrievalEvalCaseRegression[];
+  summary: string;
+}
+
+export interface RetrievalEvalMetricDelta {
+  metric: RetrievalEvalRegressionMetric;
+  current: number;
+  baseline: number | null;
+  delta: number;
+  classification: RetrievalEvalRegressionClassification;
+}
+
+export interface RetrievalEvalCaseRegression {
+  case_id: string;
+  retrieval_mode: RetrievalMode;
+  query: string;
+  classification: RetrievalEvalRegressionClassification;
+  current_passed: boolean | null;
+  baseline_passed: boolean | null;
+  current_top_hit_rank: number | null;
+  baseline_top_hit_rank: number | null;
+  current_retrieved_chunk_ids: string[];
+  baseline_retrieved_chunk_ids: string[];
+  current_failure_labels: RetrievalEvalFailureLabel[];
+  baseline_failure_labels: RetrievalEvalFailureLabel[];
+}
+
 export interface RetrievalEvalGate {
   status: RetrievalEvalGateStatus;
   average_recall_at_k: number;
@@ -257,6 +354,27 @@ export function getEvalLabDataset(
   );
 }
 
+export function listEvalLabDatasetExperiments(
+  datasetId: string,
+  signal?: AbortSignal,
+): Promise<RetrievalEvalExperimentSummary[]> {
+  return requestJson<RetrievalEvalExperimentSummary[]>(
+    `/api/v1/eval-lab/datasets/${datasetId}/experiments`,
+    { signal },
+  );
+}
+
+export function getEvalLabDatasetTrends(
+  datasetId: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<RetrievalEvalTrendSummary> {
+  return requestJson<RetrievalEvalTrendSummary>(
+    `/api/v1/eval-lab/datasets/${datasetId}/trends?limit=${limit}`,
+    { signal },
+  );
+}
+
 export function createEvalLabCase(
   datasetId: string,
   request: CreateRetrievalEvalCaseRequest,
@@ -314,6 +432,20 @@ export function getEvalLabExperiment(
 ): Promise<RetrievalEvalExperiment> {
   return requestJson<RetrievalEvalExperiment>(
     `/api/v1/eval-lab/experiments/${experimentId}`,
+    { signal },
+  );
+}
+
+export function getEvalLabExperimentRegression(
+  experimentId: string,
+  baselineId?: string,
+  signal?: AbortSignal,
+): Promise<RetrievalEvalRegressionComparison> {
+  const params = baselineId
+    ? `?baseline_id=${encodeURIComponent(baselineId)}`
+    : "";
+  return requestJson<RetrievalEvalRegressionComparison>(
+    `/api/v1/eval-lab/experiments/${experimentId}/regression${params}`,
     { signal },
   );
 }

@@ -3,9 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
-import { getEvalLabExperiment } from "../../../lib/api/evalLab";
+import {
+  getEvalLabExperiment,
+  getEvalLabExperimentRegression,
+} from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
+import { RegressionPanel } from "./components/QualityViews";
 import styles from "./QualityPage.module.css";
 
 export function ExperimentDetailPage() {
@@ -13,6 +17,12 @@ export function ExperimentDetailPage() {
   const experimentQuery = useQuery({
     queryKey: ["eval-experiment", experimentId],
     queryFn: ({ signal }) => getEvalLabExperiment(experimentId!, signal),
+    enabled: Boolean(experimentId),
+  });
+  const regressionQuery = useQuery({
+    queryKey: ["eval-experiment-regression", experimentId],
+    queryFn: ({ signal }) =>
+      getEvalLabExperimentRegression(experimentId!, undefined, signal),
     enabled: Boolean(experimentId),
   });
 
@@ -75,6 +85,8 @@ export function ExperimentDetailPage() {
           <p>{experiment.gate.reasons.join(" ")}</p>
         </div>
       </section>
+
+      <RegressionPanel regression={regressionQuery.data} />
 
       {!gatePassed ? (
         <section className={styles.panel}>

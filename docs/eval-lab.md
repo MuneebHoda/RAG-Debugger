@@ -9,6 +9,8 @@ Eval Lab is CorpusLab's quality-control center for retrieval systems. It turns i
 - **Experiment:** one run of a dataset across one or more retrieval modes with a frozen config snapshot.
 - **Mode result:** metrics for one retrieval mode, such as `hybrid`, `vector`, or `lexical`.
 - **Comparison:** the cross-mode summary that identifies the best mode and the recall, precision, and latency spread.
+- **Regression comparison:** the current experiment compared with a prior compatible experiment for the same dataset, `top_k`, and retrieval-mode set.
+- **Trend:** a compact time series of recent experiment outcomes for one dataset.
 - **Gate:** deterministic pass/fail rules for release readiness.
 - **Failure:** a per-case diagnosis label that explains what went wrong.
 
@@ -19,12 +21,15 @@ Eval Lab routes live under `/api/v1/eval-lab`.
 - `GET /datasets`: list datasets with case counts and latest gate summaries.
 - `POST /datasets`: create a dataset.
 - `GET /datasets/:dataset_id`: load a dataset and its cases.
+- `GET /datasets/:dataset_id/experiments`: list dataset-scoped experiment history as compact summaries.
+- `GET /datasets/:dataset_id/trends?limit=10`: load recent quality trend points and latest regression comparison.
 - `POST /datasets/:dataset_id/cases`: create a case inside a dataset.
 - `PATCH /cases/:case_id`: update a case.
 - `DELETE /cases/:case_id`: delete a case.
 - `POST /experiments`: run a dataset across selected modes.
 - `GET /experiments`: list recent experiments.
 - `GET /experiments/:experiment_id`: load one experiment.
+- `GET /experiments/:experiment_id/regression?baseline_id=<uuid>`: compare an experiment with an explicit baseline or the previous compatible run.
 - `POST /experiments/:experiment_id/compare`: compare selected modes from a saved experiment.
 
 The older `/api/v1/retrieval/evals` endpoints remain available for compatibility. New UI workflows save cases into Eval Lab datasets.
@@ -64,6 +69,25 @@ The default release gate passes when:
 
 Failed gates store human-readable reasons. Mission Control surfaces failed gates as critical risks so a team knows what to fix next.
 
+## Regression History
+
+Eval Lab v2 treats saved experiments as release-history snapshots. The system compares a current experiment with the latest earlier experiment that has the same dataset, `top_k`, and sorted retrieval-mode set. Users can also request an explicit baseline by ID.
+
+Regression comparison tracks:
+
+- gate movement, such as `passed` to `failed`;
+- recall, precision, MRR, citation coverage, weak-evidence case rate, missing embeddings, and p95 latency deltas;
+- newly failing cases and recovered cases;
+- changed top evidence and changed failure labels.
+
+Overall classification is deterministic:
+
+- `regressed` when a passed gate becomes failed, a case newly fails, or a metric crosses the regression threshold;
+- `improved` when a failed gate becomes passed, a case recovers, or metrics improve without new regressions;
+- `unchanged` when changes stay within thresholds.
+
+Trend summaries default to the latest 10 experiments and clamp requests to 50 points. Trend points are chronological for graphing and review, while experiment history lists newest first.
+
 ## UI Workflow
 
 Quality starts at `/app/evals` and uses focused detail routes.
@@ -73,13 +97,15 @@ Quality starts at `/app/evals` and uses focused detail routes.
 3. Choose retrieval modes: lexical, vector, hybrid.
 4. Pick `top_k`.
 5. Run an experiment.
-6. Open `/app/evals/experiments/:experimentId`. Inspect the gate result and failed cases first, then expand detailed metrics.
+6. Open `/app/evals/experiments/:experimentId`. Inspect the gate result, regression summary, newly failed or recovered cases, and detailed metrics.
 7. Use failed cases to improve documents, chunking, indexing, or retrieval config.
 8. Create a privacy-classified audit report from the experiment detail when the gate decision is ready for review.
 
 The Trace Debugger saves evidence into Quality with a note pointing back to the run. The user must choose both the target dataset and expected evidence. This prevents accidental labels and turns observed behavior into deliberate regression coverage.
 
 Experiment Detail uses the same Reports-owned creation action as Trace Debugger. Metadata-only is the default; snippets or unrestricted local diagnostics require an explicit privacy selection before the report is generated.
+
+When a comparable baseline exists, experiment-sourced audit reports include regression classification, baseline experiment ID, newly failed case counts, recovered case counts, and metric deltas. Metadata-only reports keep this to IDs, labels, and metrics.
 
 ## Storage Model
 

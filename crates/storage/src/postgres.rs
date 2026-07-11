@@ -309,6 +309,13 @@ impl EvalRepository for PostgresStore {
         PostgresStore::list_retrieval_eval_experiments(self).await
     }
 
+    async fn list_retrieval_eval_experiments_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+    ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
+        PostgresStore::list_retrieval_eval_experiments_for_dataset(self, dataset_id).await
+    }
+
     async fn get_retrieval_eval_experiment(
         &self,
         experiment_id: RetrievalEvalExperimentId,

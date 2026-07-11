@@ -8,9 +8,13 @@ use rag_debugger_core::{
     CreateDebugReportFromCiRunRequest, CreateDebugReportFromExperimentRequest,
     CreateDebugReportFromTraceRequest, DebugReport, DebugReportId,
 };
-use rag_debugger_rag::reports::{
-    build_ci_eval_debug_report, build_eval_experiment_debug_report, build_trace_debug_report,
-    render_debug_report_markdown, DebugReportBuildContext, ReportBuildError, ReportExportError,
+use rag_debugger_rag::{
+    evals::{compare_experiment_regression, previous_comparable_experiment},
+    reports::{
+        build_ci_eval_debug_report, build_eval_experiment_debug_report_with_regression,
+        build_trace_debug_report, render_debug_report_markdown, DebugReportBuildContext,
+        ReportBuildError, ReportExportError,
+    },
 };
 use rag_debugger_storage::StorageError;
 use time::OffsetDateTime;
@@ -78,10 +82,17 @@ pub async fn create_report_from_experiment(
         .get_retrieval_eval_experiment(request.experiment_id)
         .await
         .map_err(source_storage_error("eval experiment"))?;
+    let dataset_experiments = repository
+        .list_retrieval_eval_experiments_for_dataset(experiment.dataset_id)
+        .await?;
+    let experiment_refs = dataset_experiments.iter().collect::<Vec<_>>();
+    let regression = previous_comparable_experiment(&experiment, &experiment_refs)
+        .map(|baseline| compare_experiment_regression(&experiment, Some(baseline)));
     let project = repository.ensure_default_project().await?;
-    let report = build_eval_experiment_debug_report(
+    let report = build_eval_experiment_debug_report_with_regression(
         build_context(user.workspace.id, project.id, request.privacy_mode),
         &experiment,
+        regression.as_ref(),
     );
     Ok((
         StatusCode::CREATED,

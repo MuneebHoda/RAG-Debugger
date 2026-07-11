@@ -448,6 +448,24 @@ impl PostgresStore {
         rows.iter().map(eval_experiment_from_row).collect()
     }
 
+    pub(super) async fn list_retrieval_eval_experiments_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+    ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
+        let rows = sqlx::query(
+            "SELECT experiment_json
+             FROM retrieval_eval_experiments
+             WHERE dataset_id = $1
+             ORDER BY created_at DESC
+             LIMIT 100",
+        )
+        .bind(dataset_id.0)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter().map(eval_experiment_from_row).collect()
+    }
+
     pub(super) async fn get_retrieval_eval_experiment(
         &self,
         experiment_id: RetrievalEvalExperimentId,

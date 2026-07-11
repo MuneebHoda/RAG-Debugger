@@ -98,7 +98,7 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
 
     let dataset = create_dataset(&app, "Platform regression set").await;
     let dataset_id = dataset["id"].as_str().expect("dataset id");
-    create_case(
+    let eval_case = create_case(
         &app,
         dataset_id,
         json!({
@@ -110,6 +110,7 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
         }),
     )
     .await;
+    let case_id = eval_case["id"].as_str().expect("case id");
 
     let experiment = request_json(
         &app,
@@ -136,6 +137,14 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     );
 
     let experiment_id = experiment["id"].as_str().expect("experiment id");
+    let history = get_json(
+        &app,
+        &format!("/api/v1/eval-lab/datasets/{dataset_id}/experiments"),
+    )
+    .await;
+    assert_eq!(history.as_array().expect("history").len(), 1);
+    assert_eq!(history[0]["id"], experiment_id);
+
     let comparison = request_json(
         &app,
         Method::POST,
@@ -145,8 +154,52 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     .await;
     assert_eq!(comparison["mode_count"], 2);
 
+    request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({
+            "expected_chunk_ids": ["018f7a2a-6e2e-7000-a000-000000000404"],
+            "expected_document_ids": [document_id]
+        }),
+    )
+    .await;
+    let regressed = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/experiments",
+        json!({
+            "dataset_id": dataset_id,
+            "name": "Regressed comparison",
+            "modes": ["lexical", "vector", "hybrid"],
+            "top_k": 5
+        }),
+    )
+    .await;
+    let regressed_id = regressed["id"].as_str().expect("regressed id");
+    let regression = get_json(
+        &app,
+        &format!("/api/v1/eval-lab/experiments/{regressed_id}/regression"),
+    )
+    .await;
+    assert_eq!(regression["classification"], "regressed");
+    assert_eq!(regression["baseline_experiment_id"], experiment_id);
+    assert!(!regression["newly_failed_cases"]
+        .as_array()
+        .expect("newly failed")
+        .is_empty());
+
+    let trend = get_json(
+        &app,
+        &format!("/api/v1/eval-lab/datasets/{dataset_id}/trends?limit=99"),
+    )
+    .await;
+    assert_eq!(trend["window_limit"], 50);
+    assert_eq!(trend["latest_experiment_id"], regressed_id);
+    assert_eq!(trend["latest_regression"]["classification"], "regressed");
+
     let overview = get_json(&app, "/api/v1/overview").await;
-    assert_eq!(overview["latest_eval_experiment"]["id"], experiment_id);
+    assert_eq!(overview["latest_eval_experiment"]["id"], regressed_id);
 }
 
 async fn create_dataset(app: &axum::Router, name: &str) -> Value {

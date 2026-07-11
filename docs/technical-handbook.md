@@ -252,6 +252,8 @@ Metrics include recall@k, precision@k, MRR, top hit rank, citation coverage, wea
 
 The default gate passes when average recall@k is at least `0.80`, critical missing-embedding failures are absent, and weak-evidence cases are at or below 20%. Failed gates appear in Mission Control and point users to `/app/evals`.
 
+Eval Lab v2 adds regression read models over saved experiments. Dataset history and trend endpoints compare the latest run with the previous compatible baseline for the same dataset, `top_k`, and retrieval-mode set. Experiment detail surfaces gate movement, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels. Audit reports created from experiments include that regression context when available while preserving metadata-only privacy.
+
 The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts

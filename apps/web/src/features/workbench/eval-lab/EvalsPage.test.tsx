@@ -23,8 +23,23 @@ describe("guided Eval Lab workflow", () => {
         if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
           return responseJson(dataset());
         }
+        if (
+          url.includes(`/api/v1/eval-lab/datasets/${datasetId}/experiments`)
+        ) {
+          return responseJson([experimentSummary()]);
+        }
+        if (url.includes(`/api/v1/eval-lab/datasets/${datasetId}/trends`)) {
+          return responseJson(trendSummary());
+        }
         if (url.endsWith(`/api/v1/eval-lab/experiments/${experimentId}`)) {
           return responseJson(experiment());
+        }
+        if (
+          url.includes(
+            `/api/v1/eval-lab/experiments/${experimentId}/regression`,
+          )
+        ) {
+          return responseJson(regression());
         }
         if (url.endsWith("/api/v1/eval-lab/datasets")) {
           return responseJson([datasetSummary()]);
@@ -64,6 +79,8 @@ describe("guided Eval Lab workflow", () => {
       await screen.findByText("Production corpus gate"),
     ).toBeInTheDocument();
     expect(await screen.findAllByText("failed")).not.toHaveLength(0);
+    expect(screen.getByText(/quality trend/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/regressed/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/recent experiments/i)).toBeInTheDocument();
   });
 
@@ -104,6 +121,10 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByRole("button", { name: /add case/i }),
     ).toBeInTheDocument();
+    expect(screen.getByText(/experiment history/i)).toBeInTheDocument();
+    expect(
+      screen.getAllByText(/release retrieval gate/i).length,
+    ).toBeGreaterThan(0);
   });
 
   it("shows gate failures before the detailed mode metrics", async () => {
@@ -125,6 +146,10 @@ describe("guided Eval Lab workflow", () => {
       screen.getByText(/expected evidence was not retrieved/i),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: /regression history/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/newly failed/i)).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { name: /mode comparison/i }),
     ).toBeInTheDocument();
     expect(
@@ -144,6 +169,87 @@ function renderRoute(initialEntry: string, route: React.ReactElement) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+function experimentSummary() {
+  return {
+    id: experimentId,
+    dataset_id: datasetId,
+    dataset_name: "Production corpus gate",
+    name: "Release retrieval gate",
+    modes: ["hybrid", "vector", "lexical"],
+    top_k: 5,
+    best_mode: "hybrid",
+    gate_status: "failed",
+    average_recall_at_k: 0.5,
+    average_precision_at_k: 0.4,
+    mean_reciprocal_rank: 0.5,
+    citation_coverage: 0.5,
+    weak_evidence_case_rate: 1,
+    missing_embedding_failures: 0,
+    latency_p50_ms: 20,
+    latency_p95_ms: 20,
+    failure_count: 1,
+    created_at: "2026-06-25T00:00:00Z",
+  };
+}
+
+function trendSummary() {
+  return {
+    dataset_id: datasetId,
+    experiment_count: 2,
+    window_limit: 10,
+    latest_experiment_id: experimentId,
+    latest_gate_status: "failed",
+    points: [experimentSummary()],
+    latest_regression: regression(),
+  };
+}
+
+function regression() {
+  return {
+    current_experiment_id: experimentId,
+    baseline_experiment_id: "018f7a2a-6e2e-7000-a000-000000000307",
+    classification: "regressed",
+    current_gate_status: "failed",
+    baseline_gate_status: "passed",
+    metric_deltas: [
+      {
+        metric: "recall_at_k",
+        current: 0.5,
+        baseline: 1,
+        delta: -0.5,
+        classification: "regressed",
+      },
+      {
+        metric: "precision_at_k",
+        current: 0.4,
+        baseline: 1,
+        delta: -0.6,
+        classification: "regressed",
+      },
+    ],
+    newly_failed_cases: [
+      {
+        case_id: caseId,
+        retrieval_mode: "hybrid",
+        query: "Which evidence explains GPU indexing workers?",
+        classification: "regressed",
+        current_passed: false,
+        baseline_passed: true,
+        current_top_hit_rank: null,
+        baseline_top_hit_rank: 1,
+        current_retrieved_chunk_ids: [],
+        baseline_retrieved_chunk_ids: [chunkId],
+        current_failure_labels: ["expected_evidence_missing"],
+        baseline_failure_labels: [],
+      },
+    ],
+    recovered_cases: [],
+    changed_top_evidence_cases: [],
+    changed_failure_label_cases: [],
+    summary: "Release retrieval gate regressed compared with Baseline.",
+  };
 }
 
 function datasetSummary() {

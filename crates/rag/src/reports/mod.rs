@@ -14,7 +14,9 @@ use thiserror::Error;
 use time::OffsetDateTime;
 
 pub use ci::build_ci_eval_debug_report;
-pub use experiment::build_eval_experiment_debug_report;
+pub use experiment::{
+    build_eval_experiment_debug_report, build_eval_experiment_debug_report_with_regression,
+};
 pub use markdown::{render_debug_report_markdown, ReportExportError};
 pub use trace::build_trace_debug_report;
 

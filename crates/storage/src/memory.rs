@@ -538,6 +538,21 @@ impl EvalRepository for MemoryStore {
         Ok(experiments)
     }
 
+    async fn list_retrieval_eval_experiments_for_dataset(
+        &self,
+        dataset_id: RetrievalEvalDatasetId,
+    ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
+        let inner = self.lock()?;
+        let mut experiments = inner
+            .retrieval_eval_experiments
+            .values()
+            .filter(|experiment| experiment.dataset_id == dataset_id)
+            .cloned()
+            .collect::<Vec<_>>();
+        experiments.sort_by_key(|experiment| Reverse(experiment.created_at));
+        Ok(experiments)
+    }
+
     async fn get_retrieval_eval_experiment(
         &self,
         experiment_id: RetrievalEvalExperimentId,

@@ -69,6 +69,14 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         )
         .route("/eval-lab/datasets/:dataset_id", get(eval_lab::get_dataset))
         .route(
+            "/eval-lab/datasets/:dataset_id/experiments",
+            get(eval_lab::list_dataset_experiments),
+        )
+        .route(
+            "/eval-lab/datasets/:dataset_id/trends",
+            get(eval_lab::dataset_trends),
+        )
+        .route(
             "/eval-lab/datasets/:dataset_id/cases",
             post(eval_lab::create_case),
         )
@@ -83,6 +91,10 @@ fn protected_routes(state: AppState) -> Router<AppState> {
         .route(
             "/eval-lab/experiments/:experiment_id",
             get(eval_lab::get_experiment),
+        )
+        .route(
+            "/eval-lab/experiments/:experiment_id/regression",
+            get(eval_lab::experiment_regression),
         )
         .route(
             "/eval-lab/experiments/:experiment_id/compare",

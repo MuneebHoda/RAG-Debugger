@@ -70,7 +70,9 @@ Configuration context uses an ordered map so Markdown and API output remain stab
 
 `crates/rag/src/reports` separates source builders, privacy filtering, and recommendation mapping. Callers supply `DebugReportBuildContext` with fixed ownership, ID, privacy mode, and timestamp so tests and later storage/API layers control non-deterministic values.
 
-Trace builders require a saved retrieval response and include ranked evidence plus the latest rerun comparison. Eval builders include gate outcomes, mode metrics, expected/retrieved/missing evidence IDs, and failed cases. CI builders add branch, commit, config label, regression deltas, and newly failing case counts.
+Trace builders require a saved retrieval response and include ranked evidence plus the latest rerun comparison. Eval builders include gate outcomes, mode metrics, expected/retrieved/missing evidence IDs, failed cases, and the previous comparable experiment when one exists. CI builders add branch, commit, config label, regression deltas, and newly failing case counts.
+
+Eval regression context is metadata-first. Metadata-only reports may include experiment IDs, baseline IDs, gate transitions, metric deltas, failure-label codes, and newly failed or recovered case counts. They must not include raw queries, document paths, section titles, snippets, or corpus text unless a stronger privacy mode explicitly allows that content.
 
 ## Safe Sharing Rules
 
