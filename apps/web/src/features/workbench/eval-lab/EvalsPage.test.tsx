@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -13,9 +13,17 @@ const sourceId = "018f7a2a-6e2e-7000-a000-000000000303";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000304";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000305";
 const experimentId = "018f7a2a-6e2e-7000-a000-000000000306";
+const baselineId = "018f7a2a-6e2e-7000-a000-000000000307";
+const partialBaselineId = "018f7a2a-6e2e-7000-a000-000000000308";
+const newerExperimentId = "018f7a2a-6e2e-7000-a000-000000000309";
+const firstExperimentId = "018f7a2a-6e2e-7000-a000-000000000310";
+let historyShouldFail = false;
+let regressionShouldFail = false;
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
+    historyShouldFail = false;
+    regressionShouldFail = false;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -26,7 +34,10 @@ describe("guided Eval Lab workflow", () => {
         if (
           url.includes(`/api/v1/eval-lab/datasets/${datasetId}/experiments`)
         ) {
-          return responseJson([experimentSummary()]);
+          if (historyShouldFail) {
+            return responseError(500, "Experiment history failed");
+          }
+          return responseJson(experimentHistory());
         }
         if (url.includes(`/api/v1/eval-lab/datasets/${datasetId}/trends`)) {
           return responseJson(trendSummary());
@@ -34,12 +45,25 @@ describe("guided Eval Lab workflow", () => {
         if (url.endsWith(`/api/v1/eval-lab/experiments/${experimentId}`)) {
           return responseJson(experiment());
         }
+        if (url.endsWith(`/api/v1/eval-lab/experiments/${firstExperimentId}`)) {
+          return responseJson(firstExperiment());
+        }
         if (
           url.includes(
             `/api/v1/eval-lab/experiments/${experimentId}/regression`,
           )
         ) {
-          return responseJson(regression());
+          if (regressionShouldFail) {
+            return responseError(500, "Regression comparison failed");
+          }
+          return responseJson(regressionForUrl(url));
+        }
+        if (
+          url.includes(
+            `/api/v1/eval-lab/experiments/${firstExperimentId}/regression`,
+          )
+        ) {
+          return responseJson(noBaselineRegression());
         }
         if (url.endsWith("/api/v1/eval-lab/datasets")) {
           return responseJson([datasetSummary()]);
@@ -146,15 +170,175 @@ describe("guided Eval Lab workflow", () => {
       screen.getByText(/expected evidence was not retrieved/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: /regression history/i }),
+      await screen.findByRole("heading", { name: /regression history/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Baseline experiment" }),
+    ).toHaveValue("auto");
+    expect(
+      await screen.findByText(/Automatic: Baseline retrieval gate/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/newly failed/i)).toBeInTheDocument();
+    expect(screen.getByText(/changed top evidence/i)).toBeInTheDocument();
+    expect(screen.getByText(/changed failure labels/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Classification is regressed/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: /mode comparison/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
     ).toBeInTheDocument();
+  });
+
+  it("persists explicit baseline choice and warns for partial compatibility", async () => {
+    renderRoute(
+      `/app/evals/experiments/${experimentId}?baseline_id=${partialBaselineId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    const selector = await screen.findByRole("combobox", {
+      name: "Baseline experiment",
+    });
+    expect(await screen.findByText(/Partial baseline/i)).toBeInTheDocument();
+    expect(selector).toHaveValue(partialBaselineId);
+    expect(
+      await screen.findByText(/top_k changed from 10 to 5/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Partial baseline comparison is unchanged/i),
+    ).toBeInTheDocument();
+
+    fireEvent.change(selector, { target: { value: baselineId } });
+
+    expect(selector).toHaveValue(baselineId);
+    expect(
+      (await screen.findAllByText(/Baseline retrieval gate/i)).length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText(/Partial baseline/i)).not.toBeInTheDocument();
+  });
+
+  it("shows incompatible baseline options but does not allow selecting them", async () => {
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    await screen.findByRole("option", {
+      name: /Release retrieval gate · incompatible/i,
+    });
+    expect(
+      screen.getByRole("option", {
+        name: /Release retrieval gate · incompatible/i,
+      }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("option", {
+        name: /Future retrieval gate · incompatible/i,
+      }),
+    ).toBeDisabled();
+  });
+
+  it("distinguishes no baseline from unchanged regression", async () => {
+    renderRoute(
+      `/app/evals/experiments/${firstExperimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Initial retrieval gate" }),
+    ).toBeInTheDocument();
+    expect(
+      (await screen.findAllByText(/No comparable baseline/i)).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Run another compatible experiment/i),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the current experiment identity when experiment history fails", async () => {
+    historyShouldFail = true;
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Experiment history could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /regression history/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/modes hybrid, vector, lexical · top_k 5/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a visible regression error while keeping the selector usable", async () => {
+    regressionShouldFail = true;
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Regression comparison could not be loaded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("combobox", { name: "Baseline experiment" }),
+    ).toBeEnabled();
+    expect(screen.getByText("Unavailable")).toBeInTheDocument();
+  });
+
+  it("rejects an invalid baseline id from the URL before calling regression", async () => {
+    renderRoute(
+      `/app/evals/experiments/${experimentId}?baseline_id=${newerExperimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText(
+        "Selected baseline cannot be compared with this experiment.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Choose Automatic or a compatible earlier experiment to view regression history.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /use automatic comparison/i }),
+    ).toBeInTheDocument();
+
+    const fetchMock = vi.mocked(fetch);
+    expect(
+      fetchMock.mock.calls.some(([input]) =>
+        input
+          .toString()
+          .includes(
+            `/api/v1/eval-lab/experiments/${experimentId}/regression?baseline_id=${newerExperimentId}`,
+          ),
+      ),
+    ).toBe(false);
   });
 });
 
@@ -171,7 +355,39 @@ function renderRoute(initialEntry: string, route: React.ReactElement) {
   );
 }
 
-function experimentSummary() {
+function experimentHistory() {
+  return [
+    experimentSummary({
+      id: newerExperimentId,
+      name: "Future retrieval gate",
+      created_at: "2026-06-27T00:00:00Z",
+      gate_status: "passed",
+    }),
+    experimentSummary(),
+    experimentSummary({
+      id: partialBaselineId,
+      name: "Partial retrieval gate",
+      modes: ["hybrid"],
+      top_k: 10,
+      created_at: "2026-06-24T00:00:00Z",
+      gate_status: "passed",
+    }),
+    experimentSummary({
+      id: baselineId,
+      name: "Baseline retrieval gate",
+      created_at: "2026-06-23T00:00:00Z",
+      gate_status: "passed",
+    }),
+  ];
+}
+
+function experimentSummary(
+  overrides: Partial<ReturnType<typeof baseExperimentSummary>> = {},
+) {
+  return { ...baseExperimentSummary(), ...overrides };
+}
+
+function baseExperimentSummary() {
   return {
     id: experimentId,
     dataset_id: datasetId,
@@ -209,7 +425,7 @@ function trendSummary() {
 function regression() {
   return {
     current_experiment_id: experimentId,
-    baseline_experiment_id: "018f7a2a-6e2e-7000-a000-000000000307",
+    baseline_experiment_id: baselineId,
     classification: "regressed",
     current_gate_status: "failed",
     baseline_gate_status: "passed",
@@ -246,8 +462,38 @@ function regression() {
       },
     ],
     recovered_cases: [],
-    changed_top_evidence_cases: [],
-    changed_failure_label_cases: [],
+    changed_top_evidence_cases: [
+      {
+        case_id: caseId,
+        retrieval_mode: "hybrid",
+        query: "Which evidence explains GPU indexing workers?",
+        classification: "regressed",
+        current_passed: false,
+        baseline_passed: true,
+        current_top_hit_rank: 4,
+        baseline_top_hit_rank: 1,
+        current_retrieved_chunk_ids: ["018f7a2a-6e2e-7000-a000-000000000399"],
+        baseline_retrieved_chunk_ids: [chunkId],
+        current_failure_labels: ["expected_evidence_missing"],
+        baseline_failure_labels: [],
+      },
+    ],
+    changed_failure_label_cases: [
+      {
+        case_id: caseId,
+        retrieval_mode: "hybrid",
+        query: "Which evidence explains GPU indexing workers?",
+        classification: "regressed",
+        current_passed: false,
+        baseline_passed: true,
+        current_top_hit_rank: null,
+        baseline_top_hit_rank: 1,
+        current_retrieved_chunk_ids: [],
+        baseline_retrieved_chunk_ids: [chunkId],
+        current_failure_labels: ["expected_evidence_missing"],
+        baseline_failure_labels: ["low_precision"],
+      },
+    ],
     summary: "Release retrieval gate regressed compared with Baseline.",
   };
 }
@@ -389,6 +635,36 @@ function experiment() {
   };
 }
 
+function firstExperiment() {
+  return {
+    ...experiment(),
+    id: firstExperimentId,
+    name: "Initial retrieval gate",
+    created_at: "2026-06-22T00:00:00Z",
+    gate: gate("passed"),
+    failures: [],
+  };
+}
+
+function regressionForUrl(url: string) {
+  const baselineIdParam = new URL(url, "http://127.0.0.1").searchParams.get(
+    "baseline_id",
+  );
+  if (baselineIdParam === partialBaselineId) {
+    return {
+      ...regression(),
+      baseline_experiment_id: partialBaselineId,
+      classification: "unchanged",
+      newly_failed_cases: [],
+      recovered_cases: [],
+      changed_top_evidence_cases: [],
+      changed_failure_label_cases: [],
+      summary: "Partial baseline comparison is unchanged.",
+    };
+  }
+  return regression();
+}
+
 function modeResult(
   mode: string,
   recall: number,
@@ -426,6 +702,37 @@ function gate(status: "passed" | "failed") {
   };
 }
 
+function noBaselineRegression() {
+  return {
+    current_experiment_id: firstExperimentId,
+    baseline_experiment_id: null,
+    classification: "unchanged",
+    current_gate_status: "passed",
+    baseline_gate_status: null,
+    metric_deltas: [
+      {
+        metric: "recall_at_k",
+        current: 1,
+        baseline: null,
+        delta: 0,
+        classification: "unchanged",
+      },
+    ],
+    newly_failed_cases: [],
+    recovered_cases: [],
+    changed_top_evidence_cases: [],
+    changed_failure_label_cases: [],
+    summary: "No comparable baseline exists.",
+  };
+}
+
 function responseJson(json: unknown) {
   return Promise.resolve({ status: 200, json: async () => json } as Response);
+}
+
+function responseError(status: number, message: string) {
+  return Promise.resolve({
+    status,
+    text: async () => JSON.stringify({ error: { message } }),
+  } as Response);
 }

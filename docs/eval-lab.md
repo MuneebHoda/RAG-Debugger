@@ -88,6 +88,14 @@ Overall classification is deterministic:
 
 Trend summaries default to the latest 10 experiments and clamp requests to 50 points. Trend points are chronological for graphing and review, while experiment history lists newest first.
 
+Experiment Detail exposes the baseline choice so the comparison can be reviewed and revisited. The selector marks each candidate as:
+
+- `fully compatible`: earlier experiment with the same dataset, `top_k`, and sorted retrieval-mode set;
+- `partially compatible`: earlier experiment from the same dataset with different `top_k` or modes, selectable with a warning;
+- `incompatible`: the current experiment or a newer experiment, visible but disabled.
+
+The selected baseline is stored in the local URL as `baseline_id`. If no explicit baseline is selected, the API keeps using the automatic previous compatible run. When no baseline exists, the UI shows `No comparable baseline` instead of implying that the experiment is meaningfully unchanged.
+
 ## UI Workflow
 
 Quality starts at `/app/evals` and uses focused detail routes.

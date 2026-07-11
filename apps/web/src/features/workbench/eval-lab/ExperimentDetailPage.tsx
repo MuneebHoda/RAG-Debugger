@@ -1,29 +1,71 @@
 import { AlertTriangle, CheckCircle2, Gauge, XCircle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 
 import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPageHeader";
 import {
   getEvalLabExperiment,
   getEvalLabExperimentRegression,
+  listEvalLabDatasetExperiments,
 } from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
-import { RegressionPanel } from "./components/QualityViews";
+import { BaselineSelector, RegressionPanel } from "./components/QualityViews";
+import {
+  classifyBaselineCompatibility,
+  findAutomaticBaseline,
+  summarizeExperimentForComparison,
+} from "./evalRegression";
 import styles from "./QualityPage.module.css";
 
 export function ExperimentDetailPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedBaselineId = searchParams.get("baseline_id");
   const experimentQuery = useQuery({
     queryKey: ["eval-experiment", experimentId],
     queryFn: ({ signal }) => getEvalLabExperiment(experimentId!, signal),
     enabled: Boolean(experimentId),
   });
-  const regressionQuery = useQuery({
-    queryKey: ["eval-experiment-regression", experimentId],
+  const historyQuery = useQuery({
+    queryKey: ["eval-dataset-experiments", experimentQuery.data?.dataset_id],
     queryFn: ({ signal }) =>
-      getEvalLabExperimentRegression(experimentId!, undefined, signal),
-    enabled: Boolean(experimentId),
+      listEvalLabDatasetExperiments(experimentQuery.data!.dataset_id, signal),
+    enabled: Boolean(experimentQuery.data?.dataset_id),
+  });
+
+  const selectedBaseline = historyQuery.data?.find(
+    (candidate) => candidate.id === selectedBaselineId,
+  );
+  const selectedCompatibility =
+    selectedBaseline && experimentQuery.data
+      ? classifyBaselineCompatibility(selectedBaseline, experimentQuery.data)
+      : null;
+  const hasInvalidSelectedBaseline = Boolean(
+    selectedBaselineId &&
+    historyQuery.isSuccess &&
+    (!selectedBaseline || selectedCompatibility?.level === "incompatible"),
+  );
+  const hasSelectedBaselinePendingValidation = Boolean(
+    selectedBaselineId && !historyQuery.isSuccess,
+  );
+
+  const regressionQuery = useQuery({
+    queryKey: [
+      "eval-experiment-regression",
+      experimentId,
+      selectedBaselineId ?? "auto",
+    ],
+    queryFn: ({ signal }) =>
+      getEvalLabExperimentRegression(
+        experimentId!,
+        selectedBaselineId ?? undefined,
+        signal,
+      ),
+    enabled:
+      Boolean(experimentQuery.data) &&
+      !hasInvalidSelectedBaseline &&
+      !hasSelectedBaselinePendingValidation,
   });
 
   if (experimentQuery.isLoading) {
@@ -47,6 +89,28 @@ export function ExperimentDetailPage() {
 
   const experiment = experimentQuery.data;
   const gatePassed = experiment.gate.status === "passed";
+  const automaticBaseline = historyQuery.data
+    ? findAutomaticBaseline(experiment, historyQuery.data)
+    : null;
+  const regressionBaseline =
+    historyQuery.data?.find(
+      (candidate) =>
+        candidate.id === regressionQuery.data?.baseline_experiment_id,
+    ) ?? null;
+  const currentSummary =
+    historyQuery.data?.find((candidate) => candidate.id === experiment.id) ??
+    summarizeExperimentForComparison(experiment);
+
+  const updateBaseline = (baselineId: string | null) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (baselineId) {
+      nextParams.set("baseline_id", baselineId);
+    } else {
+      nextParams.delete("baseline_id");
+    }
+    setSearchParams(nextParams, { replace: true });
+  };
+
   return (
     <section className={styles.page} aria-labelledby="experiment-title">
       <WorkbenchPageHeader
@@ -72,7 +136,7 @@ export function ExperimentDetailPage() {
         titleId="experiment-title"
       />
 
-      <section className={`${styles.gate} ${styles[experiment.gate.status]}`}>
+      <section className={styles.gate}>
         <div className={styles.gateIcon}>
           {gatePassed ? (
             <CheckCircle2 aria-hidden="true" size={20} />
@@ -86,7 +150,34 @@ export function ExperimentDetailPage() {
         </div>
       </section>
 
-      <RegressionPanel regression={regressionQuery.data} />
+      <BaselineSelector
+        automaticBaseline={automaticBaseline}
+        currentExperiment={experiment}
+        error={
+          hasInvalidSelectedBaseline
+            ? "Selected baseline cannot be compared with this experiment."
+            : historyQuery.isError
+              ? "Experiment history could not be loaded."
+              : null
+        }
+        experiments={historyQuery.data ?? []}
+        isLoading={historyQuery.isLoading}
+        selectedBaselineId={selectedBaselineId}
+        onBaselineChange={updateBaseline}
+      />
+
+      <RegressionPanel
+        baselineExperiment={regressionBaseline}
+        currentExperiment={currentSummary}
+        error={
+          hasInvalidSelectedBaseline
+            ? "Choose Automatic or a compatible earlier experiment to view regression history."
+            : regressionQuery.isError
+              ? "Regression comparison could not be loaded."
+              : null
+        }
+        regression={hasInvalidSelectedBaseline ? null : regressionQuery.data}
+      />
 
       {!gatePassed ? (
         <section className={styles.panel}>
@@ -95,7 +186,7 @@ export function ExperimentDetailPage() {
               <h2>Failed cases</h2>
               <p>Start here. These failures explain what needs attention.</p>
             </div>
-            <span className={styles.failed}>{experiment.failures.length}</span>
+            <span className={styles.error}>{experiment.failures.length}</span>
           </div>
           <div className={styles.list}>
             {experiment.failures.map((failure, index) => (
