@@ -15,13 +15,16 @@ import { TraceDetailPage } from "./TraceDetailPage";
 const traceId = "018f7a2a-6e2e-7000-a000-000000000201";
 const secondTraceId = "018f7a2a-6e2e-7000-a000-000000000202";
 const datasetId = "018f7a2a-6e2e-7000-a000-000000000210";
+const documentId = "document-1";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000205";
+let createdCaseBody: unknown;
 
 describe("guided run workflow", () => {
   beforeEach(() => {
+    createdCaseBody = undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = input.toString();
         if (url.endsWith("/api/v1/traces")) {
           return responseJson([traceSummary]);
@@ -61,6 +64,7 @@ describe("guided run workflow", () => {
           return responseJson(evidenceLookup());
         }
         if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}/cases`)) {
+          createdCaseBody = JSON.parse(String(init?.body ?? "{}"));
           return responseJson({ id: "case-1" });
         }
         return responseJson(trace);
@@ -149,7 +153,19 @@ describe("guided run workflow", () => {
     const saveButton = screen.getByRole("button", {
       name: /save quality case/i,
     });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Expect this exact chunk" })[0],
+    );
     await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toMatchObject({
+      expected_chunk_ids: [chunkId],
+      expected_document_ids: [],
+    });
   });
 
   it("shows a loading state when navigating to a different trace", async () => {
@@ -261,7 +277,7 @@ const retrieval = {
       score: 3.4,
       chunk: {
         id: chunkId,
-        document_id: "document-1",
+        document_id: documentId,
         ordinal: 0,
         text: "GPU workers speed up embedding refreshes.",
         token_count: 6,
@@ -276,7 +292,7 @@ const retrieval = {
         evidence_score_hint: 0.8,
       },
       document: {
-        id: "document-1",
+        id: documentId,
         source_id: "source-1",
         path: "platform-guide.md",
         mime_type: "text/markdown",
@@ -319,7 +335,7 @@ const retrieval = {
       citation: {
         label: "[1]",
         chunk_id: chunkId,
-        document_id: "document-1",
+        document_id: documentId,
         document_path: "platform-guide.md",
         chunk_ordinal: 0,
         section_title: "Indexing",
@@ -414,7 +430,7 @@ function evidenceLookup() {
   return {
     documents: [
       {
-        id: "document-1",
+        id: documentId,
         source_id: "source-1",
         source_name: "Corpus upload",
         path: "platform-guide.md",
@@ -427,7 +443,7 @@ function evidenceLookup() {
     chunks: [
       {
         id: chunkId,
-        document_id: "document-1",
+        document_id: documentId,
         source_id: "source-1",
         source_name: "Corpus upload",
         document_path: "platform-guide.md",

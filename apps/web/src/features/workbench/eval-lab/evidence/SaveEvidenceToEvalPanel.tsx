@@ -38,10 +38,7 @@ export function SaveEvidenceToEvalPanel({
   const [caseName, setCaseName] = useState(query);
   const [notes, setNotes] = useState(sourceNote);
   const [selection, setSelection] = useState<EvidenceSelection>(() =>
-    normalizeEvidenceSelection({
-      documentIds: candidateHits.slice(0, 1).map((hit) => hit.documentId),
-      chunkIds: candidateHits.slice(0, 1).map((hit) => hit.chunkId),
-    }),
+    emptyEvidenceSelection(),
   );
   const datasetsQuery = useQuery({
     queryKey: ["eval-datasets"],

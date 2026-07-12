@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +16,8 @@ import { AnswerPanel } from "./RetrievalResults";
 const sourceId = "018f7a2a-6e2e-7000-a000-000000000101";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000102";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000103";
+const datasetId = "018f7a2a-6e2e-7000-a000-000000000107";
+let createdCaseBody: unknown;
 
 const source = {
   id: sourceId,
@@ -55,9 +63,10 @@ const chunk = {
 
 describe("RetrievalPage", () => {
   beforeEach(() => {
+    createdCaseBody = undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = input.toString();
         if (url.endsWith("/api/v1/sources")) {
           return responseJson([
@@ -126,6 +135,71 @@ describe("RetrievalPage", () => {
             retrieval: null,
             reruns: [],
           });
+        }
+        if (url.endsWith("/api/v1/eval-lab/datasets")) {
+          return responseJson([
+            {
+              id: datasetId,
+              name: "Critical retrieval questions",
+              description: null,
+              case_count: 0,
+              latest_experiment_id: null,
+              latest_gate: null,
+              latest_average_recall_at_k: null,
+              latest_average_precision_at_k: null,
+              updated_at: "2026-06-23T00:00:00Z",
+            },
+          ]);
+        }
+        if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
+          return responseJson({
+            id: datasetId,
+            name: "Critical retrieval questions",
+            description: null,
+            cases: [],
+            created_at: "2026-06-23T00:00:00Z",
+            updated_at: "2026-06-23T00:00:00Z",
+          });
+        }
+        if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
+          return responseJson({
+            documents: [
+              {
+                id: documentId,
+                source_id: sourceId,
+                source_name: "Corpus upload",
+                path: "resume.md",
+                profile: "technical_docs",
+                extraction_quality: "high",
+                warnings: [],
+                chunk_count: 1,
+              },
+            ],
+            chunks: [
+              {
+                id: chunkId,
+                document_id: documentId,
+                source_id: sourceId,
+                source_name: "Corpus upload",
+                document_path: "resume.md",
+                ordinal: 0,
+                text: chunk.text,
+                token_count: chunk.token_count,
+                checksum: chunk.checksum,
+                section_title: chunk.section_title,
+                quality_flags: chunk.quality_flags,
+                is_duplicate: chunk.is_duplicate,
+                text_density: chunk.text_density,
+                evidence_score_hint: chunk.evidence_score_hint,
+              },
+            ],
+            unresolved_document_ids: [],
+            unresolved_chunk_ids: [],
+          });
+        }
+        if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}/cases`)) {
+          createdCaseBody = JSON.parse(String(init?.body ?? "{}"));
+          return responseJson({ id: "case-1" });
         }
 
         return responseJson({
@@ -363,6 +437,51 @@ describe("RetrievalPage", () => {
     expect(
       await screen.findByRole("heading", { name: /focused run debugger/i }),
     ).toBeInTheDocument();
+  });
+
+  it("saves selected exact evidence to Quality without broadening to the parent document", async () => {
+    renderWithClient(<RetrievalPage />);
+
+    fireEvent.change(
+      await screen.findByLabelText(/what should the corpus answer/i),
+      { target: { value: "gpu indexing" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: /run retrieval/i }));
+    await screen.findByText("Built GPU indexing experiments [1]");
+
+    fireEvent.click(screen.getByRole("button", { name: /choose evidence/i }));
+    const datasetSelect = await screen.findByLabelText(/quality dataset/i);
+    await screen.findByRole("option", {
+      name: "Critical retrieval questions",
+    });
+    fireEvent.change(datasetSelect, {
+      target: { value: datasetId },
+    });
+    await waitFor(() => expect(datasetSelect).toHaveValue(datasetId));
+    const retrievedEvidenceSection = screen
+      .getByRole("heading", { name: "Retrieved evidence from this run" })
+      .closest("div");
+    expect(retrievedEvidenceSection).not.toBeNull();
+    fireEvent.click(
+      within(retrievedEvidenceSection!).getByRole("button", {
+        name: "Expect this exact chunk",
+      }),
+    );
+    expect(
+      await screen.findByText(/Exact chunk expectation/i),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /save quality case/i }),
+      ).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /save quality case/i }));
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toMatchObject({
+      expected_chunk_ids: [chunkId],
+      expected_document_ids: [],
+    });
   });
 });
 

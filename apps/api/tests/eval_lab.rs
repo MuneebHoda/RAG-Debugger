@@ -100,6 +100,54 @@ async fn eval_lab_manages_datasets_and_cases() {
     )
     .await;
     assert_eq!(updated["name"], "Refund exception policy");
+    let chunk_only = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({
+            "expected_document_ids": [],
+            "expected_chunk_ids": [chunk_id, chunk_id]
+        }),
+    )
+    .await;
+    assert_eq!(
+        chunk_only["expected_document_ids"]
+            .as_array()
+            .expect("document ids")
+            .len(),
+        0
+    );
+    assert_eq!(
+        chunk_only["expected_chunk_ids"]
+            .as_array()
+            .expect("chunk ids")
+            .len(),
+        1
+    );
+    let document_only = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({
+            "expected_document_ids": [document_id, document_id],
+            "expected_chunk_ids": []
+        }),
+    )
+    .await;
+    assert_eq!(
+        document_only["expected_document_ids"]
+            .as_array()
+            .expect("document ids")
+            .len(),
+        1
+    );
+    assert_eq!(
+        document_only["expected_chunk_ids"]
+            .as_array()
+            .expect("chunk ids")
+            .len(),
+        0
+    );
 
     let invalid_update = app
         .clone()
@@ -132,27 +180,37 @@ async fn eval_lab_manages_datasets_and_cases() {
 #[tokio::test]
 async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     let app = test_app();
-    let upload_body = upload_text_file(
+    let upload_body = upload_text_file_with_target(
         &app,
         "platform-guide.md",
-        "GPU Indexing\n- Local GPU workers refresh embeddings quickly.\n\nReports\n- Evidence reports explain citations.",
+        "GPU Indexing\nLocal GPU workers refresh embeddings quickly.\n\nRetention Policy\nArchived invoices require finance approval.",
+        "8",
     )
     .await;
     let document_id = upload_body["documents"][0]["document"]["id"]
         .as_str()
         .expect("document id");
-    let chunk_id = upload_body["documents"][0]["preview_chunks"][0]["id"]
-        .as_str()
-        .expect("chunk id");
-    let wrong_upload_body = upload_text_file(
-        &app,
-        "release-notes.md",
-        "Billing\n- Annual invoices are generated through finance approval.",
-    )
-    .await;
-    let wrong_chunk_id = wrong_upload_body["documents"][0]["preview_chunks"][0]["id"]
-        .as_str()
-        .expect("wrong chunk id");
+    let chunks = get_json(&app, &format!("/api/v1/documents/{document_id}/chunks")).await;
+    let chunks = chunks.as_array().expect("chunks");
+    assert!(chunks.len() >= 2, "test fixture should produce two chunks");
+    let chunk_id = chunks
+        .iter()
+        .find(|chunk| {
+            chunk["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("GPU workers"))
+        })
+        .and_then(|chunk| chunk["id"].as_str())
+        .expect("gpu chunk id");
+    let wrong_chunk_id = chunks
+        .iter()
+        .find(|chunk| {
+            chunk["text"]
+                .as_str()
+                .is_some_and(|text| text.contains("finance"))
+        })
+        .and_then(|chunk| chunk["id"].as_str())
+        .expect("finance chunk id");
     index_embeddings(&app).await;
 
     let dataset = create_dataset(&app, "Platform regression set").await;
@@ -165,7 +223,7 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
             "query": "gpu indexing workers",
             "top_k": 5,
             "expected_chunk_ids": [chunk_id],
-            "expected_document_ids": [document_id]
+            "expected_document_ids": []
         }),
     )
     .await;
@@ -219,7 +277,7 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
         &format!("/api/v1/eval-lab/cases/{case_id}"),
         json!({
             "expected_chunk_ids": [wrong_chunk_id],
-            "expected_document_ids": [document_id]
+            "expected_document_ids": []
         }),
     )
     .await;
@@ -247,6 +305,10 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
         .as_array()
         .expect("newly failed")
         .is_empty());
+    let failures = regressed["failures"].as_array().expect("failures");
+    assert!(failures.iter().any(|failure| {
+        failure["label"] == "correct_document_wrong_chunk" && failure["case_id"] == case_id
+    }));
 
     let trend = get_json(
         &app,
@@ -282,9 +344,18 @@ async fn create_case(app: &axum::Router, dataset_id: &str, body: Value) -> Value
 }
 
 async fn upload_text_file(app: &axum::Router, file_name: &str, content: &str) -> Value {
+    upload_text_file_with_target(app, file_name, content, "40").await
+}
+
+async fn upload_text_file_with_target(
+    app: &axum::Router,
+    file_name: &str,
+    content: &str,
+    target_tokens: &str,
+) -> Value {
     let response = app
         .clone()
-        .oneshot(multipart_request(file_name, content))
+        .oneshot(multipart_request(file_name, content, target_tokens))
         .await
         .expect("upload response");
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -332,11 +403,11 @@ fn empty_request(method: Method, uri: &str) -> Request<Body> {
         .expect("request")
 }
 
-fn multipart_request(file_name: &str, content: &str) -> Request<Body> {
+fn multipart_request(file_name: &str, content: &str, target_tokens: &str) -> Request<Body> {
     let boundary = "CORPUSLAB_EVAL_LAB_TEST_BOUNDARY";
     let mut body = String::new();
 
-    push_text_part(&mut body, boundary, "target_tokens", "40");
+    push_text_part(&mut body, boundary, "target_tokens", target_tokens);
     push_text_part(&mut body, boundary, "overlap_tokens", "0");
     body.push_str(&format!("--{boundary}\r\n"));
     body.push_str(&format!(

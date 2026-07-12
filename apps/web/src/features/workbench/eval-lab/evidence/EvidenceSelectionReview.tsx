@@ -58,6 +58,10 @@ export function EvidenceSelectionReview({
   return (
     <div className={styles.review}>
       <h3>Selected expected evidence</h3>
+      <p className={styles.empty}>
+        Exact chunks require that specific chunk to be retrieved. Document-level
+        evidence accepts any suitable chunk from that document.
+      </p>
       <div className={styles.selectedList}>
         {(evidenceQuery.data?.documents ?? []).map((document) => (
           <article className={styles.selectedItem} key={document.id}>
@@ -78,7 +82,8 @@ export function EvidenceSelectionReview({
               </button>
             </div>
             <span>
-              Document · {document.source_name} · {document.chunk_count} chunks
+              Document-level expectation · accepts evidence from{" "}
+              {document.source_name} · {document.chunk_count} chunks
             </span>
           </article>
         ))}
@@ -101,6 +106,7 @@ export function EvidenceSelectionReview({
               </button>
             </div>
             <span>
+              Exact chunk expectation · this chunk must be retrieved ·{" "}
               {chunk.section_title ? `${chunk.section_title} · ` : ""}
               checksum {chunk.checksum.slice(0, 12)}
             </span>

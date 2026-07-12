@@ -33,6 +33,21 @@ describe("evidence selection helpers", () => {
     });
   });
 
+  it("does not infer document expectations from exact chunk expectations", () => {
+    expect(
+      addEvidenceChunk({ documentIds: [], chunkIds: [] }, "chunk-1"),
+    ).toEqual({
+      documentIds: [],
+      chunkIds: ["chunk-1"],
+    });
+    expect(
+      addEvidenceDocument({ documentIds: [], chunkIds: [] }, "doc-1"),
+    ).toEqual({
+      documentIds: ["doc-1"],
+      chunkIds: [],
+    });
+  });
+
   it("normalizes an existing eval case selection", () => {
     expect(
       selectionFromCase({

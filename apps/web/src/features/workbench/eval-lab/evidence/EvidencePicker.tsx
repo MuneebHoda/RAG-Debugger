@@ -81,24 +81,17 @@ export function EvidencePicker({
           </button>
         </span>
       </label>
+      <p className={styles.empty}>
+        Use exact chunks when a specific passage must be retrieved. Use
+        document-level evidence only when any suitable chunk from that document
+        should count.
+      </p>
 
       {candidateHits.length > 0 ? (
         <div className={styles.resultColumn}>
           <h3>Retrieved evidence from this run</h3>
           {candidateHits.slice(0, 8).map((hit) => (
-            <button
-              className={styles.option}
-              key={hit.chunkId}
-              type="button"
-              onClick={() =>
-                onSelectionChange(
-                  addEvidenceChunk(
-                    addEvidenceDocument(selection, hit.documentId),
-                    hit.chunkId,
-                  ),
-                )
-              }
-            >
+            <article className={styles.option} key={hit.chunkId}>
               <strong>
                 {hit.rank ? `Rank ${hit.rank} · ` : ""}
                 {hit.path ?? hit.label}
@@ -107,7 +100,29 @@ export function EvidencePicker({
                 {hit.sectionTitle ? `${hit.sectionTitle} · ` : ""}
                 {hit.snippet ?? compactId(hit.chunkId)}
               </span>
-            </button>
+              <span className={styles.actions}>
+                <button
+                  className="secondary-button compact"
+                  type="button"
+                  onClick={() =>
+                    onSelectionChange(addEvidenceChunk(selection, hit.chunkId))
+                  }
+                >
+                  Expect this exact chunk
+                </button>
+                <button
+                  className="secondary-button compact"
+                  type="button"
+                  onClick={() =>
+                    onSelectionChange(
+                      addEvidenceDocument(selection, hit.documentId),
+                    )
+                  }
+                >
+                  Accept evidence from this document
+                </button>
+              </span>
+            </article>
           ))}
         </div>
       ) : null}
@@ -130,12 +145,7 @@ export function EvidencePicker({
           chunks={evidenceQuery.data?.chunks ?? []}
           selection={normalizedSelection}
           onAdd={(chunk) =>
-            onSelectionChange(
-              addEvidenceChunk(
-                addEvidenceDocument(selection, chunk.document_id),
-                chunk.id,
-              ),
-            )
+            onSelectionChange(addEvidenceChunk(selection, chunk.id))
           }
         />
       </div>
@@ -159,19 +169,21 @@ function EvidenceDocumentOptions({
         documents.map((document) => {
           const selected = selection.documentIds.includes(document.id);
           return (
-            <button
-              className={styles.option}
-              disabled={selected}
-              key={document.id}
-              type="button"
-              onClick={() => onAdd(document)}
-            >
+            <article className={styles.option} key={document.id}>
               <strong>{document.path}</strong>
               <span>
                 {document.source_name} · {document.profile.replaceAll("_", " ")}{" "}
                 · {document.chunk_count} chunks
               </span>
-            </button>
+              <button
+                className="secondary-button compact"
+                disabled={selected}
+                type="button"
+                onClick={() => onAdd(document)}
+              >
+                Accept evidence from this document
+              </button>
+            </article>
           );
         })
       ) : (
@@ -197,13 +209,7 @@ function EvidenceChunkOptions({
         chunks.map((chunk) => {
           const selected = selection.chunkIds.includes(chunk.id);
           return (
-            <button
-              className={styles.option}
-              disabled={selected}
-              key={chunk.id}
-              type="button"
-              onClick={() => onAdd(chunk)}
-            >
+            <article className={styles.option} key={chunk.id}>
               <strong>
                 {chunk.document_path} · chunk {chunk.ordinal + 1}
               </strong>
@@ -220,7 +226,15 @@ function EvidenceChunkOptions({
                   ))}
                 </span>
               ) : null}
-            </button>
+              <button
+                className="secondary-button compact"
+                disabled={selected}
+                type="button"
+                onClick={() => onAdd(chunk)}
+              >
+                Expect this exact chunk
+              </button>
+            </article>
           );
         })
       ) : (

@@ -74,8 +74,8 @@ After a query completes, the Retrieval page can save the run as a Trace Debugger
 Retrieval results can also become Eval Lab coverage. The `Add to Quality` panel uses the shared expected-evidence picker:
 
 - choose the target Quality dataset;
-- review the retrieval query and selected top evidence;
-- add or remove expected chunks and whole documents;
+- review the retrieval query and ranked evidence;
+- add exact chunks or whole-document expectations as separate explicit actions;
 - see duplicate-question warnings for the selected dataset;
 - save the case with the selected expected evidence IDs.
 

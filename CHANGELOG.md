@@ -12,7 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
-- Expected-evidence editor for Eval Lab with authenticated document/chunk lookup, readable multi-evidence selection, stale evidence warnings, shared Retrieval/Trace save-to-Quality panels, and text-labeled evidence state visualization.
+- Expected-evidence editor for Eval Lab with authenticated document/chunk lookup, readable multi-evidence selection, independent exact-chunk versus document-level expectations, stale evidence warnings, shared Retrieval/Trace save-to-Quality panels, and text-labeled evidence state visualization.
 - Eval Lab v2 regression history with dataset experiment timelines, trend summaries, baseline comparisons, newly failed/recovered case detection, and regression-aware audit reports.
 - Shared workbench workflow guidance that explains each page's purpose, position in the RAG quality loop, recommended next action, and retrieval-quality impact.
 - Shared authenticated-workbench visual primitives for panels, toolbars, status pills, and dense metric cards, with focused component tests.

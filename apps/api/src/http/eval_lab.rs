@@ -16,8 +16,8 @@ use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
     evals::{
         build_trend_summary, compare_experiment_regression, compare_mode_results, evaluate_gate,
-        evaluate_retrieval_eval_case_with_config, previous_comparable_experiment,
-        summarize_experiment, summarize_mode_result,
+        evaluate_retrieval_eval_case_with_context, expected_chunk_parent_document_ids,
+        previous_comparable_experiment, summarize_experiment, summarize_mode_result,
     },
     retrieval::LocalHybridRetriever,
     RagError,
@@ -206,13 +206,16 @@ pub async fn run_experiment(
                 document_ids: Vec::new(),
             };
             let candidates = repository.list_searchable_chunks(&query_request).await?;
+            let expected_chunk_document_ids =
+                expected_chunk_parent_document_ids(&case, &candidates);
             let response = retriever
                 .retrieve(query_request, candidates)
                 .map_err(rag_error_to_api_error)?;
-            case_results.push(evaluate_retrieval_eval_case_with_config(
+            case_results.push(evaluate_retrieval_eval_case_with_context(
                 &case,
                 &response,
                 &state.config().product.debugger,
+                &expected_chunk_document_ids,
             ));
         }
         mode_results.push(summarize_mode_result(*mode, case_results));

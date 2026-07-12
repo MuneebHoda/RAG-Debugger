@@ -5,7 +5,7 @@ Eval Lab is CorpusLab's quality-control center for retrieval systems. It turns i
 ## Core Concepts
 
 - **Dataset:** a named set of retrieval cases, usually grouped by product area, customer workflow, compliance topic, or release gate.
-- **Case:** a query plus expected evidence. Expected evidence can be exact chunk IDs, broader document IDs, or both.
+- **Case:** a query plus expected evidence. Exact chunk IDs mean that specific chunk must be retrieved. Broader document IDs mean any suitable chunk from that document can satisfy the case. Cases can contain both, but each must be selected explicitly.
 - **Experiment:** one run of a dataset across one or more retrieval modes with a frozen config snapshot.
 - **Mode result:** metrics for one retrieval mode, such as `hybrid`, `vector`, or `lexical`.
 - **Comparison:** the cross-mode summary that identifies the best mode and the recall, precision, and latency spread.
@@ -102,7 +102,7 @@ The selected baseline is stored in the local URL as `baseline_id`. If no explici
 Quality starts at `/app/evals` and uses focused detail routes.
 
 1. Create or select a dataset from the Quality overview.
-2. Open `/app/evals/datasets/:datasetId` and add cases with the expected-evidence picker. Search by question text, path, section, chunk text, or compact IDs, then select one or more expected documents and chunks.
+2. Open `/app/evals/datasets/:datasetId` and add cases with the expected-evidence picker. Search by question text, path, section, chunk text, or compact IDs, then choose exact chunks or document-level expectations explicitly.
 3. Choose retrieval modes: lexical, vector, hybrid.
 4. Pick `top_k`.
 5. Run an experiment.
@@ -112,7 +112,7 @@ Quality starts at `/app/evals` and uses focused detail routes.
 
 The Trace Debugger saves evidence into Quality with a note pointing back to the run. The user must choose both the target dataset and expected evidence. This prevents accidental labels and turns observed behavior into deliberate regression coverage.
 
-Retrieval and Trace Debugger use the same shared save-to-Quality workflow. The panel starts from retrieved chunks, lets the user choose the dataset, warns about duplicate normalized questions, shows readable document/chunk names, and submits only authenticated evidence IDs. It never asks users to manually paste UUIDs.
+Retrieval and Trace Debugger use the same shared save-to-Quality workflow. The panel shows retrieved chunks, lets the user choose the dataset, warns about duplicate normalized questions, shows readable document/chunk names, and submits only authenticated evidence IDs. It never asks users to manually paste UUIDs, and it never broadens an exact chunk expectation into a whole-document expectation.
 
 Existing cases with stale or deleted expected evidence remain readable. When a case is edited, newly submitted evidence IDs are validated against evidence visible in the active workspace. Stale IDs are shown with `stale/deleted expected evidence` labels so the user can remove or replace them intentionally.
 
@@ -149,8 +149,8 @@ The in-memory repository mirrors the same behavior for tests and local no-Postgr
 Good cases should represent the questions that would embarrass or block a real product if retrieval failed.
 
 - Prefer customer, support, policy, product, contract, and technical decision questions.
-- Use expected chunks when the exact evidence matters.
-- Use expected documents when any section in the right document is acceptable.
+- Use expected chunks when the exact evidence matters; selecting a chunk adds only that chunk.
+- Use expected documents when any section in the right document is acceptable; selecting a document adds only that document.
 - Add notes explaining why the case matters.
 - Keep datasets small but high signal at first, then grow them by workflow.
 
