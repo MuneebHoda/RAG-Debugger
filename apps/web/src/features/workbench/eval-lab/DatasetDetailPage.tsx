@@ -496,6 +496,7 @@ function EditableCase({
             chunk
           </small>
           <EvidenceStateList
+            context={{ kind: "expectation_only" }}
             selection={selectionFromCase(evalCase)}
             title="Expected evidence status"
           />

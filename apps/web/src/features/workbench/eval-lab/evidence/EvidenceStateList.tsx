@@ -3,65 +3,79 @@ import { useQuery } from "@tanstack/react-query";
 import { queryEvalLabEvidence } from "../../../../lib/api/evalLab";
 import {
   deriveEvidenceStates,
+  evidenceLookupChunkIds,
   normalizeEvidenceSelection,
-  type EvidenceHitRef,
   type EvidenceSelection,
+  type EvidenceStateContext,
 } from "./evidenceSelection";
 import styles from "./EvidencePicker.module.css";
 
 export function EvidenceStateList({
   title = "Evidence states",
   selection,
-  retrievedHits = [],
+  context,
   failureLabels = [],
 }: {
   title?: string;
   selection: EvidenceSelection;
-  retrievedHits?: EvidenceHitRef[];
+  context: EvidenceStateContext;
   failureLabels?: Parameters<typeof deriveEvidenceStates>[0]["failureLabels"];
 }) {
   const normalizedSelection = normalizeEvidenceSelection(selection);
+  const requestedChunkIds = evidenceLookupChunkIds(
+    normalizedSelection,
+    context,
+  );
+  const hasEvidence =
+    normalizedSelection.documentIds.length > 0 || requestedChunkIds.length > 0;
   const evidenceQuery = useQuery({
     queryKey: [
       "eval-lab-evidence-state",
       normalizedSelection.documentIds,
-      normalizedSelection.chunkIds,
-      retrievedHits.map((hit) => hit.chunkId),
+      requestedChunkIds,
     ],
     queryFn: ({ signal }) =>
       queryEvalLabEvidence(
         {
           document_ids: normalizedSelection.documentIds,
-          chunk_ids: normalizedSelection.chunkIds,
-          include_chunks: true,
+          chunk_ids: requestedChunkIds,
+          include_chunks: false,
           limit:
             normalizedSelection.documentIds.length +
-            normalizedSelection.chunkIds.length +
-            retrievedHits.length +
+            requestedChunkIds.length +
             10,
         },
         signal,
       ),
-    enabled:
-      normalizedSelection.documentIds.length > 0 ||
-      normalizedSelection.chunkIds.length > 0 ||
-      retrievedHits.length > 0,
+    enabled: hasEvidence,
   });
 
-  const states = deriveEvidenceStates({
-    selection: normalizedSelection,
-    documents: evidenceQuery.data?.documents,
-    chunks: evidenceQuery.data?.chunks,
-    unresolvedDocumentIds: evidenceQuery.data?.unresolved_document_ids,
-    unresolvedChunkIds: evidenceQuery.data?.unresolved_chunk_ids,
-    retrievedHits,
-    failureLabels,
-  });
+  const isLoadingMetadata = hasEvidence && evidenceQuery.isPending;
+  const states = isLoadingMetadata
+    ? []
+    : deriveEvidenceStates({
+        selection: normalizedSelection,
+        context,
+        metadata: evidenceQuery.isError
+          ? { status: "unavailable" }
+          : {
+              status: "resolved",
+              documents: evidenceQuery.data?.documents ?? [],
+              chunks: evidenceQuery.data?.chunks ?? [],
+              unresolvedDocumentIds:
+                evidenceQuery.data?.unresolved_document_ids ?? [],
+              unresolvedChunkIds:
+                evidenceQuery.data?.unresolved_chunk_ids ?? [],
+            },
+        failureLabels,
+      });
 
   return (
     <section className={styles.stateList} aria-label={title}>
       <h3>{title}</h3>
-      {states.length > 0 ? (
+      {isLoadingMetadata ? (
+        <p className={styles.empty}>Loading evidence metadata…</p>
+      ) : states.length > 0 ? (
         states.map((state) => (
           <article
             className={`${styles.stateItem} ${styles[state.severity]}`}
@@ -74,6 +88,7 @@ export function EvidenceStateList({
               </span>
             </div>
             <span>{state.description}</span>
+            {state.snippet ? <small>{state.snippet}</small> : null}
           </article>
         ))
       ) : (

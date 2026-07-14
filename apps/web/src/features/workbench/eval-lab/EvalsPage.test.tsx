@@ -12,6 +12,7 @@ const caseId = "018f7a2a-6e2e-7000-a000-000000000302";
 const sourceId = "018f7a2a-6e2e-7000-a000-000000000303";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000304";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000305";
+const retrievedChunkId = "018f7a2a-6e2e-7000-a000-000000000311";
 const experimentId = "018f7a2a-6e2e-7000-a000-000000000306";
 const baselineId = "018f7a2a-6e2e-7000-a000-000000000307";
 const partialBaselineId = "018f7a2a-6e2e-7000-a000-000000000308";
@@ -19,11 +20,13 @@ const newerExperimentId = "018f7a2a-6e2e-7000-a000-000000000309";
 const firstExperimentId = "018f7a2a-6e2e-7000-a000-000000000310";
 let historyShouldFail = false;
 let regressionShouldFail = false;
+let experimentResponse: ReturnType<typeof experiment> | null = null;
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
     historyShouldFail = false;
     regressionShouldFail = false;
+    experimentResponse = null;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -43,7 +46,7 @@ describe("guided Eval Lab workflow", () => {
           return responseJson(trendSummary());
         }
         if (url.endsWith(`/api/v1/eval-lab/experiments/${experimentId}`)) {
-          return responseJson(experiment());
+          return responseJson(experimentResponse ?? experiment());
         }
         if (url.endsWith(`/api/v1/eval-lab/experiments/${firstExperimentId}`)) {
           return responseJson(firstExperiment());
@@ -152,6 +155,9 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getAllByText(/release retrieval gate/i).length,
     ).toBeGreaterThan(0);
+    expect(await screen.findByText("Expected exact chunk")).toBeInTheDocument();
+    expect(screen.getByText("Expected document")).toBeInTheDocument();
+    expect(screen.queryByText("Expected but missing")).not.toBeInTheDocument();
   });
 
   it("shows gate failures before the detailed mode metrics", async () => {
@@ -193,6 +199,31 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Expected document retrieved"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Expected document retrieved, wrong chunk").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getAllByText(/platform-guide\.md/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/metadata unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("shows missing expectations for a completed experiment with zero hits", async () => {
+    experimentResponse = experimentWithRetrievedChunks([]);
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Release retrieval gate" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Expected but missing")).toBeInTheDocument();
+    expect(screen.getByText("Expected document missing")).toBeInTheDocument();
   });
 
   it("persists explicit baseline choice and warns for partial compatibility", async () => {
@@ -622,6 +653,22 @@ function evidenceLookup() {
         text_density: 0.9,
         evidence_score_hint: 0.8,
       },
+      {
+        id: retrievedChunkId,
+        document_id: documentId,
+        source_id: sourceId,
+        source_name: "Platform docs",
+        document_path: "platform-guide.md",
+        ordinal: 1,
+        text: "A sibling chunk describes the indexing queue.",
+        token_count: 7,
+        checksum: "fedcba0987654321",
+        section_title: "Indexing queue",
+        quality_flags: [],
+        is_duplicate: false,
+        text_density: 0.88,
+        evidence_score_hint: 0.72,
+      },
     ],
     unresolved_document_ids: [],
     unresolved_chunk_ids: [],
@@ -647,7 +694,7 @@ function experiment() {
       dataset_case_count: 1,
     },
     mode_results: [
-      modeResult("hybrid", 0.5, 0.4, 20),
+      modeResult("hybrid", 0.5, 0.4, 20, [caseEvaluation([retrievedChunkId])]),
       modeResult("vector", 0.25, 0.2, 18),
       modeResult("lexical", 0, 0, 12),
     ],
@@ -672,6 +719,47 @@ function experiment() {
       },
     ],
     created_at: "2026-06-25T00:00:00Z",
+  };
+}
+
+function experimentWithRetrievedChunks(retrievedChunkIds: string[]) {
+  const value = experiment();
+  value.mode_results[0].case_results = [caseEvaluation(retrievedChunkIds)];
+  return value;
+}
+
+function caseEvaluation(retrievedChunkIds: string[]) {
+  return {
+    case_id: caseId,
+    query: "Which evidence explains GPU indexing workers?",
+    top_k: 5,
+    recall_at_k: retrievedChunkIds.includes(chunkId) ? 1 : 0,
+    precision_at_k: 0,
+    mrr: 0,
+    top_hit_rank: retrievedChunkIds.length > 0 ? 1 : null,
+    citation_coverage: 0,
+    weak_evidence_count: 0,
+    missing_embedding_failures: 0,
+    passed: retrievedChunkIds.includes(chunkId),
+    expected_chunk_ids: [chunkId],
+    expected_document_ids: [documentId],
+    retrieved_chunk_ids: retrievedChunkIds,
+    latency_ms: 20,
+    failures:
+      retrievedChunkIds.length > 0
+        ? [
+            {
+              case_id: caseId,
+              query: "Which evidence explains GPU indexing workers?",
+              retrieval_mode: "hybrid",
+              label: "correct_document_wrong_chunk",
+              severity: "warning",
+              message:
+                "The correct document ranked, but the exact chunk did not.",
+              top_hit_rank: 1,
+            },
+          ]
+        : [],
   };
 }
 
@@ -710,6 +798,7 @@ function modeResult(
   recall: number,
   precision: number,
   latency: number,
+  caseResults: ReturnType<typeof caseEvaluation>[] = [],
 ) {
   return {
     retrieval_mode: mode,
@@ -723,7 +812,7 @@ function modeResult(
     missing_embedding_failures: 0,
     latency_p50_ms: latency,
     latency_p95_ms: latency,
-    case_results: [],
+    case_results: caseResults,
   };
 }
 

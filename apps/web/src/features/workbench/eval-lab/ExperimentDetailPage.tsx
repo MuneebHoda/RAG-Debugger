@@ -229,16 +229,15 @@ export function ExperimentDetailPage() {
               <article className={styles.failureCard} key={result.case_id}>
                 <strong>{result.query}</strong>
                 <EvidenceStateList
+                  context={{
+                    kind: "retrieval",
+                    hits: result.retrieved_chunk_ids.map((chunkId, index) => ({
+                      chunkId,
+                      rank: index + 1,
+                    })),
+                  }}
                   failureLabels={result.failures.map(
                     (failure) => failure.label,
-                  )}
-                  retrievedHits={result.retrieved_chunk_ids.map(
-                    (chunkId, index) => ({
-                      chunkId,
-                      documentId: "",
-                      label: `Retrieved chunk ${index + 1}`,
-                      rank: index + 1,
-                    }),
                   )}
                   selection={{
                     documentIds: result.expected_document_ids,

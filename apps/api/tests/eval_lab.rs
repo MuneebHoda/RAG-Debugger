@@ -178,6 +178,42 @@ async fn eval_lab_manages_datasets_and_cases() {
 }
 
 #[tokio::test]
+async fn evidence_lookup_prioritizes_explicit_document_and_chunk_ids() {
+    let app = test_app();
+    upload_text_file(&app, "unrelated.md", "Unrelated\nBackground material.").await;
+    let target = upload_text_file(
+        &app,
+        "target-evidence.md",
+        "Target Evidence\nThe exact answer lives in this chunk.",
+    )
+    .await;
+    let document_id = target["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("target document id");
+    let chunk_id = target["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("target chunk id");
+
+    let evidence = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/evidence/query",
+        json!({
+            "document_ids": [document_id],
+            "chunk_ids": [chunk_id],
+            "include_chunks": true,
+            "limit": 1
+        }),
+    )
+    .await;
+
+    assert_eq!(evidence["documents"][0]["id"], document_id);
+    assert_eq!(evidence["documents"][0]["path"], "target-evidence.md");
+    assert_eq!(evidence["chunks"][0]["id"], chunk_id);
+    assert_eq!(evidence["chunks"][0]["document_id"], document_id);
+}
+
+#[tokio::test]
 async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     let app = test_app();
     let upload_body = upload_text_file_with_target(

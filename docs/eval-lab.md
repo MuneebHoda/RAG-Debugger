@@ -118,6 +118,7 @@ Existing cases with stale or deleted expected evidence remain readable. When a c
 
 Case and experiment views show evidence states with text labels, not color alone:
 
+- `expected document` and `expected exact chunk` for saved cases that have no retrieval context;
 - `expected and retrieved`
 - `expected but missing`
 - `retrieved but not expected`
@@ -125,8 +126,13 @@ Case and experiment views show evidence states with text labels, not color alone
 - `duplicate evidence`
 - `weak evidence`
 - `stale/deleted expected evidence`
+- `metadata unavailable` when a retrieved or expected identifier cannot be resolved safely
 
-When an experiment result does not contain full hit metadata, CorpusLab uses case-level failure labels such as `weak_evidence`, `duplicate_evidence`, or `correct_document_wrong_chunk` instead of inventing per-chunk details.
+An empty hit list has meaning only when an experiment actually ran. Saved dataset cases therefore show neutral expectations and never imply that retrieval failed. Completed experiments with zero hits show resolved expectations as missing.
+
+Experiment results persist retrieved chunk IDs. The workbench resolves the union of expected and retrieved IDs through the authenticated evidence lookup endpoint before deriving states. Parent document IDs, paths, section titles, and authorized previews come from real chunk metadata; the UI never invents document identifiers. A document-level expectation succeeds when any resolved child chunk was retrieved. An exact chunk becomes `wrong chunk` only when a different resolved chunk from that same document was retrieved.
+
+If metadata lookup fails or a retrieved ID cannot be resolved, CorpusLab shows `metadata unavailable` rather than inferring retrieved, missing, or wrong-chunk status. Case-level failure labels such as `weak_evidence`, `duplicate_evidence`, or `correct_document_wrong_chunk` remain visible without fabricating per-chunk details.
 
 Experiment Detail uses the same Reports-owned creation action as Trace Debugger. Metadata-only is the default; snippets or unrestricted local diagnostics require an explicit privacy selection before the report is generated.
 

@@ -70,44 +70,219 @@ describe("evidence selection helpers", () => {
     expect(matches.map((match) => match.id)).toEqual(["case-1"]);
   });
 
-  it("derives expected, missing, wrong-chunk, weak, duplicate, and stale states", () => {
+  it("shows neutral expectations when no retrieval context exists", () => {
     const states = deriveEvidenceStates({
       selection: normalizeEvidenceSelection({
         documentIds: ["doc-1"],
-        chunkIds: ["chunk-1", "chunk-2"],
+        chunkIds: ["chunk-1"],
       }),
-      documents: [documentFixture],
-      chunks: [
-        chunkFixture("chunk-1", "doc-1"),
-        chunkFixture("chunk-2", "doc-1"),
-      ],
-      retrievedHits: [
-        {
-          label: "[1]",
-          chunkId: "chunk-1",
-          documentId: "doc-1",
-          duplicate: true,
-          weak: true,
-        },
-        {
-          label: "[2]",
-          chunkId: "chunk-3",
-          documentId: "doc-2",
-        },
-      ],
-      unresolvedChunkIds: ["chunk-stale"],
+      context: { kind: "expectation_only" },
+      metadata: resolvedMetadata({
+        chunks: [chunkFixture("chunk-1", "doc-1")],
+      }),
     });
 
-    expect(states.map((state) => state.kind)).toEqual(
+    expect(states.map((state) => state.kind)).toEqual([
+      "expected_exact_chunk",
+      "expected_document",
+    ]);
+    expect(states.map((state) => state.label)).toEqual([
+      "Expected exact chunk",
+      "Expected document",
+    ]);
+  });
+
+  it("marks expectations missing after a completed retrieval with zero hits", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: ["doc-1"], chunkIds: ["chunk-1"] },
+      context: { kind: "retrieval", hits: [] },
+      metadata: resolvedMetadata({
+        chunks: [chunkFixture("chunk-1", "doc-1")],
+      }),
+    });
+
+    expect(states.map((state) => state.kind)).toEqual([
+      "expected_missing",
+      "expected_missing",
+    ]);
+  });
+
+  it("satisfies a document expectation through a retrieved child chunk", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: ["doc-1"], chunkIds: [] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-2", rank: 1 }],
+      },
+      metadata: resolvedMetadata({
+        documents: [],
+        chunks: [chunkFixture("chunk-2", "doc-1")],
+      }),
+    });
+
+    expect(states).toEqual(
       expect.arrayContaining([
-        "expected_retrieved",
-        "wrong_chunk",
-        "duplicate_evidence",
-        "weak_evidence",
-        "stale_evidence",
-        "retrieved_not_expected",
+        expect.objectContaining({
+          kind: "expected_retrieved",
+          evidenceId: "doc-1",
+        }),
       ]),
     );
+  });
+
+  it("marks an exact expectation wrong-chunk only for a real sibling chunk", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: [], chunkIds: ["chunk-1"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-2", rank: 1 }],
+      },
+      metadata: resolvedMetadata({
+        chunks: [
+          chunkFixture("chunk-1", "doc-1"),
+          chunkFixture("chunk-2", "doc-1"),
+        ],
+      }),
+    });
+
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "wrong_chunk", evidenceId: "chunk-1" }),
+        expect.objectContaining({
+          kind: "retrieved_not_expected",
+          evidenceId: "chunk-2",
+        }),
+      ]),
+    );
+  });
+
+  it("keeps unrelated retrieved chunks separate from missing expectations", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: ["doc-1"], chunkIds: ["chunk-1"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-3", rank: 1 }],
+      },
+      metadata: resolvedMetadata({
+        documents: [documentFixture, documentFixtureFor("doc-2", "other.md")],
+        chunks: [
+          chunkFixture("chunk-1", "doc-1"),
+          chunkFixture("chunk-3", "doc-2"),
+        ],
+      }),
+    });
+
+    expect(
+      states.filter((state) => state.kind === "expected_missing"),
+    ).toHaveLength(2);
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "retrieved_not_expected",
+          evidenceId: "chunk-3",
+        }),
+      ]),
+    );
+  });
+
+  it("keeps mixed document and exact-chunk expectations independent", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: ["doc-1"], chunkIds: ["chunk-1"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-2", duplicate: true, weak: true }],
+      },
+      metadata: resolvedMetadata({
+        chunks: [
+          chunkFixture("chunk-1", "doc-1"),
+          chunkFixture("chunk-2", "doc-1"),
+        ],
+      }),
+    });
+
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "wrong_chunk", evidenceId: "chunk-1" }),
+        expect.objectContaining({
+          kind: "expected_retrieved",
+          evidenceId: "doc-1",
+        }),
+        expect.objectContaining({
+          kind: "duplicate_evidence",
+          evidenceId: "chunk-2",
+        }),
+        expect.objectContaining({
+          kind: "weak_evidence",
+          evidenceId: "chunk-2",
+        }),
+      ]),
+    );
+  });
+
+  it("represents unavailable metadata without inventing retrieval outcomes", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: ["doc-1"], chunkIds: ["chunk-1"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-2", rank: 1 }],
+      },
+      metadata: { status: "unavailable" },
+    });
+
+    expect(states.every((state) => state.kind === "metadata_unavailable")).toBe(
+      true,
+    );
+  });
+
+  it("distinguishes stale expectations from unresolved retrieved metadata", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: [], chunkIds: ["chunk-stale"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-unavailable" }],
+      },
+      metadata: resolvedMetadata({
+        unresolvedChunkIds: ["chunk-stale", "chunk-unavailable"],
+      }),
+    });
+
+    expect(states).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "stale_evidence",
+          evidenceId: "chunk-stale",
+        }),
+        expect.objectContaining({
+          kind: "metadata_unavailable",
+          evidenceId: "chunk-unavailable",
+        }),
+      ]),
+    );
+  });
+
+  it("never marks the same expectation both retrieved and missing", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: ["doc-1"], chunkIds: ["chunk-1"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-1" }],
+      },
+      metadata: resolvedMetadata({
+        chunks: [chunkFixture("chunk-1", "doc-1")],
+      }),
+    });
+
+    for (const evidenceId of ["doc-1", "chunk-1"]) {
+      const primaryKinds = states
+        .filter((state) => state.evidenceId === evidenceId)
+        .map((state) => state.kind)
+        .filter((kind) =>
+          ["expected_retrieved", "expected_missing", "wrong_chunk"].includes(
+            kind,
+          ),
+        );
+      expect(primaryKinds).toEqual(["expected_retrieved"]);
+    }
   });
 });
 
@@ -132,6 +307,30 @@ const documentFixture: EvalLabEvidenceDocument = {
   warnings: [],
   chunk_count: 3,
 };
+
+function documentFixtureFor(id: string, path: string): EvalLabEvidenceDocument {
+  return { ...documentFixture, id, path };
+}
+
+function resolvedMetadata({
+  documents = [documentFixture],
+  chunks = [],
+  unresolvedDocumentIds = [],
+  unresolvedChunkIds = [],
+}: {
+  documents?: EvalLabEvidenceDocument[];
+  chunks?: EvalLabEvidenceChunk[];
+  unresolvedDocumentIds?: string[];
+  unresolvedChunkIds?: string[];
+} = {}) {
+  return {
+    status: "resolved" as const,
+    documents,
+    chunks,
+    unresolvedDocumentIds,
+    unresolvedChunkIds,
+  };
+}
 
 function chunkFixture(id: string, documentId: string): EvalLabEvidenceChunk {
   return {

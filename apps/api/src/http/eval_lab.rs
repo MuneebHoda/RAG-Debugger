@@ -448,7 +448,7 @@ async fn build_evidence_response(
                 found_document_ids.push(document.id);
             }
 
-            if document_matches && documents.len() < limit {
+            if document_matches && (requested_document || documents.len() < limit) {
                 documents.push(evidence_document(source, summary));
             }
 
@@ -469,6 +469,9 @@ async fn build_evidence_response(
         }
     }
 
+    documents.sort_by_key(|document| !requested_documents.contains(&document.id.0));
+    chunks.sort_by_key(|chunk| !requested_chunks.contains(&chunk.id.0));
+    documents.truncate(limit);
     chunks.truncate(limit);
     let unresolved_document_ids = document_ids
         .into_iter()

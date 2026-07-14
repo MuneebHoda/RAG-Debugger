@@ -89,7 +89,7 @@ Expected coverage in the scaffold:
 - Workbench shell tests treat canonical navigation order, active parent routes, breadcrumbs, actionable empty states, mobile focus recovery, and the dedicated CI Runs query view as compatibility contracts.
 - Workbench workflow tests verify that Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings explain their page purpose, quality-loop position, and recommended next action.
 - Eval Lab UI tests verify trend cards, dataset experiment history, experiment regression panels, explicit baseline selection, compatibility warnings, no-baseline states, failed-case diagnosis, and audit-report actions without duplicating backend regression logic.
-- Expected-evidence picker tests live under `features/workbench/eval-lab/evidence` and cover pure state derivation separately from React rendering.
+- Expected-evidence tests live under `features/workbench/eval-lab/evidence` and cover picker behavior, explicit expectation-only versus completed-retrieval contexts, real parent-document resolution, zero-hit results, wrong-chunk classification, unavailable metadata, and contradiction prevention separately from page rendering.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 
