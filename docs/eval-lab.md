@@ -114,7 +114,9 @@ The Trace Debugger saves evidence into Quality with a note pointing back to the 
 
 Retrieval and Trace Debugger use the same shared save-to-Quality workflow. The panel shows retrieved chunks, lets the user choose the dataset, warns about duplicate normalized questions, shows readable document/chunk names, and submits only authenticated evidence IDs. It never asks users to manually paste UUIDs, and it never broadens an exact chunk expectation into a whole-document expectation.
 
-Existing cases with stale or deleted expected evidence remain readable. When a case is edited, newly submitted evidence IDs are validated against evidence visible in the active workspace. Stale IDs are shown with `stale/deleted expected evidence` labels so the user can remove or replace them intentionally.
+Existing cases with stale or deleted expected evidence remain readable. Stale IDs stay visible with explicit removal controls until the user removes or replaces them. Name, query, notes, and `top_k` edits omit unchanged evidence fields, so legacy IDs are preserved without being revalidated. Once evidence changes, the editor submits the complete normalized selection and the API validates every submitted ID against evidence visible in the active workspace. Explicit empty arrays clear evidence during repair; new case creation still requires at least one expected document or chunk.
+
+Eval case updates are atomic. If a changed selection still contains unavailable evidence, the API rejects the complete update with a non-enumerating repair message and preserves both the stored evidence and unrelated case fields. Cancelling an edit restores every draft field from the persisted case.
 
 Case and experiment views show evidence states with text labels, not color alone:
 

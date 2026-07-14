@@ -3,7 +3,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { QueryEvalLabEvidenceResponse } from "../../../../lib/api/evalLab";
 import { EvidencePicker } from "./EvidencePicker";
+import { EvidenceSelectionReview } from "./EvidenceSelectionReview";
 import {
   emptyEvidenceSelection,
   type EvidenceHitRef,
@@ -12,47 +14,16 @@ import {
 
 const documentId = "018f7a2a-6e2e-7000-a000-000000000401";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000402";
+const staleDocumentId = "018f7a2a-6e2e-7000-a000-000000000403";
+const staleChunkId = "018f7a2a-6e2e-7000-a000-000000000404";
+let evidenceResponse: QueryEvalLabEvidenceResponse;
 
 describe("EvidencePicker", () => {
   beforeEach(() => {
+    evidenceResponse = resolvedEvidence();
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        responseJson({
-          documents: [
-            {
-              id: documentId,
-              source_id: "source-1",
-              source_name: "Corpus",
-              path: "platform-guide.md",
-              profile: "technical_docs",
-              extraction_quality: "high",
-              warnings: [],
-              chunk_count: 2,
-            },
-          ],
-          chunks: [
-            {
-              id: chunkId,
-              document_id: documentId,
-              source_id: "source-1",
-              source_name: "Corpus",
-              document_path: "platform-guide.md",
-              ordinal: 1,
-              text: "GPU workers refresh embeddings.",
-              token_count: 5,
-              checksum: "abcdef123456",
-              section_title: "Indexing",
-              quality_flags: [],
-              is_duplicate: false,
-              text_density: 0.9,
-              evidence_score_hint: 0.8,
-            },
-          ],
-          unresolved_document_ids: [],
-          unresolved_chunk_ids: [],
-        }),
-      ),
+      vi.fn(async () => responseJson(evidenceResponse)),
     );
   });
 
@@ -104,6 +75,45 @@ describe("EvidencePicker", () => {
       chunkIds: [chunkId],
     });
   });
+
+  it("keeps stale evidence visible until its accessible controls remove it", async () => {
+    evidenceResponse = resolvedEvidence({
+      documents: [],
+      chunks: [],
+      unresolved_document_ids: [staleDocumentId],
+      unresolved_chunk_ids: [staleChunkId],
+    });
+    renderReview({
+      documentIds: [staleDocumentId],
+      chunkIds: [staleChunkId],
+    });
+
+    expect(
+      await screen.findByText("Stale/deleted expected document"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Stale/deleted expected chunk"),
+    ).toBeInTheDocument();
+
+    const removeDocument = screen.getByRole("button", {
+      name: /Remove stale document/,
+    });
+    removeDocument.focus();
+    expect(removeDocument).toHaveFocus();
+    fireEvent.click(removeDocument);
+    expect(selectionJson()).toEqual({
+      documentIds: [],
+      chunkIds: [staleChunkId],
+    });
+
+    const removeChunk = await screen.findByRole("button", {
+      name: /Remove stale chunk/,
+    });
+    removeChunk.focus();
+    expect(removeChunk).toHaveFocus();
+    fireEvent.click(removeChunk);
+    expect(selectionJson()).toEqual({ documentIds: [], chunkIds: [] });
+  });
 });
 
 function renderPicker(candidateHits: EvidenceHitRef[] = []) {
@@ -136,6 +146,34 @@ function PickerHarness({ candidateHits }: { candidateHits: EvidenceHitRef[] }) {
   );
 }
 
+function renderReview(initialSelection: EvidenceSelection) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <ReviewHarness initialSelection={initialSelection} />
+    </QueryClientProvider>,
+  );
+}
+
+function ReviewHarness({
+  initialSelection,
+}: {
+  initialSelection: EvidenceSelection;
+}) {
+  const [selection, setSelection] = useState(initialSelection);
+  return (
+    <>
+      <EvidenceSelectionReview
+        selection={selection}
+        onSelectionChange={setSelection}
+      />
+      <output aria-label="selection">{JSON.stringify(selection)}</output>
+    </>
+  );
+}
+
 function selectionJson(): EvidenceSelection {
   const output = screen.getByLabelText("selection");
   return JSON.parse(output.textContent ?? "{}") as EvidenceSelection;
@@ -146,4 +184,47 @@ function responseJson(json: unknown) {
     status: 200,
     json: async () => json,
   });
+}
+
+function resolvedEvidence(
+  overrides: Partial<QueryEvalLabEvidenceResponse> = {},
+): QueryEvalLabEvidenceResponse {
+  return { ...baseEvidence(), ...overrides };
+}
+
+function baseEvidence(): QueryEvalLabEvidenceResponse {
+  return {
+    documents: [
+      {
+        id: documentId,
+        source_id: "source-1",
+        source_name: "Corpus",
+        path: "platform-guide.md",
+        profile: "technical_docs",
+        extraction_quality: "high",
+        warnings: [],
+        chunk_count: 2,
+      },
+    ],
+    chunks: [
+      {
+        id: chunkId,
+        document_id: documentId,
+        source_id: "source-1",
+        source_name: "Corpus",
+        document_path: "platform-guide.md",
+        ordinal: 1,
+        text: "GPU workers refresh embeddings.",
+        token_count: 5,
+        checksum: "abcdef123456",
+        section_title: "Indexing",
+        quality_flags: [],
+        is_duplicate: false,
+        text_density: 0.9,
+        evidence_score_hint: 0.8,
+      },
+    ],
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
+  };
 }

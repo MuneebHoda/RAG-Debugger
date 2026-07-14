@@ -14,9 +14,11 @@ import styles from "./EvidencePicker.module.css";
 export function EvidenceSelectionReview({
   selection,
   onSelectionChange,
+  allowEmptySelection = false,
 }: {
   selection: EvidenceSelection;
   onSelectionChange: (selection: EvidenceSelection) => void;
+  allowEmptySelection?: boolean;
 }) {
   const normalizedSelection = normalizeEvidenceSelection(selection);
   const evidenceQuery = useQuery({
@@ -49,8 +51,9 @@ export function EvidenceSelectionReview({
   ) {
     return (
       <div className={styles.warning} role="status">
-        Select at least one expected document or chunk before saving. Good eval
-        cases need evidence they can measure.
+        {allowEmptySelection
+          ? "No expected evidence is selected. Saving will clear this case's evidence, so it will not measure retrieval quality until evidence is added."
+          : "Select at least one expected document or chunk before saving. Good eval cases need evidence they can measure."}
       </div>
     );
   }
@@ -117,7 +120,20 @@ export function EvidenceSelectionReview({
             className={`${styles.selectedItem} ${styles.danger}`}
             key={id}
           >
-            <strong>Stale/deleted expected document</strong>
+            <div className={styles.selectedHeader}>
+              <strong>Stale/deleted expected document</strong>
+              <button
+                aria-label={`Remove stale document ${compactId(id)}`}
+                className="secondary-button compact"
+                type="button"
+                onClick={() =>
+                  onSelectionChange(removeEvidenceDocument(selection, id))
+                }
+              >
+                <X aria-hidden="true" size={14} />
+                Remove stale document
+              </button>
+            </div>
             <span>{compactId(id)} is no longer resolvable.</span>
           </article>
         ))}
@@ -126,7 +142,20 @@ export function EvidenceSelectionReview({
             className={`${styles.selectedItem} ${styles.danger}`}
             key={id}
           >
-            <strong>Stale/deleted expected chunk</strong>
+            <div className={styles.selectedHeader}>
+              <strong>Stale/deleted expected chunk</strong>
+              <button
+                aria-label={`Remove stale chunk ${compactId(id)}`}
+                className="secondary-button compact"
+                type="button"
+                onClick={() =>
+                  onSelectionChange(removeEvidenceChunk(selection, id))
+                }
+              >
+                <X aria-hidden="true" size={14} />
+                Remove stale chunk
+              </button>
+            </div>
             <span>{compactId(id)} is no longer resolvable.</span>
           </article>
         ))}

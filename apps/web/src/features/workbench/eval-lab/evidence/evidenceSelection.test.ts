@@ -8,7 +8,9 @@ import type {
 import {
   addEvidenceChunk,
   addEvidenceDocument,
+  buildUpdateCaseEvidencePayload,
   deriveEvidenceStates,
+  evidenceSelectionsEqual,
   findSimilarCases,
   normalizeEvidenceSelection,
   selectionFromCase,
@@ -56,6 +58,59 @@ describe("evidence selection helpers", () => {
         expected_chunk_ids: ["chunk-1", "chunk-1"],
       }),
     ).toEqual({ documentIds: ["doc-1"], chunkIds: ["chunk-1"] });
+  });
+
+  it("compares normalized evidence sets without depending on order", () => {
+    expect(
+      evidenceSelectionsEqual(
+        {
+          documentIds: ["doc-2", "doc-1", "doc-1"],
+          chunkIds: ["chunk-2", "chunk-1"],
+        },
+        {
+          documentIds: ["doc-1", "doc-2"],
+          chunkIds: ["chunk-1", "chunk-2", "chunk-2"],
+        },
+      ),
+    ).toBe(true);
+    expect(
+      evidenceSelectionsEqual(
+        { documentIds: ["doc-1"], chunkIds: ["chunk-1"] },
+        { documentIds: ["doc-1"], chunkIds: ["chunk-2"] },
+      ),
+    ).toBe(false);
+  });
+
+  it("omits unchanged evidence and sends complete normalized replacements", () => {
+    const original = {
+      documentIds: ["doc-1"],
+      chunkIds: ["chunk-1"],
+    };
+
+    expect(
+      buildUpdateCaseEvidencePayload(original, {
+        documentIds: ["doc-1", "doc-1"],
+        chunkIds: ["chunk-1"],
+      }),
+    ).toEqual({});
+    expect(
+      buildUpdateCaseEvidencePayload(original, {
+        documentIds: ["doc-2", "doc-2"],
+        chunkIds: ["chunk-2", "chunk-2"],
+      }),
+    ).toEqual({
+      expected_document_ids: ["doc-2"],
+      expected_chunk_ids: ["chunk-2"],
+    });
+    expect(
+      buildUpdateCaseEvidencePayload(original, {
+        documentIds: [],
+        chunkIds: [],
+      }),
+    ).toEqual({
+      expected_document_ids: [],
+      expected_chunk_ids: [],
+    });
   });
 
   it("detects similar cases by normalized query", () => {

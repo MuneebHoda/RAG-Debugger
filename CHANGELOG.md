@@ -42,6 +42,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Eval Lab case editing now preserves unchanged legacy stale evidence during scalar-only updates, exposes explicit stale-item removal, validates modified selections atomically, supports intentional evidence clearing, and restores persisted drafts on cancellation.
 - Eval Lab evidence states now distinguish saved expectations from completed retrievals, resolve experiment hits through real chunk/document metadata, and represent unavailable metadata without false missing, retrieved, or wrong-chunk claims.
 - Eval Lab experiment detail now supports URL-persisted baseline selection, compatibility warnings, full regression-category rendering, and a clear no-baseline state.
 - Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings now make the Upload → Chunk → Embed → Retrieve → Trace → Eval → CI gate → Report loop explicit for first-time users.

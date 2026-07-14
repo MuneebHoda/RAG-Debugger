@@ -254,6 +254,8 @@ The default gate passes when average recall@k is at least `0.80`, critical missi
 
 Eval Lab v2 adds regression read models over saved experiments. Dataset history and trend endpoints compare the latest run with the previous compatible baseline for the same dataset, `top_k`, and retrieval-mode set. Experiment detail surfaces gate movement, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels. Audit reports created from experiments include that regression context when available while preserving metadata-only privacy.
 
+Legacy cases may retain expected-evidence IDs whose source data was deleted or is no longer accessible. Case updates preserve omitted evidence arrays without revalidation, while present arrays replace and validate the corresponding selection. The workbench tracks evidence changes as normalized ID sets, exposes explicit stale-item removal, sends empty arrays only for intentional clearing, and restores persisted drafts on cancellation. Validation completes before the merged case is stored, so failed repairs cannot partially persist unrelated edits.
+
 The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts

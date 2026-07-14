@@ -9,13 +9,19 @@ use rag_debugger_api::{
     config::{ApiConfig, RuntimeEnvironment, StorageBackend},
     state::AppState,
 };
-use rag_debugger_core::ProductConfig;
-use rag_debugger_storage::memory::MemoryStore;
+use rag_debugger_core::{ChunkId, DocumentId, ProductConfig, RetrievalEvalCase};
+use rag_debugger_storage::{memory::MemoryStore, repository::EvalRepository};
 use serde_json::{json, Value};
 use tower::ServiceExt;
+use uuid::Uuid;
 
 fn test_app() -> axum::Router {
-    app(AppState::new(
+    test_app_with_store().0
+}
+
+fn test_app_with_store() -> (axum::Router, Arc<MemoryStore>) {
+    let store = Arc::new(MemoryStore::default());
+    let router = app(AppState::new(
         ApiConfig {
             environment: RuntimeEnvironment::Test,
             bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
@@ -26,8 +32,9 @@ fn test_app() -> axum::Router {
             auth: Default::default(),
             product: ProductConfig::default(),
         },
-        Arc::new(MemoryStore::default()),
-    ))
+        store.clone(),
+    ));
+    (router, store)
 }
 
 #[tokio::test]
@@ -175,6 +182,206 @@ async fn eval_lab_manages_datasets_and_cases() {
 
     let detail = get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
     assert!(detail["cases"].as_array().expect("cases").is_empty());
+}
+
+#[tokio::test]
+async fn update_case_repairs_legacy_stale_evidence_atomically() {
+    let (app, store) = test_app_with_store();
+    let upload = upload_text_file(
+        &app,
+        "repair-guide.md",
+        "Repair Guide\nUse verified evidence when repairing legacy cases.",
+    )
+    .await;
+    let document_id = upload["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("document id");
+    let chunk_id = upload["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("chunk id");
+    let dataset = create_dataset(&app, "Legacy repair dataset").await;
+    let dataset_id = dataset["id"].as_str().expect("dataset id");
+    let empty_create = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "name": "Invalid empty case",
+                "query": "Creation still requires expected evidence",
+                "expected_document_ids": [],
+                "expected_chunk_ids": []
+            }),
+        ))
+        .await
+        .expect("empty create response");
+    assert_eq!(empty_create.status(), StatusCode::BAD_REQUEST);
+
+    let created = create_case(
+        &app,
+        dataset_id,
+        json!({
+            "name": "Legacy case",
+            "query": "How are legacy cases repaired?",
+            "expected_document_ids": [document_id],
+            "expected_chunk_ids": [chunk_id]
+        }),
+    )
+    .await;
+    let case_id = created["id"].as_str().expect("case id").to_owned();
+    let stale_chunk = ChunkId(
+        Uuid::parse_str("018f7a2a-6e2e-7000-a000-000000000991").expect("valid stale chunk id"),
+    );
+    let stale_document = DocumentId(
+        Uuid::parse_str("018f7a2a-6e2e-7000-a000-000000000992").expect("valid stale document id"),
+    );
+    let mut legacy: RetrievalEvalCase =
+        serde_json::from_value(created).expect("deserialize created case");
+    legacy.expected_chunk_ids = vec![stale_chunk];
+    legacy.expected_document_ids = vec![stale_document];
+    store
+        .update_retrieval_eval_case(legacy.clone())
+        .await
+        .expect("seed legacy stale case");
+
+    let readable = get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
+    assert_eq!(
+        readable["cases"][0]["expected_chunk_ids"][0],
+        stale_chunk.0.to_string()
+    );
+    assert_eq!(
+        readable["cases"][0]["expected_document_ids"][0],
+        stale_document.0.to_string()
+    );
+
+    let renamed = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "name": "Renamed legacy case" }),
+    )
+    .await;
+    assert_eq!(renamed["name"], "Renamed legacy case");
+    assert_eq!(renamed["expected_chunk_ids"][0], stale_chunk.0.to_string());
+    assert_eq!(
+        renamed["expected_document_ids"][0],
+        stale_document.0.to_string()
+    );
+
+    let noted = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "notes": "Stale evidence intentionally retained." }),
+    )
+    .await;
+    assert_eq!(noted["notes"], "Stale evidence intentionally retained.");
+    assert_eq!(noted["expected_chunk_ids"][0], stale_chunk.0.to_string());
+    assert_eq!(
+        noted["expected_document_ids"][0],
+        stale_document.0.to_string()
+    );
+
+    let chunk_replaced = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "expected_chunk_ids": [chunk_id, chunk_id] }),
+    )
+    .await;
+    assert_eq!(
+        chunk_replaced["expected_chunk_ids"]
+            .as_array()
+            .expect("chunk ids")
+            .len(),
+        1
+    );
+    assert_eq!(
+        chunk_replaced["expected_document_ids"][0],
+        stale_document.0.to_string(),
+        "an omitted stale document must not be revalidated"
+    );
+
+    let chunk_cleared = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "expected_chunk_ids": [] }),
+    )
+    .await;
+    assert!(chunk_cleared["expected_chunk_ids"]
+        .as_array()
+        .expect("chunk ids")
+        .is_empty());
+    assert_eq!(
+        chunk_cleared["expected_document_ids"][0],
+        stale_document.0.to_string()
+    );
+
+    let all_cleared = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "expected_document_ids": [] }),
+    )
+    .await;
+    assert!(all_cleared["expected_chunk_ids"]
+        .as_array()
+        .expect("chunk ids")
+        .is_empty());
+    assert!(all_cleared["expected_document_ids"]
+        .as_array()
+        .expect("document ids")
+        .is_empty());
+
+    store
+        .update_retrieval_eval_case(legacy)
+        .await
+        .expect("restore legacy stale case");
+    let invalid = app
+        .clone()
+        .oneshot(json_request(
+            Method::PATCH,
+            &format!("/api/v1/eval-lab/cases/{case_id}"),
+            json!({
+                "name": "Must not persist",
+                "expected_chunk_ids": [stale_chunk.0, chunk_id]
+            }),
+        ))
+        .await
+        .expect("invalid stale evidence response");
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let error = json_body(invalid).await;
+    assert_eq!(
+        error["error"]["message"],
+        "bad request: Some selected evidence is unavailable. Remove or replace stale evidence before saving."
+    );
+
+    let invalid_document = app
+        .clone()
+        .oneshot(json_request(
+            Method::PATCH,
+            &format!("/api/v1/eval-lab/cases/{case_id}"),
+            json!({
+                "notes": "Must not persist",
+                "expected_document_ids": [stale_document.0, document_id]
+            }),
+        ))
+        .await
+        .expect("invalid stale document response");
+    assert_eq!(invalid_document.status(), StatusCode::BAD_REQUEST);
+
+    let unchanged = get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
+    assert_eq!(unchanged["cases"][0]["name"], "Legacy case");
+    assert_eq!(unchanged["cases"][0]["notes"], Value::Null);
+    assert_eq!(
+        unchanged["cases"][0]["expected_chunk_ids"],
+        json!([stale_chunk.0])
+    );
+    assert_eq!(
+        unchanged["cases"][0]["expected_document_ids"],
+        json!([stale_document.0])
+    );
 }
 
 #[tokio::test]

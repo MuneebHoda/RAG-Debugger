@@ -515,7 +515,8 @@ async fn validate_expected_evidence(
         Ok(())
     } else {
         Err(ApiError::BadRequest(
-            "expected evidence is unavailable or outside this workspace".to_owned(),
+            "Some selected evidence is unavailable. Remove or replace stale evidence before saving."
+                .to_owned(),
         ))
     }
 }
@@ -674,11 +675,6 @@ fn merge_case_update(
     let expected_document_ids = request
         .expected_document_ids
         .unwrap_or_else(|| current.expected_document_ids.clone());
-    if expected_chunk_ids.is_empty() && expected_document_ids.is_empty() {
-        return Err(ApiError::BadRequest(
-            "eval case needs at least one expected chunk or document".to_owned(),
-        ));
-    }
 
     Ok(RetrievalEvalCase {
         name: request

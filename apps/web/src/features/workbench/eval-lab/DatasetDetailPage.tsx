@@ -32,6 +32,7 @@ import { EvidencePicker } from "./evidence/EvidencePicker";
 import { EvidenceSelectionReview } from "./evidence/EvidenceSelectionReview";
 import { EvidenceStateList } from "./evidence/EvidenceStateList";
 import {
+  buildUpdateCaseEvidencePayload,
   emptyEvidenceSelection,
   hasExpectedEvidence,
   normalizeEvidenceSelection,
@@ -369,19 +370,26 @@ function EditableCase({
   const [evidenceSelection, setEvidenceSelection] = useState<EvidenceSelection>(
     () => selectionFromCase(evalCase),
   );
+  const [originalEvidenceSelection, setOriginalEvidenceSelection] =
+    useState<EvidenceSelection>(() => selectionFromCase(evalCase));
   const normalizedEvidenceSelection =
     normalizeEvidenceSelection(evidenceSelection);
   const updateMutation = useMutation({
-    mutationFn: () =>
-      updateEvalLabCase(evalCase.id, {
+    mutationFn: () => {
+      const evidencePayload = buildUpdateCaseEvidencePayload(
+        originalEvidenceSelection,
+        normalizedEvidenceSelection,
+      );
+      return updateEvalLabCase(evalCase.id, {
         name: name.trim(),
         query: query.trim(),
         top_k: topK,
-        expected_chunk_ids: normalizedEvidenceSelection.chunkIds,
-        expected_document_ids: normalizedEvidenceSelection.documentIds,
         notes: notes.trim() || null,
-      }),
-    onSuccess: () => {
+        ...evidencePayload,
+      });
+    },
+    onSuccess: (updatedCase) => {
+      restoreDraft(updatedCase);
       setEditing(false);
       void queryClient.invalidateQueries({
         queryKey: ["eval-dataset", datasetId],
@@ -432,9 +440,15 @@ function EditableCase({
             onSelectionChange={setEvidenceSelection}
           />
           <EvidenceSelectionReview
+            allowEmptySelection
             selection={evidenceSelection}
             onSelectionChange={setEvidenceSelection}
           />
+          {updateMutation.isError ? (
+            <p className={styles.error} role="alert">
+              {errorMessage(updateMutation.error)}
+            </p>
+          ) : null}
           <label>
             Notes
             <textarea
@@ -446,10 +460,7 @@ function EditableCase({
             <button
               className="primary-button"
               disabled={
-                !name.trim() ||
-                !query.trim() ||
-                !hasExpectedEvidence(normalizedEvidenceSelection) ||
-                updateMutation.isPending
+                !name.trim() || !query.trim() || updateMutation.isPending
               }
               type="button"
               onClick={() => updateMutation.mutate()}
@@ -459,7 +470,7 @@ function EditableCase({
             <button
               className="secondary-button"
               type="button"
-              onClick={() => setEditing(false)}
+              onClick={cancelEditing}
             >
               Cancel
             </button>
@@ -476,7 +487,7 @@ function EditableCase({
               <button
                 aria-label={`Edit ${evalCase.name}`}
                 type="button"
-                onClick={() => setEditing(true)}
+                onClick={beginEditing}
               >
                 <Pencil aria-hidden="true" size={14} />
               </button>
@@ -505,6 +516,28 @@ function EditableCase({
       )}
     </article>
   );
+
+  function beginEditing() {
+    restoreDraft(evalCase);
+    updateMutation.reset();
+    setEditing(true);
+  }
+
+  function cancelEditing() {
+    restoreDraft(evalCase);
+    updateMutation.reset();
+    setEditing(false);
+  }
+
+  function restoreDraft(persistedCase: RetrievalEvalCase) {
+    const persistedSelection = selectionFromCase(persistedCase);
+    setName(persistedCase.name);
+    setQuery(persistedCase.query);
+    setNotes(persistedCase.notes ?? "");
+    setTopK(persistedCase.top_k);
+    setEvidenceSelection(persistedSelection);
+    setOriginalEvidenceSelection(persistedSelection);
+  }
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

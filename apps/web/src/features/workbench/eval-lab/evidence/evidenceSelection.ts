@@ -3,12 +3,18 @@ import type {
   EvalLabEvidenceDocument,
   RetrievalEvalCase,
   RetrievalEvalFailureLabel,
+  UpdateRetrievalEvalCaseRequest,
 } from "../../../../lib/api/evalLab";
 
 export interface EvidenceSelection {
   documentIds: string[];
   chunkIds: string[];
 }
+
+export type EvidenceSelectionUpdatePayload = Pick<
+  UpdateRetrievalEvalCaseRequest,
+  "expected_chunk_ids" | "expected_document_ids"
+>;
 
 export interface EvidenceHitRef {
   chunkId: string;
@@ -81,6 +87,33 @@ export function normalizeEvidenceSelection(
   return {
     documentIds: dedupeIds(selection.documentIds),
     chunkIds: dedupeIds(selection.chunkIds),
+  };
+}
+
+export function evidenceSelectionsEqual(
+  left: EvidenceSelection,
+  right: EvidenceSelection,
+): boolean {
+  const normalizedLeft = normalizeEvidenceSelection(left);
+  const normalizedRight = normalizeEvidenceSelection(right);
+  return (
+    idSetsEqual(normalizedLeft.documentIds, normalizedRight.documentIds) &&
+    idSetsEqual(normalizedLeft.chunkIds, normalizedRight.chunkIds)
+  );
+}
+
+export function buildUpdateCaseEvidencePayload(
+  original: EvidenceSelection,
+  current: EvidenceSelection,
+): EvidenceSelectionUpdatePayload {
+  if (evidenceSelectionsEqual(original, current)) {
+    return {};
+  }
+
+  const normalized = normalizeEvidenceSelection(current);
+  return {
+    expected_chunk_ids: normalized.chunkIds,
+    expected_document_ids: normalized.documentIds,
   };
 }
 
@@ -461,6 +494,14 @@ function chunkSnippet(chunk: EvalLabEvidenceChunk): string | undefined {
 
 function dedupeIds(ids: string[]): string[] {
   return Array.from(new Set(ids.filter(Boolean)));
+}
+
+function idSetsEqual(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  const rightIds = new Set(right);
+  return left.every((id) => rightIds.has(id));
 }
 
 function dedupeStates(states: EvidenceState[]): EvidenceState[] {
