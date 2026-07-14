@@ -130,7 +130,7 @@ describe("evidence selection helpers", () => {
     );
   });
 
-  it("marks an exact expectation wrong-chunk only for a real sibling chunk", () => {
+  it("emits one metadata-derived wrong-chunk state when the failure label agrees", () => {
     const states = deriveEvidenceStates({
       selection: { documentIds: [], chunkIds: ["chunk-1"] },
       context: {
@@ -143,17 +143,68 @@ describe("evidence selection helpers", () => {
           chunkFixture("chunk-2", "doc-1"),
         ],
       }),
+      failureLabels: ["correct_document_wrong_chunk"],
     });
 
-    expect(states).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: "wrong_chunk", evidenceId: "chunk-1" }),
-        expect.objectContaining({
-          kind: "retrieved_not_expected",
-          evidenceId: "chunk-2",
-        }),
-      ]),
+    expect(states.filter((state) => state.kind === "wrong_chunk")).toEqual([
+      expect.objectContaining({
+        kind: "wrong_chunk",
+        evidenceId: "chunk-1",
+        label: "Expected document retrieved, wrong chunk",
+      }),
+    ]);
+    expect(states).toContainEqual(
+      expect.objectContaining({
+        kind: "retrieved_not_expected",
+        evidenceId: "chunk-2",
+      }),
     );
+  });
+
+  it("does not infer wrong-chunk from a failure label when expected metadata is unresolved", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: [], chunkIds: ["chunk-stale"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-2", rank: 1 }],
+      },
+      metadata: resolvedMetadata({
+        documents: [documentFixtureFor("doc-2", "other.md")],
+        chunks: [chunkFixture("chunk-2", "doc-2")],
+        unresolvedChunkIds: ["chunk-stale"],
+      }),
+      failureLabels: ["correct_document_wrong_chunk"],
+    });
+
+    expect(states).toContainEqual(
+      expect.objectContaining({
+        kind: "stale_evidence",
+        evidenceId: "chunk-stale",
+      }),
+    );
+    expect(states.some((state) => state.kind === "wrong_chunk")).toBe(false);
+  });
+
+  it("keeps retrieved metadata authoritative over an inconsistent wrong-chunk label", () => {
+    const states = deriveEvidenceStates({
+      selection: { documentIds: [], chunkIds: ["chunk-1"] },
+      context: {
+        kind: "retrieval",
+        hits: [{ chunkId: "chunk-1", rank: 1 }],
+      },
+      metadata: resolvedMetadata({
+        chunks: [chunkFixture("chunk-1", "doc-1")],
+      }),
+      failureLabels: ["correct_document_wrong_chunk"],
+    });
+
+    expect(states).toContainEqual(
+      expect.objectContaining({
+        kind: "expected_retrieved",
+        evidenceId: "chunk-1",
+      }),
+    );
+    expect(states.some((state) => state.kind === "wrong_chunk")).toBe(false);
   });
 
   it("keeps unrelated retrieved chunks separate from missing expectations", () => {

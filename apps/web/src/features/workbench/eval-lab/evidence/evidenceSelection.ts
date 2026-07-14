@@ -344,11 +344,6 @@ export function deriveEvidenceStates(
   if (input.failureLabels?.includes("weak_evidence")) {
     states.push(caseLevelState("weak_evidence", "Weak evidence"));
   }
-  if (input.failureLabels?.includes("correct_document_wrong_chunk")) {
-    states.push(
-      caseLevelState("wrong_chunk", "Expected document retrieved, wrong chunk"),
-    );
-  }
 
   return dedupeStates(states);
 }

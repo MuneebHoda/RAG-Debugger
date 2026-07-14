@@ -203,8 +203,8 @@ describe("guided Eval Lab workflow", () => {
       await screen.findByText("Expected document retrieved"),
     ).toBeInTheDocument();
     expect(
-      screen.getAllByText("Expected document retrieved, wrong chunk").length,
-    ).toBeGreaterThan(0);
+      screen.getByText("Expected document retrieved, wrong chunk"),
+    ).toBeInTheDocument();
     expect(screen.getAllByText(/platform-guide\.md/).length).toBeGreaterThan(0);
     expect(screen.queryByText(/metadata unavailable/i)).not.toBeInTheDocument();
   });
