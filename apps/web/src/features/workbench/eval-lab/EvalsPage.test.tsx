@@ -388,15 +388,29 @@ describe("guided Eval Lab workflow", () => {
 describe("stale expected evidence repair", () => {
   let persistedCase: ReturnType<typeof legacyCase>;
   let updateBodies: Record<string, unknown>[];
+  let blockDatasetRefetch: boolean;
+  let datasetRequestCount: number;
+  let pendingDatasetRefetch: Deferred<Response> | null;
 
   beforeEach(() => {
     persistedCase = legacyCase();
     updateBodies = [];
+    blockDatasetRefetch = false;
+    datasetRequestCount = 0;
+    pendingDatasetRefetch = null;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = input.toString();
         if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
+          datasetRequestCount += 1;
+          if (
+            blockDatasetRefetch &&
+            datasetRequestCount > 1 &&
+            pendingDatasetRefetch
+          ) {
+            return pendingDatasetRefetch.promise;
+          }
           return responseJson({ ...dataset(), cases: [persistedCase] });
         }
         if (
@@ -494,6 +508,26 @@ describe("stale expected evidence repair", () => {
     expect(updateBodies[2]).not.toHaveProperty("expected_document_ids");
   });
 
+  it("clears existing notes and reopens with the persisted empty value", async () => {
+    renderDatasetDetail();
+
+    let caseCard = await openCaseEditor();
+    fireEvent.change(within(caseCard).getByLabelText("Notes"), {
+      target: { value: "" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).toHaveProperty("notes", null);
+    expect(persistedCase.notes).toBeNull();
+    expect(screen.queryByText("Stored legacy note.")).not.toBeInTheDocument();
+
+    caseCard = await openCaseEditor();
+    expect(within(caseCard).getByLabelText("Notes")).toHaveValue("");
+  });
+
   it("replaces stale evidence through complete normalized arrays", async () => {
     renderDatasetDetail();
     let caseCard = await openCaseEditor();
@@ -532,6 +566,59 @@ describe("stale expected evidence repair", () => {
     await waitFor(() => expect(updateBodies).toHaveLength(2));
     expect(updateBodies[1]).not.toHaveProperty("expected_chunk_ids");
     expect(updateBodies[1]).not.toHaveProperty("expected_document_ids");
+  });
+
+  it("reopens from the synchronous cache while dataset refetch is pending", async () => {
+    renderDatasetDetail();
+    let caseCard = await openCaseEditor();
+    blockDatasetRefetch = true;
+    pendingDatasetRefetch = deferred<Response>();
+
+    fireEvent.change(within(caseCard).getByLabelText("Case name"), {
+      target: { value: "Cache-authoritative case" },
+    });
+    await removeStaleEvidence(caseCard);
+    fireEvent.click(
+      (
+        await within(caseCard).findAllByRole("button", {
+          name: "Expect this exact chunk",
+        })
+      )[0],
+    );
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).toMatchObject({
+      expected_chunk_ids: [chunkId],
+      expected_document_ids: [],
+    });
+
+    caseCard = await openCaseEditor("Cache-authoritative case");
+    expect(within(caseCard).getByLabelText("Case name")).toHaveValue(
+      "Cache-authoritative case",
+    );
+    expect(
+      await within(caseCard).findByRole("button", { name: "Remove chunk 2" }),
+    ).toBeInTheDocument();
+    expect(
+      within(caseCard).queryByRole("button", { name: /Remove stale/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(within(caseCard).getByLabelText("Results per question"), {
+      target: { value: "11" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(2));
+    expect(updateBodies[1]).not.toHaveProperty("expected_chunk_ids");
+    expect(updateBodies[1]).not.toHaveProperty("expected_document_ids");
+
+    pendingDatasetRefetch.resolve(
+      await responseJson({ ...dataset(), cases: [persistedCase] }),
+    );
   });
 
   it("sends explicit empty arrays when all stale evidence is removed", async () => {
@@ -1191,4 +1278,17 @@ function responseError(status: number, message: string) {
     status,
     text: async () => JSON.stringify({ error: { message } }),
   } as Response);
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }

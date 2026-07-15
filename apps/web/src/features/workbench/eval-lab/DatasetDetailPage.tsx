@@ -21,6 +21,7 @@ import {
   runEvalLabExperiment,
   updateEvalLabCase,
   type RetrievalEvalCase,
+  type RetrievalEvalDataset,
 } from "../../../lib/api/evalLab";
 import type { RetrievalMode } from "../../../lib/api/retrieval";
 import { formatDateTime } from "../../../lib/dateTime";
@@ -389,6 +390,18 @@ function EditableCase({
       });
     },
     onSuccess: (updatedCase) => {
+      queryClient.setQueryData<RetrievalEvalDataset>(
+        ["eval-dataset", datasetId],
+        (dataset) =>
+          dataset
+            ? {
+                ...dataset,
+                cases: dataset.cases.map((candidate) =>
+                  candidate.id === updatedCase.id ? updatedCase : candidate,
+                ),
+              }
+            : dataset,
+      );
       restoreDraft(updatedCase);
       setEditing(false);
       void queryClient.invalidateQueries({
@@ -518,15 +531,23 @@ function EditableCase({
   );
 
   function beginEditing() {
-    restoreDraft(evalCase);
+    restoreDraft(latestPersistedCase());
     updateMutation.reset();
     setEditing(true);
   }
 
   function cancelEditing() {
-    restoreDraft(evalCase);
+    restoreDraft(latestPersistedCase());
     updateMutation.reset();
     setEditing(false);
+  }
+
+  function latestPersistedCase() {
+    return (
+      queryClient
+        .getQueryData<RetrievalEvalDataset>(["eval-dataset", datasetId])
+        ?.cases.find((candidate) => candidate.id === evalCase.id) ?? evalCase
+    );
   }
 
   function restoreDraft(persistedCase: RetrievalEvalCase) {

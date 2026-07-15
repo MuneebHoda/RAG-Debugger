@@ -72,7 +72,7 @@ Expected coverage in the scaffold:
 - Test Retrieval render and mocked query tests, including one mode control, collapsed advanced settings, evidence summary, score bars, citations, and direct debugger navigation.
 - Runs tests for search/list navigation, primary diagnosis, backend failure labels and recommendations, per-evidence score explanations, rerun diagnosis comparison, and explicit dataset/evidence selection for Quality.
 - Quality tests for the overview, focused dataset case management, experiment controls, gate-first result view, mode metrics, and failure diagnosis.
-- Eval Lab expected-evidence tests for searchable document/chunk lookup, deduplication, stale evidence labels and removal, omitted-versus-present PATCH semantics, atomic repair failures, cancellation, similar-case warnings, save-from-Retrieval, save-from-Trace, and text-labeled evidence states.
+- Eval Lab expected-evidence tests for searchable document/chunk lookup, deduplication, stale evidence labels and removal, omitted-versus-present PATCH semantics, nullable note clearing, atomic repair failures, cancellation, immediate reopen during delayed refetch, similar-case warnings, save-from-Retrieval, save-from-Trace, and text-labeled evidence states.
 - Auth tests for backend login/signup integration and session validation.
 - Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.
 - CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.

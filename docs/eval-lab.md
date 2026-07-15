@@ -118,6 +118,8 @@ Existing cases with stale or deleted expected evidence remain readable. Stale ID
 
 Eval case updates are atomic. If a changed selection still contains unavailable evidence, the API rejects the complete update with a non-enumerating repair message and preserves both the stored evidence and unrelated case fields. Cancelling an edit restores every draft field from the persisted case.
 
+Case-note PATCH values have three explicit meanings: omitting `notes` preserves the stored value, a string replaces it, and `null` clears it. After a successful edit, the workbench replaces the matching case in the dataset query cache before starting background invalidation. Reopening the editor therefore uses the saved scalar and evidence values even when the reconciliation request is still pending.
+
 Case and experiment views show evidence states with text labels, not color alone:
 
 - `expected document` and `expected exact chunk` for saved cases that have no retrieval context;

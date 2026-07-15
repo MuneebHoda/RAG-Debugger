@@ -42,6 +42,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Eval Lab case notes now distinguish omitted, replacement, and explicit-null PATCH values, while successful edits update the dataset cache synchronously so immediate reopen uses the saved case before background refetch completes.
 - Eval Lab case editing now preserves unchanged legacy stale evidence during scalar-only updates, exposes explicit stale-item removal, validates modified selections atomically, supports intentional evidence clearing, and restores persisted drafts on cancellation.
 - Eval Lab evidence states now distinguish saved expectations from completed retrievals, resolve experiment hits through real chunk/document metadata, and represent unavailable metadata without false missing, retrieved, or wrong-chunk claims.
 - Eval Lab experiment detail now supports URL-persisted baseline selection, compatibility warnings, full regression-category rendering, and a clear no-baseline state.

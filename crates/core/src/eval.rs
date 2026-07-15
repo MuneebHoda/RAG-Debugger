@@ -134,7 +134,20 @@ pub struct UpdateRetrievalEvalCaseRequest {
     pub top_k: Option<u32>,
     pub expected_chunk_ids: Option<Vec<ChunkId>>,
     pub expected_document_ids: Option<Vec<DocumentId>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub notes: Option<Option<String>>,
+}
+
+fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -506,6 +519,31 @@ mod tests {
     use time::format_description::well_known::Rfc3339;
 
     use super::*;
+
+    #[test]
+    fn update_case_notes_distinguish_missing_null_and_string_values() {
+        let missing: UpdateRetrievalEvalCaseRequest =
+            serde_json::from_value(json!({})).expect("missing notes deserialize");
+        let cleared: UpdateRetrievalEvalCaseRequest = serde_json::from_value(json!({
+            "notes": null
+        }))
+        .expect("null notes deserialize");
+        let replaced: UpdateRetrievalEvalCaseRequest = serde_json::from_value(json!({
+            "notes": "Updated"
+        }))
+        .expect("string notes deserialize");
+
+        assert_eq!(missing.notes, None);
+        assert_eq!(cleared.notes, Some(None));
+        assert_eq!(replaced.notes, Some(Some("Updated".to_owned())));
+
+        let missing_json = serde_json::to_value(missing).expect("missing notes serialize");
+        let cleared_json = serde_json::to_value(cleared).expect("null notes serialize");
+        let replaced_json = serde_json::to_value(replaced).expect("string notes serialize");
+        assert!(missing_json.get("notes").is_none());
+        assert_eq!(cleared_json["notes"], serde_json::Value::Null);
+        assert_eq!(replaced_json["notes"], "Updated");
+    }
 
     #[test]
     fn regression_contract_uses_stable_wire_values() {

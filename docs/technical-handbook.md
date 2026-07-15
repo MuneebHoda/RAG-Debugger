@@ -256,6 +256,8 @@ Eval Lab v2 adds regression read models over saved experiments. Dataset history 
 
 Legacy cases may retain expected-evidence IDs whose source data was deleted or is no longer accessible. Case updates preserve omitted evidence arrays without revalidation, while present arrays replace and validate the corresponding selection. The workbench tracks evidence changes as normalized ID sets, exposes explicit stale-item removal, sends empty arrays only for intentional clearing, and restores persisted drafts on cancellation. Validation completes before the merged case is stored, so failed repairs cannot partially persist unrelated edits.
 
+The same PATCH contract distinguishes case-note omission, replacement, and clearing: an omitted `notes` property preserves the stored value, a string replaces it, and `null` clears it. Successful edits synchronously replace the matching case in the dataset query cache before background invalidation, so an immediate reopen cannot restore pre-save scalar or evidence values from a stale prop.
+
 The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts

@@ -239,6 +239,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
         serde_json::from_value(created).expect("deserialize created case");
     legacy.expected_chunk_ids = vec![stale_chunk];
     legacy.expected_document_ids = vec![stale_document];
+    legacy.notes = Some("Original legacy note.".to_owned());
     store
         .update_retrieval_eval_case(legacy.clone())
         .await
@@ -253,6 +254,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
         readable["cases"][0]["expected_document_ids"][0],
         stale_document.0.to_string()
     );
+    assert_eq!(readable["cases"][0]["notes"], "Original legacy note.");
 
     let renamed = request_json(
         &app,
@@ -267,6 +269,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
         renamed["expected_document_ids"][0],
         stale_document.0.to_string()
     );
+    assert_eq!(renamed["notes"], "Original legacy note.");
 
     let noted = request_json(
         &app,
@@ -281,6 +284,32 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
         noted["expected_document_ids"][0],
         stale_document.0.to_string()
     );
+
+    let cleared_notes = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "notes": null }),
+    )
+    .await;
+    assert_eq!(cleared_notes["notes"], Value::Null);
+    assert_eq!(
+        cleared_notes["expected_chunk_ids"][0],
+        stale_chunk.0.to_string()
+    );
+    assert_eq!(
+        cleared_notes["expected_document_ids"][0],
+        stale_document.0.to_string()
+    );
+
+    let protected_notes = request_json(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "notes": "Protected note." }),
+    )
+    .await;
+    assert_eq!(protected_notes["notes"], "Protected note.");
 
     let chunk_replaced = request_json(
         &app,
@@ -334,6 +363,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
         .expect("document ids")
         .is_empty());
 
+    legacy.notes = Some("Protected note.".to_owned());
     store
         .update_retrieval_eval_case(legacy)
         .await
@@ -363,7 +393,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
             Method::PATCH,
             &format!("/api/v1/eval-lab/cases/{case_id}"),
             json!({
-                "notes": "Must not persist",
+                "notes": null,
                 "expected_document_ids": [stale_document.0, document_id]
             }),
         ))
@@ -373,7 +403,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
 
     let unchanged = get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
     assert_eq!(unchanged["cases"][0]["name"], "Legacy case");
-    assert_eq!(unchanged["cases"][0]["notes"], Value::Null);
+    assert_eq!(unchanged["cases"][0]["notes"], "Protected note.");
     assert_eq!(
         unchanged["cases"][0]["expected_chunk_ids"],
         json!([stale_chunk.0])
