@@ -10,6 +10,7 @@ import {
   addEvidenceDocument,
   buildUpdateCaseEvidencePayload,
   deriveEvidenceStates,
+  evidenceSearchError,
   evidenceSelectionsEqual,
   findSimilarCases,
   normalizeEvidenceSelection,
@@ -17,6 +18,16 @@ import {
 } from "./evidenceSelection";
 
 describe("evidence selection helpers", () => {
+  it("accepts browse, exact IDs, and three-character text searches", () => {
+    expect(evidenceSearchError("")).toBeNull();
+    expect(
+      evidenceSearchError("018f7a2a-6e2e-7000-a000-000000000401"),
+    ).toBeNull();
+    expect(evidenceSearchError("GPU")).toBeNull();
+    expect(evidenceSearchError("éa")).toContain("at least 3 characters");
+    expect(evidenceSearchError("ab")).toContain("at least 3 characters");
+  });
+
   it("deduplicates documents and chunks when adding evidence", () => {
     const selection = addEvidenceChunk(
       addEvidenceChunk(

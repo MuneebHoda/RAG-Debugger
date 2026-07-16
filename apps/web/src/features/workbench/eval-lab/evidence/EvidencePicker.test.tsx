@@ -124,6 +124,27 @@ describe("EvidencePicker", () => {
     });
   });
 
+  it("rejects short text locally without replacing existing results", async () => {
+    renderPicker();
+    expect(
+      await findPreview("GPU workers refresh embeddings."),
+    ).toBeInTheDocument();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+    const input = screen.getByLabelText("Search corpus evidence");
+
+    fireEvent.change(input, { target: { value: "ab" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter at least 3 characters, paste an exact UUID, or leave blank to browse.",
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(
+      findPreviewNow("GPU workers refresh embeddings."),
+    ).toBeInTheDocument();
+  });
+
   it("refreshes selected metadata without changing the submitted query", async () => {
     renderPicker();
     const addChunk = await screen.findByRole("button", {
@@ -224,6 +245,34 @@ describe("EvidencePicker", () => {
     removeChunk.focus();
     expect(removeChunk).toHaveFocus();
     fireEvent.click(removeChunk);
+    expect(selectionJson()).toEqual({ documentIds: [], chunkIds: [] });
+  });
+
+  it("keeps selected IDs removable when metadata lookup fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Promise.reject(new Error("offline"))),
+    );
+    renderReview({ documentIds: [documentId], chunkIds: [chunkId] });
+
+    expect(
+      await screen.findByText("Document metadata unavailable"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Chunk metadata unavailable")).toBeInTheDocument();
+    expect(screen.getAllByText(/remains selected/)).toHaveLength(2);
+
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: /Remove document 018f7a2a/,
+      }),
+    );
+    expect(selectionJson()).toEqual({ documentIds: [], chunkIds: [chunkId] });
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /Remove chunk 018f7a2a/,
+      }),
+    );
     expect(selectionJson()).toEqual({ documentIds: [], chunkIds: [] });
   });
 });

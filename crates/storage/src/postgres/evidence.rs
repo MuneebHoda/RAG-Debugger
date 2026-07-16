@@ -1,9 +1,9 @@
 use rag_debugger_core::{
-    EvalLabEvidenceChunk, EvalLabEvidenceDocument, EvalLabEvidenceSearchRequest,
-    EvalLabEvidenceSearchResult, EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT,
+    EvalLabEvidenceChunk, EvalLabEvidenceDocument, EvalLabEvidenceSearchQuery,
+    EvalLabEvidenceSearchRequest, EvalLabEvidenceSearchResult,
+    EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT,
 };
 use sqlx::Row;
-use uuid::Uuid;
 
 use super::{codec::*, PostgresStore};
 use crate::StorageError;
@@ -76,12 +76,9 @@ impl PostgresStore {
         &self,
         request: &EvalLabEvidenceSearchRequest,
     ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
-        let needle = request
-            .query
-            .as_deref()
-            .map(str::trim)
-            .unwrap_or_default()
-            .to_lowercase();
+        if request.document_limit == 0 && request.chunk_limit == 0 {
+            return Ok(EvalLabEvidenceSearchResult::default());
+        }
         let excluded_document_ids = request
             .excluded_document_ids
             .iter()
@@ -92,40 +89,34 @@ impl PostgresStore {
             .iter()
             .map(|id| id.0)
             .collect::<Vec<_>>();
-        let query_id = Uuid::parse_str(&needle).ok();
-
         let documents = if request.document_limit == 0 {
             Vec::new()
         } else {
-            let rows = sqlx::query(
-                "SELECT d.id, d.source_id, s.name AS source_name, d.path,
-                        d.document_profile, d.extraction_quality, d.warnings,
-                        (SELECT COUNT(*) FROM chunks c WHERE c.document_id = d.id) AS chunk_count
-                 FROM documents d
-                 INNER JOIN sources s ON s.id = d.source_id
-                 WHERE NOT (d.id = ANY($2::uuid[]))
-                   AND ($1 = ''
-                        OR ($4::uuid IS NOT NULL AND d.id = $4)
-                        OR lower(d.id::text) LIKE '%' || $1 || '%'
-                        OR lower(d.path) LIKE '%' || $1 || '%'
-                        OR lower(s.name) LIKE '%' || $1 || '%')
-                 ORDER BY
-                    CASE
-                      WHEN $4::uuid IS NOT NULL AND d.id = $4 THEN 0
-                      WHEN $1 <> '' AND lower(d.path) LIKE '%' || $1 || '%' THEN 1
-                      WHEN $1 <> '' AND lower(s.name) LIKE '%' || $1 || '%' THEN 2
-                      WHEN $1 <> '' AND lower(d.id::text) LIKE '%' || $1 || '%' THEN 3
-                      ELSE 4
-                    END,
-                    lower(d.path), lower(s.name), d.id
-                 LIMIT $3",
-            )
-            .bind(&needle)
-            .bind(excluded_document_ids)
-            .bind(request.document_limit as i64)
-            .bind(query_id)
-            .fetch_all(&self.pool)
-            .await?;
+            let rows = match &request.query {
+                EvalLabEvidenceSearchQuery::Browse => {
+                    sqlx::query(BROWSE_DOCUMENTS_SQL)
+                        .bind(&excluded_document_ids)
+                        .bind(request.document_limit as i64)
+                        .fetch_all(&self.pool)
+                        .await?
+                }
+                EvalLabEvidenceSearchQuery::ExactId(id) => {
+                    sqlx::query(EXACT_DOCUMENT_SQL)
+                        .bind(id)
+                        .bind(&excluded_document_ids)
+                        .bind(request.document_limit as i64)
+                        .fetch_all(&self.pool)
+                        .await?
+                }
+                EvalLabEvidenceSearchQuery::Text(query) => {
+                    sqlx::query(TEXT_DOCUMENTS_SQL)
+                        .bind(query)
+                        .bind(&excluded_document_ids)
+                        .bind(request.document_limit as i64)
+                        .fetch_all(&self.pool)
+                        .await?
+                }
+            };
             rows.iter()
                 .map(evidence_document_from_row)
                 .collect::<Result<Vec<_>, _>>()?
@@ -134,47 +125,34 @@ impl PostgresStore {
         let chunks = if request.chunk_limit == 0 {
             Vec::new()
         } else {
-            let rows = sqlx::query(
-                "SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
-                        d.path AS document_path, c.ordinal,
-                        LEFT(c.text, $3) AS text_preview,
-                        char_length(c.text) > $3 AS preview_truncated,
-                        c.token_count, c.checksum, c.section_title, c.quality_flags,
-                        c.is_duplicate, c.text_density, c.evidence_score_hint
-                 FROM chunks c
-                 INNER JOIN documents d ON d.id = c.document_id
-                 INNER JOIN sources s ON s.id = c.source_id
-                 WHERE NOT (c.id = ANY($2::uuid[]))
-                   AND ($1 = ''
-                        OR ($5::uuid IS NOT NULL AND (c.id = $5 OR d.id = $5))
-                        OR lower(c.id::text) LIKE '%' || $1 || '%'
-                        OR lower(d.id::text) LIKE '%' || $1 || '%'
-                        OR lower(d.path) LIKE '%' || $1 || '%'
-                        OR lower(COALESCE(c.section_title, '')) LIKE '%' || $1 || '%'
-                        OR lower(s.name) LIKE '%' || $1 || '%'
-                        OR lower(c.text) LIKE '%' || $1 || '%')
-                 ORDER BY
-                    CASE
-                      WHEN $5::uuid IS NOT NULL AND c.id = $5 THEN 0
-                      WHEN $5::uuid IS NOT NULL AND d.id = $5 THEN 1
-                      WHEN $1 <> '' AND lower(d.path) LIKE '%' || $1 || '%' THEN 2
-                      WHEN $1 <> '' AND lower(COALESCE(c.section_title, '')) LIKE '%' || $1 || '%' THEN 3
-                      WHEN $1 <> '' AND lower(s.name) LIKE '%' || $1 || '%' THEN 4
-                      WHEN $1 <> '' AND lower(c.text) LIKE '%' || $1 || '%' THEN 5
-                      WHEN $1 <> '' AND (lower(c.id::text) LIKE '%' || $1 || '%'
-                                           OR lower(d.id::text) LIKE '%' || $1 || '%') THEN 6
-                      ELSE 7
-                    END,
-                    lower(d.path), c.ordinal, c.id
-                 LIMIT $4",
-            )
-            .bind(&needle)
-            .bind(excluded_chunk_ids)
-            .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
-            .bind(request.chunk_limit as i64)
-            .bind(query_id)
-            .fetch_all(&self.pool)
-            .await?;
+            let rows = match &request.query {
+                EvalLabEvidenceSearchQuery::Browse => {
+                    sqlx::query(BROWSE_CHUNKS_SQL)
+                        .bind(&excluded_chunk_ids)
+                        .bind(request.chunk_limit as i64)
+                        .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
+                        .fetch_all(&self.pool)
+                        .await?
+                }
+                EvalLabEvidenceSearchQuery::ExactId(id) => {
+                    sqlx::query(EXACT_CHUNKS_SQL)
+                        .bind(id)
+                        .bind(&excluded_chunk_ids)
+                        .bind(request.chunk_limit as i64)
+                        .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
+                        .fetch_all(&self.pool)
+                        .await?
+                }
+                EvalLabEvidenceSearchQuery::Text(query) => {
+                    sqlx::query(TEXT_CHUNKS_SQL)
+                        .bind(query)
+                        .bind(&excluded_chunk_ids)
+                        .bind(request.chunk_limit as i64)
+                        .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
+                        .fetch_all(&self.pool)
+                        .await?
+                }
+            };
             rows.iter()
                 .map(evidence_chunk_from_row)
                 .collect::<Result<Vec<_>, _>>()?
@@ -183,6 +161,156 @@ impl PostgresStore {
         Ok(EvalLabEvidenceSearchResult { documents, chunks })
     }
 }
+
+const BROWSE_DOCUMENTS_SQL: &str = "SELECT d.id, d.source_id, s.name AS source_name, d.path,
+        d.document_profile, d.extraction_quality, d.warnings,
+        (SELECT COUNT(*) FROM chunks count_chunks WHERE count_chunks.document_id = d.id) AS chunk_count
+    FROM documents d
+    INNER JOIN sources s ON s.id = d.source_id
+    WHERE NOT (d.id = ANY($1::uuid[]))
+    ORDER BY lower(d.path) COLLATE \"C\", d.id
+    LIMIT $2";
+
+const EXACT_DOCUMENT_SQL: &str = "SELECT d.id, d.source_id, s.name AS source_name, d.path,
+        d.document_profile, d.extraction_quality, d.warnings,
+        (SELECT COUNT(*) FROM chunks count_chunks WHERE count_chunks.document_id = d.id) AS chunk_count
+    FROM documents d
+    INNER JOIN sources s ON s.id = d.source_id
+    WHERE d.id = $1 AND NOT (d.id = ANY($2::uuid[]))
+    LIMIT $3";
+
+const TEXT_DOCUMENTS_SQL: &str = "WITH path_matches AS (
+        SELECT d.id, 1::smallint AS priority
+        FROM documents d
+        WHERE NOT (d.id = ANY($2::uuid[]))
+          AND lower(d.path) LIKE '%' || $1 || '%'
+        ORDER BY lower(d.path) COLLATE \"C\", d.id
+        LIMIT $3
+    ), source_matches AS (
+        SELECT d.id, 2::smallint AS priority
+        FROM sources s
+        INNER JOIN documents d ON d.source_id = s.id
+        WHERE NOT (d.id = ANY($2::uuid[]))
+          AND lower(s.name) LIKE '%' || $1 || '%'
+        ORDER BY lower(s.name) COLLATE \"C\", lower(d.path) COLLATE \"C\", d.id
+        LIMIT $3
+    ), ranked AS (
+        SELECT id, MIN(priority) AS priority
+        FROM (
+            SELECT * FROM path_matches
+            UNION ALL
+            SELECT * FROM source_matches
+        ) matches
+        GROUP BY id
+    )
+    SELECT d.id, d.source_id, s.name AS source_name, d.path,
+           d.document_profile, d.extraction_quality, d.warnings,
+           (SELECT COUNT(*) FROM chunks count_chunks WHERE count_chunks.document_id = d.id) AS chunk_count
+    FROM ranked r
+    INNER JOIN documents d ON d.id = r.id
+    INNER JOIN sources s ON s.id = d.source_id
+    ORDER BY r.priority, lower(d.path) COLLATE \"C\", lower(s.name) COLLATE \"C\", d.id
+    LIMIT $3";
+
+const BROWSE_CHUNKS_SQL: &str = "SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
+        d.path AS document_path, c.ordinal,
+        LEFT(c.text, $3) AS text_preview,
+        char_length(c.text) > $3 AS preview_truncated,
+        c.token_count, c.checksum, c.section_title, c.quality_flags,
+        c.is_duplicate, c.text_density, c.evidence_score_hint
+    FROM documents d
+    INNER JOIN sources s ON s.id = d.source_id
+    CROSS JOIN LATERAL (
+        SELECT candidate.id, candidate.ordinal
+        FROM chunks candidate
+        WHERE candidate.document_id = d.id
+          AND NOT (candidate.id = ANY($1::uuid[]))
+        ORDER BY candidate.ordinal, candidate.id
+        LIMIT $2
+    ) ranked_chunk
+    INNER JOIN chunks c ON c.id = ranked_chunk.id
+    ORDER BY lower(d.path) COLLATE \"C\", d.id, ranked_chunk.ordinal, c.id
+    LIMIT $2";
+
+const EXACT_CHUNKS_SQL: &str = "WITH matches AS (
+        SELECT c.id, 0::smallint AS priority
+        FROM chunks c
+        WHERE c.id = $1 AND NOT (c.id = ANY($2::uuid[]))
+        UNION ALL
+        SELECT c.id, 1::smallint AS priority
+        FROM chunks c
+        WHERE c.document_id = $1 AND NOT (c.id = ANY($2::uuid[]))
+    ), ranked AS (
+        SELECT id, MIN(priority) AS priority FROM matches GROUP BY id
+    )
+    SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
+        d.path AS document_path, c.ordinal,
+        LEFT(c.text, $4) AS text_preview,
+        char_length(c.text) > $4 AS preview_truncated,
+        c.token_count, c.checksum, c.section_title, c.quality_flags,
+        c.is_duplicate, c.text_density, c.evidence_score_hint
+    FROM ranked r
+    INNER JOIN chunks c ON c.id = r.id
+    INNER JOIN documents d ON d.id = c.document_id
+    INNER JOIN sources s ON s.id = c.source_id
+    ORDER BY r.priority, lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
+    LIMIT $3";
+
+const TEXT_CHUNKS_SQL: &str = "WITH path_matches AS (
+        SELECT c.id, 2::smallint AS priority
+        FROM documents d
+        INNER JOIN chunks c ON c.document_id = d.id
+        WHERE NOT (c.id = ANY($2::uuid[]))
+          AND lower(d.path) LIKE '%' || $1 || '%'
+        ORDER BY lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
+        LIMIT $3
+    ), section_matches AS (
+        SELECT c.id, 3::smallint AS priority
+        FROM chunks c
+        INNER JOIN documents d ON d.id = c.document_id
+        WHERE NOT (c.id = ANY($2::uuid[]))
+          AND lower(COALESCE(c.section_title, '')) LIKE '%' || $1 || '%'
+        ORDER BY lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
+        LIMIT $3
+    ), source_matches AS (
+        SELECT c.id, 4::smallint AS priority
+        FROM sources s
+        INNER JOIN documents d ON d.source_id = s.id
+        INNER JOIN chunks c ON c.document_id = d.id
+        WHERE NOT (c.id = ANY($2::uuid[]))
+          AND lower(s.name) LIKE '%' || $1 || '%'
+        ORDER BY lower(d.path) COLLATE \"C\", lower(s.name) COLLATE \"C\", d.id, c.ordinal, c.id
+        LIMIT $3
+    ), body_matches AS (
+        SELECT c.id, 5::smallint AS priority
+        FROM chunks c
+        INNER JOIN documents d ON d.id = c.document_id
+        WHERE NOT (c.id = ANY($2::uuid[]))
+          AND lower(c.text) LIKE '%' || $1 || '%'
+        ORDER BY lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
+        LIMIT $3
+    ), ranked AS (
+        SELECT id, MIN(priority) AS priority
+        FROM (
+            SELECT * FROM path_matches
+            UNION ALL SELECT * FROM section_matches
+            UNION ALL SELECT * FROM source_matches
+            UNION ALL SELECT * FROM body_matches
+        ) matches
+        GROUP BY id
+    )
+    SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
+        d.path AS document_path, c.ordinal,
+        LEFT(c.text, $4) AS text_preview,
+        char_length(c.text) > $4 AS preview_truncated,
+        c.token_count, c.checksum, c.section_title, c.quality_flags,
+        c.is_duplicate, c.text_density, c.evidence_score_hint
+    FROM ranked r
+    INNER JOIN chunks c ON c.id = r.id
+    INNER JOIN documents d ON d.id = c.document_id
+    INNER JOIN sources s ON s.id = c.source_id
+    ORDER BY r.priority, lower(d.path) COLLATE \"C\", lower(s.name) COLLATE \"C\", d.id, c.ordinal, c.id
+    LIMIT $3";
 
 fn evidence_document_from_row(
     row: &sqlx::postgres::PgRow,
@@ -229,4 +357,299 @@ fn evidence_chunk_from_row(
         text_density: row.try_get("text_density")?,
         evidence_score_hint: row.try_get("evidence_score_hint")?,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use serde_json::Value;
+    use sqlx::PgPool;
+    use uuid::Uuid;
+
+    use super::*;
+
+    const PLAN_DOCUMENT_COUNT: i32 = 20_000;
+    const PLAN_CHUNKS_PER_DOCUMENT: i32 = 3;
+
+    #[tokio::test]
+    #[ignore = "requires a migrated Postgres database"]
+    async fn postgres_evidence_query_plans_are_index_compatible() {
+        let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+        let store = PostgresStore::connect(&database_url)
+            .await
+            .expect("connect Postgres store");
+        let pool = store.pool();
+        let marker = Uuid::now_v7().simple().to_string();
+        let project_id = Uuid::now_v7();
+        let source_id = Uuid::now_v7();
+
+        seed_query_plan_corpus(pool, project_id, source_id, &marker).await;
+
+        let exact_document_id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM documents WHERE source_id = $1 ORDER BY path LIMIT 1",
+        )
+        .bind(source_id)
+        .fetch_one(pool)
+        .await
+        .expect("exact document fixture");
+        let exact_chunk_id: Uuid = sqlx::query_scalar(
+            "SELECT id FROM chunks WHERE document_id = $1 ORDER BY ordinal LIMIT 1",
+        )
+        .bind(exact_document_id)
+        .fetch_one(pool)
+        .await
+        .expect("exact chunk fixture");
+
+        let browse_documents = explain_browse_documents(pool).await;
+        let browse_chunks = explain_browse_chunks(pool).await;
+        let exact_document = explain_exact_document(pool, exact_document_id).await;
+        let exact_chunks = explain_exact_chunks(pool, exact_chunk_id).await;
+        let path_search = explain_text_documents(pool, "zqx").await;
+        let section_search = explain_text_chunks(pool, "vwx").await;
+        let body_search = explain_text_chunks(pool, "jkp").await;
+
+        sqlx::query("DELETE FROM projects WHERE id = $1")
+            .bind(project_id)
+            .execute(pool)
+            .await
+            .expect("clean query plan corpus");
+
+        assert_uses_index(&browse_documents, "idx_documents_evidence_browse");
+        assert_uses_index(&browse_chunks, "idx_documents_evidence_browse");
+        assert_uses_index(&browse_chunks, "idx_chunks_evidence_browse");
+        assert_no_relation_scan(&browse_chunks, "chunks");
+        assert_no_large_sort(
+            &browse_chunks,
+            (PLAN_DOCUMENT_COUNT * PLAN_CHUNKS_PER_DOCUMENT) as u64,
+        );
+
+        assert_uses_index(&exact_document, "documents_pkey");
+        assert_uses_index(&exact_chunks, "chunks_pkey");
+        assert_uses_index(&exact_chunks, "idx_chunks_evidence_browse");
+        assert_uses_index(&path_search, "idx_documents_path_trgm");
+        assert_uses_index(&section_search, "idx_chunks_section_title_trgm");
+        assert_uses_index(&body_search, "idx_chunks_text_trgm");
+    }
+
+    async fn seed_query_plan_corpus(
+        pool: &PgPool,
+        project_id: Uuid,
+        source_id: Uuid,
+        marker: &str,
+    ) {
+        sqlx::query(
+            "INSERT INTO projects (id, name, privacy_mode, created_at, updated_at)
+             VALUES ($1, $2, 'local_only', NOW(), NOW())",
+        )
+        .bind(project_id)
+        .bind(format!("Evidence plan project {marker}"))
+        .execute(pool)
+        .await
+        .expect("insert plan project");
+        sqlx::query(
+            "INSERT INTO sources (
+                id, project_id, name, source_kind, root_hint, sync_policy,
+                target_tokens, overlap_tokens, created_at
+             ) VALUES ($1, $2, $3, 'file_set', 'query-plan', 'manual', 512, 64, NOW())",
+        )
+        .bind(source_id)
+        .bind(project_id)
+        .bind(format!("needle-source-{marker}"))
+        .execute(pool)
+        .await
+        .expect("insert plan source");
+        sqlx::query(
+            "INSERT INTO documents (
+                id, source_id, path, mime_type, checksum, byte_size, created_at
+             )
+             SELECT md5($2 || '-document-' || item::text)::uuid,
+                    $1,
+                    CASE item
+                      WHEN 4998 THEN 'zqx/' || $2 || '/guide.md'
+                      WHEN 4999 THEN 'section-target-' || $2 || '/guide.md'
+                      WHEN 5000 THEN 'body-target-' || $2 || '/guide.md'
+                      ELSE 'browse/' || lpad(item::text, 6, '0') || '/guide.md'
+                    END,
+                    'text/markdown', md5($2 || '-checksum-' || item::text), 512, NOW()
+             FROM generate_series(1, $3) AS items(item)",
+        )
+        .bind(source_id)
+        .bind(marker)
+        .bind(PLAN_DOCUMENT_COUNT)
+        .execute(pool)
+        .await
+        .expect("insert plan documents");
+        sqlx::query(
+            "INSERT INTO chunks (
+                id, source_id, document_id, ordinal, text, token_count,
+                byte_start, byte_end, checksum, created_at, section_title
+             )
+             SELECT md5($2 || '-chunk-' || d.id::text || '-' || ordinal::text)::uuid,
+                    $1, d.id, ordinal,
+                    CASE
+                      WHEN d.path LIKE 'body-target-%' AND ordinal = 1
+                        THEN 'jkp uniquely identifies indexed body evidence ' || $2
+                      ELSE 'bounded evidence fixture ' || d.path || ' chunk ' || ordinal::text
+                    END,
+                    12, 0, 128,
+                    md5($2 || '-chunk-checksum-' || d.id::text || '-' || ordinal::text), NOW(),
+                    CASE
+                      WHEN d.path LIKE 'section-target-%' AND ordinal = 1
+                        THEN 'vwx ' || $2
+                      ELSE 'Evidence section'
+                    END
+             FROM documents d
+             CROSS JOIN generate_series(0, $3 - 1) AS ordinals(ordinal)
+             WHERE d.source_id = $1",
+        )
+        .bind(source_id)
+        .bind(marker)
+        .bind(PLAN_CHUNKS_PER_DOCUMENT)
+        .execute(pool)
+        .await
+        .expect("insert plan chunks");
+        sqlx::query("ANALYZE sources, documents, chunks")
+            .execute(pool)
+            .await
+            .expect("analyze plan corpus");
+    }
+
+    async fn explain_browse_documents(pool: &PgPool) -> Value {
+        let sql = format!("EXPLAIN (FORMAT JSON) {BROWSE_DOCUMENTS_SQL}");
+        sqlx::query_scalar(&sql)
+            .bind(Vec::<Uuid>::new())
+            .bind(1_i64)
+            .fetch_one(pool)
+            .await
+            .expect("explain document browse")
+    }
+
+    async fn explain_browse_chunks(pool: &PgPool) -> Value {
+        let sql = format!("EXPLAIN (FORMAT JSON) {BROWSE_CHUNKS_SQL}");
+        sqlx::query_scalar(&sql)
+            .bind(Vec::<Uuid>::new())
+            .bind(1_i64)
+            .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
+            .fetch_one(pool)
+            .await
+            .expect("explain chunk browse")
+    }
+
+    async fn explain_exact_document(pool: &PgPool, id: Uuid) -> Value {
+        let sql = format!("EXPLAIN (FORMAT JSON) {EXACT_DOCUMENT_SQL}");
+        sqlx::query_scalar(&sql)
+            .bind(id)
+            .bind(Vec::<Uuid>::new())
+            .bind(1_i64)
+            .fetch_one(pool)
+            .await
+            .expect("explain exact document")
+    }
+
+    async fn explain_exact_chunks(pool: &PgPool, id: Uuid) -> Value {
+        let sql = format!("EXPLAIN (FORMAT JSON) {EXACT_CHUNKS_SQL}");
+        sqlx::query_scalar(&sql)
+            .bind(id)
+            .bind(Vec::<Uuid>::new())
+            .bind(1_i64)
+            .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
+            .fetch_one(pool)
+            .await
+            .expect("explain exact chunks")
+    }
+
+    async fn explain_text_documents(pool: &PgPool, query: &str) -> Value {
+        let sql = format!("EXPLAIN (FORMAT JSON) {TEXT_DOCUMENTS_SQL}");
+        sqlx::query_scalar(&sql)
+            .bind(query)
+            .bind(Vec::<Uuid>::new())
+            .bind(1_i64)
+            .fetch_one(pool)
+            .await
+            .expect("explain text documents")
+    }
+
+    async fn explain_text_chunks(pool: &PgPool, query: &str) -> Value {
+        let sql = format!("EXPLAIN (FORMAT JSON) {TEXT_CHUNKS_SQL}");
+        sqlx::query_scalar(&sql)
+            .bind(query)
+            .bind(Vec::<Uuid>::new())
+            .bind(1_i64)
+            .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
+            .fetch_one(pool)
+            .await
+            .expect("explain text chunks")
+    }
+
+    fn assert_uses_index(plan: &Value, expected: &str) {
+        let indexes = plan_values(plan, "Index Name")
+            .into_iter()
+            .filter_map(Value::as_str)
+            .collect::<HashSet<_>>();
+        assert!(
+            indexes.contains(expected),
+            "expected {expected} in query plan indexes {indexes:?}: {plan}"
+        );
+    }
+
+    fn assert_no_relation_scan(plan: &Value, relation: &str) {
+        let has_scan = plan_objects(plan).into_iter().any(|node| {
+            node.get("Node Type").and_then(Value::as_str) == Some("Seq Scan")
+                && node.get("Relation Name").and_then(Value::as_str) == Some(relation)
+        });
+        assert!(
+            !has_scan,
+            "unexpected sequential scan of {relation}: {plan}"
+        );
+    }
+
+    fn assert_no_large_sort(plan: &Value, corpus_rows: u64) {
+        let has_large_sort = plan_objects(plan).into_iter().any(|node| {
+            node.get("Node Type")
+                .and_then(Value::as_str)
+                .is_some_and(|node_type| node_type.contains("Sort"))
+                && node
+                    .get("Plan Rows")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|rows| rows >= corpus_rows)
+        });
+        assert!(!has_large_sort, "unexpected full-corpus sort: {plan}");
+    }
+
+    fn plan_values<'a>(value: &'a Value, key: &str) -> Vec<&'a Value> {
+        let mut matches = Vec::new();
+        visit_plan(value, &mut |object| {
+            if let Some(value) = object.get(key) {
+                matches.push(value);
+            }
+        });
+        matches
+    }
+
+    fn plan_objects(value: &Value) -> Vec<&serde_json::Map<String, Value>> {
+        let mut objects = Vec::new();
+        visit_plan(value, &mut |object| objects.push(object));
+        objects
+    }
+
+    fn visit_plan<'a>(
+        value: &'a Value,
+        visitor: &mut impl FnMut(&'a serde_json::Map<String, Value>),
+    ) {
+        match value {
+            Value::Array(values) => {
+                for value in values {
+                    visit_plan(value, visitor);
+                }
+            }
+            Value::Object(object) => {
+                visitor(object);
+                for value in object.values() {
+                    visit_plan(value, visitor);
+                }
+            }
+            _ => {}
+        }
+    }
 }

@@ -318,6 +318,100 @@ async fn evidence_lookup_separates_requested_items_from_bounded_candidates() {
 }
 
 #[tokio::test]
+async fn evidence_lookup_and_case_mutations_enforce_request_work_limits() {
+    let app = test_app();
+    let repeated_document_id = "018f7a2a-6e2e-7000-a000-000000000901";
+    let repeated_chunk_id = "018f7a2a-6e2e-7000-a000-000000000902";
+
+    let short_query = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/eval-lab/evidence/query",
+            json!({ "query": "ab", "document_limit": 1 }),
+        ))
+        .await
+        .expect("short-query response");
+    assert_eq!(short_query.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json_body(short_query).await["error"]["message"],
+        "bad request: Enter at least 3 characters, paste an exact UUID, or leave blank to browse."
+    );
+
+    let oversized_lookup = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/eval-lab/evidence/query",
+            json!({
+                "document_ids": vec![repeated_document_id; 101],
+                "document_limit": 0,
+                "chunk_limit": 0
+            }),
+        ))
+        .await
+        .expect("oversized lookup response");
+    assert_eq!(oversized_lookup.status(), StatusCode::BAD_REQUEST);
+
+    let combined_lookup = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/eval-lab/evidence/query",
+            json!({
+                "document_ids": vec![repeated_document_id; 100],
+                "chunk_ids": vec![repeated_chunk_id; 151],
+                "document_limit": 0,
+                "chunk_limit": 0
+            }),
+        ))
+        .await
+        .expect("combined lookup response");
+    assert_eq!(combined_lookup.status(), StatusCode::BAD_REQUEST);
+
+    let dataset = create_dataset(&app, "Bounded evidence mutations").await;
+    let dataset_id = dataset["id"].as_str().expect("dataset id");
+    let oversized_create = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "bounded create",
+                "expected_document_ids": vec![repeated_document_id; 101]
+            }),
+        ))
+        .await
+        .expect("oversized create response");
+    assert_eq!(oversized_create.status(), StatusCode::BAD_REQUEST);
+
+    let upload = upload_text_file(&app, "bounded-case.md", "Bounded evidence case.").await;
+    let document_id = upload["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("document id");
+    let eval_case = create_case(
+        &app,
+        dataset_id,
+        json!({
+            "query": "bounded update",
+            "expected_document_ids": [document_id]
+        }),
+    )
+    .await;
+    let case_id = eval_case["id"].as_str().expect("case id");
+    let oversized_update = app
+        .clone()
+        .oneshot(json_request(
+            Method::PATCH,
+            &format!("/api/v1/eval-lab/cases/{case_id}"),
+            json!({ "expected_chunk_ids": vec![repeated_chunk_id; 251] }),
+        ))
+        .await
+        .expect("oversized update response");
+    assert_eq!(oversized_update.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn update_case_repairs_legacy_stale_evidence_atomically() {
     let (app, store) = test_app_with_store();
     let upload = upload_text_file(

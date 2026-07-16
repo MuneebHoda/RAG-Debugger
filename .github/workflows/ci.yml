@@ -86,6 +86,11 @@ jobs:
           --test evidence_repository_contract
           postgres_evidence_repository_is_deterministic_and_bounded
           -- --ignored
+      - name: Verify Postgres evidence query plans
+        run: >-
+          cargo test -p rag-debugger-storage
+          postgres_evidence_query_plans_are_index_compatible
+          -- --ignored
 
   docs:
     name: Documentation

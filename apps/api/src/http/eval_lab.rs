@@ -1,17 +1,21 @@
+use std::{collections::HashSet, hash::Hash};
+
 use axum::{
     extract::{Path, Query, State},
     Json,
 };
 use rag_debugger_core::{
     ChunkId, CompareRetrievalEvalExperimentRequest, CreateRetrievalEvalDatasetRequest,
-    CreateRetrievalEvalLabCaseRequest, DocumentId, EvalLabEvidenceSearchRequest,
-    QueryEvalLabEvidenceRequest, QueryEvalLabEvidenceResponse, RetrievalEvalCase,
-    RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
-    RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
-    RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
-    RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
-    RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest,
+    CreateRetrievalEvalLabCaseRequest, DocumentId, EvalLabEvidenceSearchQuery,
+    EvalLabEvidenceSearchRequest, QueryEvalLabEvidenceRequest, QueryEvalLabEvidenceResponse,
+    RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDataset,
+    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
+    RetrievalEvalExperimentId, RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison,
+    RetrievalEvalRun, RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode,
+    RetrievalQueryRequest, RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest,
     EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
+    EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS,
+    EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS, EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
@@ -94,6 +98,10 @@ pub async fn create_case(
     Json(mut request): Json<CreateRetrievalEvalLabCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    validate_evidence_request_counts(
+        Some(&request.expected_document_ids),
+        Some(&request.expected_chunk_ids),
+    )?;
     request.expected_chunk_ids = dedupe_chunk_ids(request.expected_chunk_ids);
     request.expected_document_ids = dedupe_document_ids(request.expected_document_ids);
     validate_expected_evidence(
@@ -121,6 +129,10 @@ pub async fn update_case(
     Json(mut request): Json<UpdateRetrievalEvalCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    validate_evidence_request_counts(
+        request.expected_document_ids.as_deref(),
+        request.expected_chunk_ids.as_deref(),
+    )?;
     if let Some(chunk_ids) = request.expected_chunk_ids.take() {
         let chunk_ids = dedupe_chunk_ids(chunk_ids);
         validate_expected_evidence(repository.as_ref(), &chunk_ids, &[]).await?;
@@ -408,6 +420,8 @@ async fn build_evidence_response(
     repository: &(impl EvidenceRepository + ?Sized),
     request: &QueryEvalLabEvidenceRequest,
 ) -> Result<QueryEvalLabEvidenceResponse, ApiError> {
+    validate_evidence_request_counts(Some(&request.document_ids), Some(&request.chunk_ids))?;
+    let query = evidence_search_query(request.query.as_deref())?;
     let document_ids = dedupe_document_ids(request.document_ids.clone());
     let chunk_ids = dedupe_chunk_ids(request.chunk_ids.clone());
     let mut documents = repository.resolve_evidence_documents(&document_ids).await?;
@@ -415,8 +429,8 @@ async fn build_evidence_response(
     let found_document_ids = documents
         .iter()
         .map(|document| document.id)
-        .collect::<Vec<_>>();
-    let found_chunk_ids = chunks.iter().map(|chunk| chunk.id).collect::<Vec<_>>();
+        .collect::<HashSet<_>>();
+    let found_chunk_ids = chunks.iter().map(|chunk| chunk.id).collect::<HashSet<_>>();
     let unresolved_document_ids = document_ids
         .iter()
         .copied()
@@ -437,20 +451,22 @@ async fn build_evidence_response(
     if document_limit > 0 || chunk_limit > 0 {
         let candidates = repository
             .search_evidence(&EvalLabEvidenceSearchRequest {
-                query: normalized_search(request.query.as_deref()),
+                query,
                 excluded_document_ids: document_ids,
                 excluded_chunk_ids: chunk_ids,
                 document_limit,
                 chunk_limit,
             })
             .await?;
+        let mut seen_document_ids = found_document_ids;
         for candidate in candidates.documents {
-            if !documents.iter().any(|document| document.id == candidate.id) {
+            if seen_document_ids.insert(candidate.id) {
                 documents.push(candidate);
             }
         }
+        let mut seen_chunk_ids = found_chunk_ids;
         for candidate in candidates.chunks {
-            if !chunks.iter().any(|chunk| chunk.id == candidate.id) {
+            if seen_chunk_ids.insert(candidate.id) {
                 chunks.push(candidate);
             }
         }
@@ -486,11 +502,45 @@ async fn validate_expected_evidence(
     }
 }
 
-fn normalized_search(query: Option<&str>) -> Option<String> {
-    query
-        .map(str::trim)
-        .filter(|query| !query.is_empty())
-        .map(str::to_lowercase)
+fn evidence_search_query(query: Option<&str>) -> Result<EvalLabEvidenceSearchQuery, ApiError> {
+    let query = query.map(str::trim).unwrap_or_default();
+    if query.is_empty() {
+        return Ok(EvalLabEvidenceSearchQuery::Browse);
+    }
+    if let Ok(id) = Uuid::parse_str(query) {
+        return Ok(EvalLabEvidenceSearchQuery::ExactId(id));
+    }
+    if query.chars().count() < EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS {
+        return Err(ApiError::BadRequest(
+            "Enter at least 3 characters, paste an exact UUID, or leave blank to browse."
+                .to_owned(),
+        ));
+    }
+    Ok(EvalLabEvidenceSearchQuery::Text(query.to_lowercase()))
+}
+
+fn validate_evidence_request_counts(
+    document_ids: Option<&[DocumentId]>,
+    chunk_ids: Option<&[ChunkId]>,
+) -> Result<(), ApiError> {
+    let document_count = document_ids.map_or(0, <[DocumentId]>::len);
+    let chunk_count = chunk_ids.map_or(0, <[ChunkId]>::len);
+    if document_count > EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS {
+        return Err(ApiError::BadRequest(format!(
+            "Too many requested document IDs; maximum is {EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS}."
+        )));
+    }
+    if chunk_count > EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS {
+        return Err(ApiError::BadRequest(format!(
+            "Too many requested chunk IDs; maximum is {EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS}."
+        )));
+    }
+    if document_count + chunk_count > EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS {
+        return Err(ApiError::BadRequest(format!(
+            "Too many requested evidence IDs; combined maximum is {EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS}."
+        )));
+    }
+    Ok(())
 }
 
 fn candidate_limit(specific: Option<u32>, legacy: Option<u32>) -> u32 {
@@ -536,19 +586,21 @@ fn eval_case_from_request(
 }
 
 fn dedupe_chunk_ids(ids: Vec<ChunkId>) -> Vec<ChunkId> {
-    let mut deduped = Vec::with_capacity(ids.len());
-    for id in ids {
-        if !deduped.contains(&id) {
-            deduped.push(id);
-        }
-    }
-    deduped
+    dedupe_ids(ids)
 }
 
 fn dedupe_document_ids(ids: Vec<DocumentId>) -> Vec<DocumentId> {
+    dedupe_ids(ids)
+}
+
+fn dedupe_ids<T>(ids: Vec<T>) -> Vec<T>
+where
+    T: Copy + Eq + Hash,
+{
+    let mut seen = HashSet::with_capacity(ids.len());
     let mut deduped = Vec::with_capacity(ids.len());
     for id in ids {
-        if !deduped.contains(&id) {
+        if seen.insert(id) {
             deduped.push(id);
         }
     }
@@ -650,7 +702,10 @@ fn not_found_to_api(
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    };
 
     use async_trait::async_trait;
     use rag_debugger_core::{
@@ -665,6 +720,7 @@ mod tests {
         document_resolutions: AtomicUsize,
         chunk_resolutions: AtomicUsize,
         searches: AtomicUsize,
+        search_requests: Mutex<Vec<EvalLabEvidenceSearchRequest>>,
     }
 
     #[async_trait]
@@ -687,9 +743,13 @@ mod tests {
 
         async fn search_evidence(
             &self,
-            _request: &EvalLabEvidenceSearchRequest,
+            request: &EvalLabEvidenceSearchRequest,
         ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
             self.searches.fetch_add(1, Ordering::Relaxed);
+            self.search_requests
+                .lock()
+                .expect("search requests lock")
+                .push(request.clone());
             Ok(EvalLabEvidenceSearchResult::default())
         }
     }
@@ -738,5 +798,131 @@ mod tests {
         assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 1);
         assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 1);
         assert_eq!(repository.searches.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn evidence_response_rejects_oversized_work_before_repository_access() {
+        let repository = CountingEvidenceRepository::default();
+        let repeated_document = DocumentId(Uuid::now_v7());
+        let request = QueryEvalLabEvidenceRequest {
+            query: None,
+            document_ids: vec![repeated_document; EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS + 1],
+            chunk_ids: Vec::new(),
+            limit: None,
+            document_limit: Some(0),
+            chunk_limit: Some(0),
+            include_chunks: true,
+        };
+
+        let error = build_evidence_response(&repository, &request)
+            .await
+            .expect_err("duplicates count toward request work");
+
+        assert!(matches!(error, ApiError::BadRequest(_)));
+        assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 0);
+        assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 0);
+        assert_eq!(repository.searches.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn evidence_response_accepts_exact_combined_request_limit() {
+        let repository = CountingEvidenceRepository::default();
+        let document_ids = (0..EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS)
+            .map(|value| DocumentId(Uuid::from_u128(value as u128 + 1)))
+            .collect::<Vec<_>>();
+        let chunk_ids = (0..(EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS - document_ids.len()))
+            .map(|value| ChunkId(Uuid::from_u128(value as u128 + 1_000)))
+            .collect::<Vec<_>>();
+
+        let response = build_evidence_response(
+            &repository,
+            &QueryEvalLabEvidenceRequest {
+                query: None,
+                document_ids: document_ids.clone(),
+                chunk_ids: chunk_ids.clone(),
+                limit: None,
+                document_limit: Some(0),
+                chunk_limit: Some(0),
+                include_chunks: true,
+            },
+        )
+        .await
+        .expect("exact request-work limit is accepted");
+
+        assert_eq!(response.unresolved_document_ids, document_ids);
+        assert_eq!(response.unresolved_chunk_ids, chunk_ids);
+        assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 1);
+        assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 1);
+        assert_eq!(repository.searches.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn evidence_response_rejects_short_text_before_repository_access() {
+        let repository = CountingEvidenceRepository::default();
+        let error = build_evidence_response(
+            &repository,
+            &QueryEvalLabEvidenceRequest {
+                query: Some("éa".to_owned()),
+                document_ids: Vec::new(),
+                chunk_ids: Vec::new(),
+                limit: None,
+                document_limit: Some(1),
+                chunk_limit: Some(1),
+                include_chunks: true,
+            },
+        )
+        .await
+        .expect_err("two Unicode scalars are rejected");
+
+        assert!(matches!(error, ApiError::BadRequest(_)));
+        assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 0);
+        assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 0);
+        assert_eq!(repository.searches.load(Ordering::Relaxed), 0);
+    }
+
+    #[tokio::test]
+    async fn evidence_response_routes_exact_uuid_searches_without_substrings() {
+        let repository = CountingEvidenceRepository::default();
+        let id = Uuid::now_v7();
+
+        build_evidence_response(
+            &repository,
+            &QueryEvalLabEvidenceRequest {
+                query: Some(id.to_string()),
+                document_ids: Vec::new(),
+                chunk_ids: Vec::new(),
+                limit: None,
+                document_limit: Some(1),
+                chunk_limit: Some(1),
+                include_chunks: true,
+            },
+        )
+        .await
+        .expect("exact UUID search succeeds");
+
+        let requests = repository
+            .search_requests
+            .lock()
+            .expect("search requests lock");
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].query, EvalLabEvidenceSearchQuery::ExactId(id));
+    }
+
+    #[test]
+    fn evidence_request_limits_are_independent_and_combined() {
+        let documents = vec![DocumentId(Uuid::nil()); 100];
+        let chunks = vec![ChunkId(Uuid::nil()); 150];
+        assert!(validate_evidence_request_counts(Some(&documents), Some(&chunks)).is_ok());
+
+        let maximum_chunks = vec![ChunkId(Uuid::nil()); 250];
+        assert!(validate_evidence_request_counts(None, Some(&maximum_chunks)).is_ok());
+
+        let too_many_chunks = vec![ChunkId(Uuid::nil()); 251];
+        assert!(validate_evidence_request_counts(None, Some(&too_many_chunks)).is_err());
+
+        let combined_over_limit = vec![ChunkId(Uuid::nil()); 151];
+        assert!(
+            validate_evidence_request_counts(Some(&documents), Some(&combined_over_limit)).is_err()
+        );
     }
 }

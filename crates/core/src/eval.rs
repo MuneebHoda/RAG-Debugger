@@ -167,10 +167,21 @@ pub struct QueryEvalLabEvidenceRequest {
 pub const EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT: u32 = 25;
 pub const EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT: u32 = 100;
 pub const EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT: usize = 280;
+pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS: usize = 100;
+pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS: usize = 250;
+pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS: usize = 250;
+pub const EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS: usize = 3;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum EvalLabEvidenceSearchQuery {
+    Browse,
+    ExactId(Uuid),
+    Text(String),
+}
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct EvalLabEvidenceSearchRequest {
-    pub query: Option<String>,
+    pub query: EvalLabEvidenceSearchQuery,
     pub excluded_document_ids: Vec<DocumentId>,
     pub excluded_chunk_ids: Vec<ChunkId>,
     pub document_limit: u32,

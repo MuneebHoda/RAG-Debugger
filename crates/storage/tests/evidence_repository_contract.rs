@@ -1,8 +1,8 @@
 use rag_debugger_core::{
     ByteRange, Chunk, ChunkId, ChunkQualityFlag, ChunkSplitReason, ChunkingConfig,
-    ChunkingStrategy, Document, DocumentId, DocumentProfile, EvalLabEvidenceSearchRequest,
-    ExtractionQuality, Source, SourceId, SourceKind, SourceSyncPolicy,
-    EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT,
+    ChunkingStrategy, Document, DocumentId, DocumentProfile, EvalLabEvidenceSearchQuery,
+    EvalLabEvidenceSearchRequest, ExtractionQuality, Source, SourceId, SourceKind,
+    SourceSyncPolicy, EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT,
 };
 use rag_debugger_storage::{
     memory::MemoryStore,
@@ -144,7 +144,7 @@ where
 
     let excluded = repository
         .search_evidence(&EvalLabEvidenceSearchRequest {
-            query: Some("gpu".to_owned()),
+            query: EvalLabEvidenceSearchQuery::Text("gpu".to_owned()),
             excluded_document_ids: vec![zeta_document.id],
             excluded_chunk_ids: vec![zeta_chunk.id],
             document_limit: 2,
@@ -190,7 +190,13 @@ fn search_request(
     chunk_limit: u32,
 ) -> EvalLabEvidenceSearchRequest {
     EvalLabEvidenceSearchRequest {
-        query: query.map(str::to_owned),
+        query: match query {
+            None => EvalLabEvidenceSearchQuery::Browse,
+            Some(query) => uuid::Uuid::parse_str(query).map_or_else(
+                |_| EvalLabEvidenceSearchQuery::Text(query.to_lowercase()),
+                EvalLabEvidenceSearchQuery::ExactId,
+            ),
+        },
         excluded_document_ids: Vec::new(),
         excluded_chunk_ids: Vec::new(),
         document_limit,

@@ -42,6 +42,20 @@ export function EvidenceSelectionReview({
       normalizedSelection.documentIds.length > 0 ||
       normalizedSelection.chunkIds.length > 0,
   });
+  const resolvedDocumentIds = new Set(
+    (evidenceQuery.data?.documents ?? []).map((document) => document.id),
+  );
+  const resolvedChunkIds = new Set(
+    (evidenceQuery.data?.chunks ?? []).map((chunk) => chunk.id),
+  );
+  const unavailableDocumentIds = evidenceQuery.isError
+    ? normalizedSelection.documentIds.filter(
+        (id) => !resolvedDocumentIds.has(id),
+      )
+    : [];
+  const unavailableChunkIds = evidenceQuery.isError
+    ? normalizedSelection.chunkIds.filter((id) => !resolvedChunkIds.has(id))
+    : [];
 
   if (
     normalizedSelection.documentIds.length === 0 &&
@@ -155,6 +169,54 @@ export function EvidenceSelectionReview({
               </button>
             </div>
             <span>{compactId(id)} is no longer resolvable.</span>
+          </article>
+        ))}
+        {unavailableDocumentIds.map((id) => (
+          <article
+            className={`${styles.selectedItem} ${styles.danger}`}
+            key={`unavailable-document-${id}`}
+          >
+            <div className={styles.selectedHeader}>
+              <strong>Document metadata unavailable</strong>
+              <button
+                aria-label={`Remove document ${compactId(id)}`}
+                className="secondary-button compact"
+                type="button"
+                onClick={() =>
+                  onSelectionChange(removeEvidenceDocument(selection, id))
+                }
+              >
+                <X aria-hidden="true" size={14} />
+                Remove document
+              </button>
+            </div>
+            <span>
+              {compactId(id)} remains selected. Retry the lookup or remove it.
+            </span>
+          </article>
+        ))}
+        {unavailableChunkIds.map((id) => (
+          <article
+            className={`${styles.selectedItem} ${styles.danger}`}
+            key={`unavailable-chunk-${id}`}
+          >
+            <div className={styles.selectedHeader}>
+              <strong>Chunk metadata unavailable</strong>
+              <button
+                aria-label={`Remove chunk ${compactId(id)}`}
+                className="secondary-button compact"
+                type="button"
+                onClick={() =>
+                  onSelectionChange(removeEvidenceChunk(selection, id))
+                }
+              >
+                <X aria-hidden="true" size={14} />
+                Remove chunk
+              </button>
+            </div>
+            <span>
+              {compactId(id)} remains selected. Retry the lookup or remove it.
+            </span>
           </article>
         ))}
       </div>

@@ -11,6 +11,7 @@ import {
   addEvidenceChunk,
   addEvidenceDocument,
   compactId,
+  evidenceSearchError,
   normalizeEvidenceSelection,
   type EvidenceHitRef,
   type EvidenceSelection,
@@ -34,7 +35,11 @@ export function EvidencePicker({
 }: EvidencePickerProps) {
   const searchId = useId();
   const [searchInput, setSearchInput] = useState(query);
-  const [submittedQuery, setSubmittedQuery] = useState(query.trim());
+  const initialQuery = query.trim();
+  const [submittedQuery, setSubmittedQuery] = useState(
+    evidenceSearchError(initialQuery) ? "" : initialQuery,
+  );
+  const [searchError, setSearchError] = useState<string | null>(null);
   const normalizedSelection = normalizeEvidenceSelection(selection);
   const evidenceQuery = useQuery({
     queryKey: [
@@ -59,6 +64,12 @@ export function EvidencePicker({
 
   const submitSearch = () => {
     const nextQuery = searchInput.trim();
+    const validationError = evidenceSearchError(nextQuery);
+    if (validationError) {
+      setSearchError(validationError);
+      return;
+    }
+    setSearchError(null);
     if (nextQuery === submittedQuery) {
       void evidenceQuery.refetch();
     } else {
@@ -80,7 +91,12 @@ export function EvidencePicker({
           <input
             id={searchId}
             value={searchInput}
-            onChange={(event) => setSearchInput(event.currentTarget.value)}
+            aria-describedby={searchError ? `${searchId}-error` : undefined}
+            aria-invalid={searchError ? "true" : undefined}
+            onChange={(event) => {
+              setSearchInput(event.currentTarget.value);
+              setSearchError(null);
+            }}
             placeholder="Search path, section, chunk text, or paste an ID"
           />
           <button
@@ -97,6 +113,11 @@ export function EvidencePicker({
           </button>
         </span>
       </form>
+      {searchError ? (
+        <p className={styles.error} id={`${searchId}-error`} role="alert">
+          {searchError}
+        </p>
+      ) : null}
       <p className={styles.empty}>
         Use exact chunks when a specific passage must be retrieved. Use
         document-level evidence only when any suitable chunk from that document

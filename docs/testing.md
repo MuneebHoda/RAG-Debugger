@@ -49,6 +49,7 @@ cargo test -p rag-debugger-storage --test memory_store_contract
 cargo test -p rag-debugger-storage --test report_store_contract
 cargo test -p rag-debugger-storage --test evidence_repository_contract
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/rag_debugger cargo test -p rag-debugger-storage --test evidence_repository_contract postgres_evidence_repository_is_deterministic_and_bounded -- --ignored
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/rag_debugger cargo test -p rag-debugger-storage postgres_evidence_query_plans_are_index_compatible -- --ignored
 cargo test -p rag-debugger-rag --test report_markdown_snapshots
 cargo test -p rag-debugger-rag --test public_fixtures
 ```
@@ -75,7 +76,7 @@ Expected coverage in the scaffold:
 - Test Retrieval render and mocked query tests, including one mode control, collapsed advanced settings, evidence summary, score bars, citations, and direct debugger navigation.
 - Runs tests for search/list navigation, primary diagnosis, backend failure labels and recommendations, per-evidence score explanations, rerun diagnosis comparison, and explicit dataset/evidence selection for Quality.
 - Quality tests for the overview, focused dataset case management, experiment controls, gate-first result view, mode metrics, and failure diagnosis.
-- Eval Lab expected-evidence tests for explicit Search/Enter submission, cancellable stale requests, independent candidate limits, searchable document/chunk lookup, compact previews, deduplication, stale evidence labels and removal, omitted-versus-present PATCH semantics, nullable note clearing, atomic repair failures, cancellation, immediate reopen during delayed refetch, similar-case warnings, save-from-Retrieval, save-from-Trace, and text-labeled evidence states.
+- Eval Lab expected-evidence tests for explicit Search/Enter submission, local short-query rejection, cancellable stale requests, independent candidate limits, bounded submitted-ID work, exact-UUID routing, searchable document/chunk lookup, compact previews, deduplication, metadata-error preservation, stale evidence labels and removal, omitted-versus-present PATCH semantics, nullable note clearing, atomic repair failures, cancellation, immediate reopen during delayed refetch, similar-case warnings, save-from-Retrieval, save-from-Trace, and text-labeled evidence states.
 - Auth tests for backend login/signup integration and session validation.
 - Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.
 - CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.
@@ -93,6 +94,8 @@ Expected coverage in the scaffold:
 - Workbench workflow tests verify that Home, Corpus, Retrieval, Trace Debugger, Eval Lab, CI Runs, Audit Reports, and Settings explain their page purpose, quality-loop position, and recommended next action.
 - Eval Lab UI tests verify trend cards, dataset experiment history, experiment regression panels, explicit baseline selection, compatibility warnings, no-baseline states, failed-case diagnosis, and audit-report actions without duplicating backend regression logic.
 - Expected-evidence tests live under `features/workbench/eval-lab/evidence` and cover picker behavior, explicit expectation-only versus completed-retrieval contexts, real parent-document resolution, zero-hit results, wrong-chunk classification, unavailable metadata, and contradiction prevention separately from page rendering.
+
+The migrated Postgres gate runs both the MemoryStore/Postgres evidence contract and `postgres_evidence_query_plans_are_index_compatible`. The plan fixture contains 20,000 documents and 60,000 chunks and verifies browse B-tree indexes, exact primary-key paths, selective path/section/body trigram indexes, and the absence of a full-corpus chunk scan or sort for limit-one browsing. The test does not disable sequential scans or other planner choices.
 
 Feature tests live with implementations under `apps/web/src/features/workbench/<domain>`. Files under `apps/web/src/pages` are thin route wrappers and are not the primary home for workflow tests. Pure feature utilities should be tested without rendering React.
 

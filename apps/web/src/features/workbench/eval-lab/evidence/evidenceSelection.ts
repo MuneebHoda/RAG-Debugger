@@ -397,6 +397,21 @@ export function compactId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…${id.slice(-4)}` : id;
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function evidenceSearchError(query: string): string | null {
+  const normalized = query.trim();
+  if (
+    normalized.length === 0 ||
+    UUID_PATTERN.test(normalized) ||
+    Array.from(normalized).length >= 3
+  ) {
+    return null;
+  }
+  return "Enter at least 3 characters, paste an exact UUID, or leave blank to browse.";
+}
+
 function caseLevelState(kind: EvidenceStateKind, label: string): EvidenceState {
   return {
     kind,

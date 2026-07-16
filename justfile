@@ -59,6 +59,7 @@ ci-check: rust-check web-check
     docker compose up -d postgres
     DATABASE_URL='{{ database_url }}' sqlx migrate run
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test evidence_repository_contract postgres_evidence_repository_is_deterministic_and_bounded -- --ignored
+    DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage postgres_evidence_query_plans_are_index_compatible -- --ignored
 
 check: rust-check web-check
 
