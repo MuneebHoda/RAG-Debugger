@@ -3,14 +3,15 @@ use axum::{
     Json,
 };
 use rag_debugger_core::{
-    Chunk, ChunkId, CompareRetrievalEvalExperimentRequest, CreateRetrievalEvalDatasetRequest,
-    CreateRetrievalEvalLabCaseRequest, DocumentId, EvalLabEvidenceChunk, EvalLabEvidenceDocument,
+    ChunkId, CompareRetrievalEvalExperimentRequest, CreateRetrievalEvalDatasetRequest,
+    CreateRetrievalEvalLabCaseRequest, DocumentId, EvalLabEvidenceSearchRequest,
     QueryEvalLabEvidenceRequest, QueryEvalLabEvidenceResponse, RetrievalEvalCase,
     RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
     RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
     RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
     RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
-    RunRetrievalEvalExperimentRequest, SourceSummary, UpdateRetrievalEvalCaseRequest,
+    RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest,
+    EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
@@ -22,7 +23,7 @@ use rag_debugger_rag::{
     retrieval::LocalHybridRetriever,
     RagError,
 };
-use rag_debugger_storage::repository::AppRepository;
+use rag_debugger_storage::repository::EvidenceRepository;
 use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -404,83 +405,56 @@ pub async fn compare_experiment(
 }
 
 async fn build_evidence_response(
-    repository: &dyn AppRepository,
+    repository: &(impl EvidenceRepository + ?Sized),
     request: &QueryEvalLabEvidenceRequest,
 ) -> Result<QueryEvalLabEvidenceResponse, ApiError> {
-    let sources = repository.list_sources().await?;
-    let limit = request.limit.unwrap_or(25).clamp(1, 100) as usize;
-    let query = normalized_search(request.query.as_deref());
     let document_ids = dedupe_document_ids(request.document_ids.clone());
     let chunk_ids = dedupe_chunk_ids(request.chunk_ids.clone());
-
-    let mut documents = Vec::new();
-    let mut chunks = Vec::new();
-    let mut found_document_ids = Vec::new();
-    let mut found_chunk_ids = Vec::new();
-    let requested_documents = document_ids
+    let mut documents = repository.resolve_evidence_documents(&document_ids).await?;
+    let mut chunks = repository.resolve_evidence_chunks(&chunk_ids).await?;
+    let found_document_ids = documents
         .iter()
-        .map(|document_id| document_id.0)
+        .map(|document| document.id)
         .collect::<Vec<_>>();
-    let requested_chunks = chunk_ids
-        .iter()
-        .map(|chunk_id| chunk_id.0)
-        .collect::<Vec<_>>();
-
-    for source in &sources {
-        for summary in &source.documents {
-            let document = &summary.document;
-            let requested_document = requested_documents.contains(&document.id.0);
-            let document_matches = requested_document
-                || query
-                    .as_deref()
-                    .is_none_or(|needle| document_matches_query(source, summary, needle));
-
-            let should_fetch_chunks = request.include_chunks
-                || !requested_chunks.is_empty()
-                || (query.is_some() && chunks.len() < limit);
-            let document_chunks = if should_fetch_chunks {
-                repository.list_document_chunks(document.id).await?
-            } else {
-                Vec::new()
-            };
-
-            if requested_document {
-                found_document_ids.push(document.id);
-            }
-
-            if document_matches && (requested_document || documents.len() < limit) {
-                documents.push(evidence_document(source, summary));
-            }
-
-            for chunk in document_chunks {
-                let requested_chunk = requested_chunks.contains(&chunk.id.0);
-                if requested_chunk {
-                    found_chunk_ids.push(chunk.id);
-                }
-                if requested_chunk
-                    || (request.include_chunks
-                        && query.as_deref().is_none_or(|needle| {
-                            chunk_matches_query(&chunk, source, summary, needle)
-                        }))
-                {
-                    chunks.push(evidence_chunk(source, summary, &chunk));
-                }
-            }
-        }
-    }
-
-    documents.sort_by_key(|document| !requested_documents.contains(&document.id.0));
-    chunks.sort_by_key(|chunk| !requested_chunks.contains(&chunk.id.0));
-    documents.truncate(limit);
-    chunks.truncate(limit);
+    let found_chunk_ids = chunks.iter().map(|chunk| chunk.id).collect::<Vec<_>>();
     let unresolved_document_ids = document_ids
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|document_id| !found_document_ids.contains(document_id))
         .collect();
     let unresolved_chunk_ids = chunk_ids
-        .into_iter()
+        .iter()
+        .copied()
         .filter(|chunk_id| !found_chunk_ids.contains(chunk_id))
         .collect();
+
+    let document_limit = candidate_limit(request.document_limit, request.limit);
+    let chunk_limit = if request.include_chunks {
+        candidate_limit(request.chunk_limit, request.limit)
+    } else {
+        0
+    };
+    if document_limit > 0 || chunk_limit > 0 {
+        let candidates = repository
+            .search_evidence(&EvalLabEvidenceSearchRequest {
+                query: normalized_search(request.query.as_deref()),
+                excluded_document_ids: document_ids,
+                excluded_chunk_ids: chunk_ids,
+                document_limit,
+                chunk_limit,
+            })
+            .await?;
+        for candidate in candidates.documents {
+            if !documents.iter().any(|document| document.id == candidate.id) {
+                documents.push(candidate);
+            }
+        }
+        for candidate in candidates.chunks {
+            if !chunks.iter().any(|chunk| chunk.id == candidate.id) {
+                chunks.push(candidate);
+            }
+        }
+    }
 
     Ok(QueryEvalLabEvidenceResponse {
         documents,
@@ -491,7 +465,7 @@ async fn build_evidence_response(
 }
 
 async fn validate_expected_evidence(
-    repository: &dyn AppRepository,
+    repository: &(impl EvidenceRepository + ?Sized),
     chunk_ids: &[ChunkId],
     document_ids: &[DocumentId],
 ) -> Result<(), ApiError> {
@@ -499,19 +473,10 @@ async fn validate_expected_evidence(
         return Ok(());
     }
 
-    let response = build_evidence_response(
-        repository,
-        &QueryEvalLabEvidenceRequest {
-            query: None,
-            document_ids: document_ids.to_vec(),
-            chunk_ids: chunk_ids.to_vec(),
-            limit: Some((chunk_ids.len() + document_ids.len()).max(1) as u32),
-            include_chunks: true,
-        },
-    )
-    .await?;
+    let resolved_documents = repository.resolve_evidence_documents(document_ids).await?;
+    let resolved_chunks = repository.resolve_evidence_chunks(chunk_ids).await?;
 
-    if response.unresolved_document_ids.is_empty() && response.unresolved_chunk_ids.is_empty() {
+    if resolved_documents.len() == document_ids.len() && resolved_chunks.len() == chunk_ids.len() {
         Ok(())
     } else {
         Err(ApiError::BadRequest(
@@ -521,75 +486,21 @@ async fn validate_expected_evidence(
     }
 }
 
-fn evidence_document(
-    source: &SourceSummary,
-    summary: &rag_debugger_core::DocumentSummary,
-) -> EvalLabEvidenceDocument {
-    EvalLabEvidenceDocument {
-        id: summary.document.id,
-        source_id: source.source.id,
-        source_name: source.source.name.clone(),
-        path: summary.document.path.clone(),
-        profile: summary.document.profile,
-        extraction_quality: summary.document.extraction_quality,
-        warnings: summary.document.warnings.clone(),
-        chunk_count: summary.chunk_count,
-    }
-}
-
-fn evidence_chunk(
-    source: &SourceSummary,
-    summary: &rag_debugger_core::DocumentSummary,
-    chunk: &Chunk,
-) -> EvalLabEvidenceChunk {
-    EvalLabEvidenceChunk {
-        id: chunk.id,
-        document_id: chunk.document_id,
-        source_id: source.source.id,
-        source_name: source.source.name.clone(),
-        document_path: summary.document.path.clone(),
-        ordinal: chunk.ordinal,
-        text: chunk.text.clone(),
-        token_count: chunk.token_count,
-        checksum: chunk.checksum.clone(),
-        section_title: chunk.section_title.clone(),
-        quality_flags: chunk.quality_flags.clone(),
-        is_duplicate: chunk.is_duplicate,
-        text_density: chunk.text_density,
-        evidence_score_hint: chunk.evidence_score_hint,
-    }
-}
-
-fn document_matches_query(
-    source: &SourceSummary,
-    summary: &rag_debugger_core::DocumentSummary,
-    needle: &str,
-) -> bool {
-    source.source.name.to_lowercase().contains(needle)
-        || summary.document.path.to_lowercase().contains(needle)
-        || summary.document.id.0.to_string().contains(needle)
-}
-
-fn chunk_matches_query(
-    chunk: &Chunk,
-    source: &SourceSummary,
-    summary: &rag_debugger_core::DocumentSummary,
-    needle: &str,
-) -> bool {
-    document_matches_query(source, summary, needle)
-        || chunk.text.to_lowercase().contains(needle)
-        || chunk
-            .section_title
-            .as_ref()
-            .is_some_and(|section| section.to_lowercase().contains(needle))
-        || chunk.id.0.to_string().contains(needle)
-}
-
 fn normalized_search(query: Option<&str>) -> Option<String> {
     query
         .map(str::trim)
         .filter(|query| !query.is_empty())
         .map(str::to_lowercase)
+}
+
+fn candidate_limit(specific: Option<u32>, legacy: Option<u32>) -> u32 {
+    specific
+        .map(|limit| limit.min(EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT))
+        .unwrap_or_else(|| {
+            legacy
+                .unwrap_or(EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT)
+                .clamp(1, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT)
+        })
 }
 
 fn eval_case_from_request(
@@ -734,5 +645,98 @@ fn not_found_to_api(
             ApiError::NotFound(format!("{label} not found"))
         }
         other => ApiError::Storage(other),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    use async_trait::async_trait;
+    use rag_debugger_core::{
+        EvalLabEvidenceChunk, EvalLabEvidenceDocument, EvalLabEvidenceSearchResult,
+    };
+    use rag_debugger_storage::StorageError;
+
+    use super::*;
+
+    #[derive(Default)]
+    struct CountingEvidenceRepository {
+        document_resolutions: AtomicUsize,
+        chunk_resolutions: AtomicUsize,
+        searches: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl EvidenceRepository for CountingEvidenceRepository {
+        async fn resolve_evidence_documents(
+            &self,
+            _document_ids: &[DocumentId],
+        ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError> {
+            self.document_resolutions.fetch_add(1, Ordering::Relaxed);
+            Ok(Vec::new())
+        }
+
+        async fn resolve_evidence_chunks(
+            &self,
+            _chunk_ids: &[ChunkId],
+        ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError> {
+            self.chunk_resolutions.fetch_add(1, Ordering::Relaxed);
+            Ok(Vec::new())
+        }
+
+        async fn search_evidence(
+            &self,
+            _request: &EvalLabEvidenceSearchRequest,
+        ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
+            self.searches.fetch_add(1, Ordering::Relaxed);
+            Ok(EvalLabEvidenceSearchResult::default())
+        }
+    }
+
+    #[tokio::test]
+    async fn evidence_response_uses_three_fixed_repository_calls() {
+        let repository = CountingEvidenceRepository::default();
+        let document_id = DocumentId(Uuid::now_v7());
+        let chunk_id = ChunkId(Uuid::now_v7());
+
+        let response = build_evidence_response(
+            &repository,
+            &QueryEvalLabEvidenceRequest {
+                query: Some("account recovery".to_owned()),
+                document_ids: vec![document_id],
+                chunk_ids: vec![chunk_id],
+                limit: None,
+                document_limit: Some(10),
+                chunk_limit: Some(10),
+                include_chunks: true,
+            },
+        )
+        .await
+        .expect("bounded evidence response");
+
+        assert_eq!(response.unresolved_document_ids, vec![document_id]);
+        assert_eq!(response.unresolved_chunk_ids, vec![chunk_id]);
+        assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 1);
+        assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 1);
+        assert_eq!(repository.searches.load(Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn case_validation_never_runs_candidate_search() {
+        let repository = CountingEvidenceRepository::default();
+
+        let error = validate_expected_evidence(
+            &repository,
+            &[ChunkId(Uuid::now_v7())],
+            &[DocumentId(Uuid::now_v7())],
+        )
+        .await
+        .expect_err("unresolved evidence is rejected");
+
+        assert!(matches!(error, ApiError::BadRequest(_)));
+        assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 1);
+        assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 1);
+        assert_eq!(repository.searches.load(Ordering::Relaxed), 0);
     }
 }

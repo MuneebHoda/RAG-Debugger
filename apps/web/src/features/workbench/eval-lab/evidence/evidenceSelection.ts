@@ -485,7 +485,7 @@ function chunkLabel(chunk: EvalLabEvidenceChunk): string {
 }
 
 function chunkSnippet(chunk: EvalLabEvidenceChunk): string | undefined {
-  const text = chunk.text.trim();
+  const text = chunk.text_preview.trim();
   if (!text) {
     return undefined;
   }

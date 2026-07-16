@@ -90,6 +90,7 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `GET /api/v1/eval-lab/datasets`: list Eval Lab datasets.
 - `POST /api/v1/eval-lab/datasets`: create an Eval Lab dataset.
 - `GET /api/v1/eval-lab/datasets/:dataset_id`: load a dataset with cases.
+- `POST /api/v1/eval-lab/evidence/query`: resolve selected evidence IDs and search bounded document/chunk candidates.
 - `POST /api/v1/eval-lab/datasets/:dataset_id/cases`: add a case to a dataset.
 - `PATCH /api/v1/eval-lab/cases/:case_id`: update a case.
 - `DELETE /api/v1/eval-lab/cases/:case_id`: delete a case.
@@ -107,6 +108,8 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 Migrations are in `migrations`.
 
 Core tables include `organizations`, `workspaces`, `users`, `workspace_memberships`, `auth_sessions`, `api_keys`, `projects`, `sources`, `ingestion_runs`, `documents`, `chunks`, `chunk_embeddings`, `retrieval_playground_runs`, `retrieval_playground_hits`, `debug_traces`, `trace_rerun_experiments`, `retrieval_eval_datasets`, `retrieval_eval_cases`, `retrieval_eval_runs`, `retrieval_eval_results`, `retrieval_eval_experiments`, and `ci_eval_runs`.
+
+The Eval Lab evidence-search migration enables `pg_trgm` and adds GIN indexes for normalized source names, document paths, chunk section titles, and chunk text. UUID primary keys continue serving direct requested-ID resolution. The migration changes indexes only and does not rewrite corpus records.
 
 Recent metadata additions:
 
@@ -253,6 +256,8 @@ Metrics include recall@k, precision@k, MRR, top hit rank, citation coverage, wea
 The default gate passes when average recall@k is at least `0.80`, critical missing-embedding failures are absent, and weak-evidence cases are at or below 20%. Failed gates appear in Mission Control and point users to `/app/evals`.
 
 Eval Lab v2 adds regression read models over saved experiments. Dataset history and trend endpoints compare the latest run with the previous compatible baseline for the same dataset, `top_k`, and retrieval-mode set. Experiment detail surfaces gate movement, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels. Audit reports created from experiments include that regression context when available while preserving metadata-only privacy.
+
+Expected-evidence lookup has a dedicated bounded storage contract. Explicit document and chunk IDs resolve directly in deduplicated request order and do not consume candidate limits. Additional documents and chunks use independent limits, deterministic ordering, and Postgres trigram indexes over source names, document paths, section titles, and chunk text. Chunk results contain a 280-character Unicode-safe preview and a truncation flag rather than unrestricted body text. The workbench submits searches only through Search or Enter while selection changes continue resolving selected metadata through cancellable React Query requests.
 
 Legacy cases may retain expected-evidence IDs whose source data was deleted or is no longer accessible. Case updates preserve omitted evidence arrays without revalidation, while present arrays replace and validate the corresponding selection. The workbench tracks evidence changes as normalized ID sets, exposes explicit stale-item removal, sends empty arrays only for intentional clearing, and restores persisted drafts on cancellation. Validation completes before the merged case is stored, so failed repairs cannot partially persist unrelated edits.
 

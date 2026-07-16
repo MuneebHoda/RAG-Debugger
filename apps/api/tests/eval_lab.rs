@@ -185,6 +185,139 @@ async fn eval_lab_manages_datasets_and_cases() {
 }
 
 #[tokio::test]
+async fn evidence_lookup_separates_requested_items_from_bounded_candidates() {
+    let app = test_app();
+    let _alpha = upload_text_file(&app, "aaa-indexing.md", "Indexing candidate alpha.").await;
+    let beta = upload_text_file(&app, "bbb-indexing.md", "Indexing candidate beta.").await;
+    let _gamma = upload_text_file(&app, "ccc-indexing.md", "Indexing candidate gamma.").await;
+    let selected = upload_text_file(
+        &app,
+        "zzz-indexing.md",
+        &format!("Indexing selected evidence {}", "é".repeat(400)),
+    )
+    .await;
+    let selected_document_id = selected["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("selected document id");
+    let selected_chunk_id = selected["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("selected chunk id");
+    let beta_document_id = beta["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("beta document id");
+    let beta_chunk_id = beta["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("beta chunk id");
+    let missing_document_id = "018f7a2a-6e2e-7000-a000-000000000991";
+    let missing_chunk_id = "018f7a2a-6e2e-7000-a000-000000000992";
+
+    let request = json!({
+        "query": "indexing",
+        "document_ids": [selected_document_id, beta_document_id, selected_document_id, missing_document_id],
+        "chunk_ids": [selected_chunk_id, beta_chunk_id, selected_chunk_id, missing_chunk_id],
+        "document_limit": 2,
+        "chunk_limit": 2,
+        "include_chunks": true
+    });
+    let first = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/evidence/query",
+        request.clone(),
+    )
+    .await;
+    let second = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/evidence/query",
+        request,
+    )
+    .await;
+    assert_eq!(first, second, "evidence ordering must be stable");
+
+    let documents = first["documents"].as_array().expect("documents");
+    let chunks = first["chunks"].as_array().expect("chunks");
+    assert_eq!(
+        documents.len(),
+        4,
+        "two requested items plus two candidates"
+    );
+    assert_eq!(chunks.len(), 4, "two requested items plus two candidates");
+    assert_eq!(documents[0]["id"], selected_document_id);
+    assert_eq!(documents[1]["id"], beta_document_id);
+    assert_eq!(chunks[0]["id"], selected_chunk_id);
+    assert_eq!(chunks[1]["id"], beta_chunk_id);
+    assert_eq!(documents[2]["path"], "aaa-indexing.md");
+    assert_eq!(documents[3]["path"], "ccc-indexing.md");
+    assert_eq!(
+        documents
+            .iter()
+            .filter(|document| document["id"] == selected_document_id)
+            .count(),
+        1
+    );
+    assert_eq!(
+        chunks
+            .iter()
+            .filter(|chunk| chunk["id"] == selected_chunk_id)
+            .count(),
+        1
+    );
+    assert_eq!(
+        first["unresolved_document_ids"],
+        json!([missing_document_id])
+    );
+    assert_eq!(first["unresolved_chunk_ids"], json!([missing_chunk_id]));
+
+    let preview = chunks[0]["text_preview"].as_str().expect("chunk preview");
+    assert_eq!(preview.chars().count(), 280);
+    assert_eq!(chunks[0]["preview_truncated"], true);
+    assert!(preview.is_char_boundary(preview.len()));
+
+    let direct_chunk_only = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/evidence/query",
+        json!({
+            "document_ids": [],
+            "chunk_ids": [selected_chunk_id],
+            "document_limit": 0,
+            "chunk_limit": 100,
+            "include_chunks": false
+        }),
+    )
+    .await;
+    assert!(direct_chunk_only["documents"]
+        .as_array()
+        .expect("direct documents")
+        .is_empty());
+    assert_eq!(
+        direct_chunk_only["chunks"]
+            .as_array()
+            .expect("direct chunks")
+            .len(),
+        1
+    );
+    assert_eq!(direct_chunk_only["chunks"][0]["id"], selected_chunk_id);
+
+    let legacy_limit = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/evidence/query",
+        json!({ "query": "indexing", "limit": 1, "include_chunks": true }),
+    )
+    .await;
+    assert_eq!(
+        legacy_limit["documents"]
+            .as_array()
+            .expect("documents")
+            .len(),
+        1
+    );
+    assert_eq!(legacy_limit["chunks"].as_array().expect("chunks").len(), 1);
+}
+
+#[tokio::test]
 async fn update_case_repairs_legacy_stale_evidence_atomically() {
     let (app, store) = test_app_with_store();
     let upload = upload_text_file(

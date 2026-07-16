@@ -158,8 +158,29 @@ pub struct QueryEvalLabEvidenceRequest {
     #[serde(default)]
     pub chunk_ids: Vec<ChunkId>,
     pub limit: Option<u32>,
+    pub document_limit: Option<u32>,
+    pub chunk_limit: Option<u32>,
     #[serde(default)]
     pub include_chunks: bool,
+}
+
+pub const EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT: u32 = 25;
+pub const EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT: u32 = 100;
+pub const EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT: usize = 280;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EvalLabEvidenceSearchRequest {
+    pub query: Option<String>,
+    pub excluded_document_ids: Vec<DocumentId>,
+    pub excluded_chunk_ids: Vec<ChunkId>,
+    pub document_limit: u32,
+    pub chunk_limit: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EvalLabEvidenceSearchResult {
+    pub documents: Vec<EvalLabEvidenceDocument>,
+    pub chunks: Vec<EvalLabEvidenceChunk>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -190,7 +211,8 @@ pub struct EvalLabEvidenceChunk {
     pub source_name: String,
     pub document_path: String,
     pub ordinal: u32,
-    pub text: String,
+    pub text_preview: String,
+    pub preview_truncated: bool,
     pub token_count: u32,
     pub checksum: String,
     pub section_title: Option<String>,
@@ -656,7 +678,8 @@ mod tests {
                 source_name: "Support KB".to_owned(),
                 document_path: "support/account-recovery.md".to_owned(),
                 ordinal: 0,
-                text: "Password reset links expire after fifteen minutes.".to_owned(),
+                text_preview: "Password reset links expire after fifteen minutes.".to_owned(),
+                preview_truncated: false,
                 token_count: 7,
                 checksum: "abc123".to_owned(),
                 section_title: Some("Account recovery".to_owned()),
@@ -680,6 +703,28 @@ mod tests {
         let round_trip: QueryEvalLabEvidenceResponse =
             serde_json::from_value(json).expect("evidence deserializes");
         assert_eq!(round_trip, response);
+    }
+
+    #[test]
+    fn evidence_lookup_request_keeps_legacy_and_independent_limits_optional() {
+        let request: QueryEvalLabEvidenceRequest = serde_json::from_value(json!({
+            "query": "indexing",
+            "limit": 2,
+            "include_chunks": true
+        }))
+        .expect("legacy evidence request deserializes");
+
+        assert_eq!(request.limit, Some(2));
+        assert_eq!(request.document_limit, None);
+        assert_eq!(request.chunk_limit, None);
+
+        let explicit: QueryEvalLabEvidenceRequest = serde_json::from_value(json!({
+            "document_limit": 0,
+            "chunk_limit": 12
+        }))
+        .expect("independent evidence limits deserialize");
+        assert_eq!(explicit.document_limit, Some(0));
+        assert_eq!(explicit.chunk_limit, Some(12));
     }
 
     #[test]

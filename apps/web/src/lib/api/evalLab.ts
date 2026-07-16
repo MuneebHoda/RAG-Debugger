@@ -109,6 +109,8 @@ export interface QueryEvalLabEvidenceRequest {
   document_ids?: string[];
   chunk_ids?: string[];
   limit?: number;
+  document_limit?: number;
+  chunk_limit?: number;
   include_chunks?: boolean;
 }
 
@@ -130,7 +132,8 @@ export interface EvalLabEvidenceChunk {
   source_name: string;
   document_path: string;
   ordinal: number;
-  text: string;
+  text_preview: string;
+  preview_truncated: boolean;
   token_count: number;
   checksum: string;
   section_title: string | null;

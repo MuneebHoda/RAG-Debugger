@@ -33,44 +33,60 @@ export function EvidencePicker({
   onSelectionChange,
 }: EvidencePickerProps) {
   const searchId = useId();
-  const [search, setSearch] = useState(query);
+  const [searchInput, setSearchInput] = useState(query);
+  const [submittedQuery, setSubmittedQuery] = useState(query.trim());
   const normalizedSelection = normalizeEvidenceSelection(selection);
   const evidenceQuery = useQuery({
     queryKey: [
       "eval-lab-evidence",
-      search,
+      submittedQuery,
       normalizedSelection.documentIds,
       normalizedSelection.chunkIds,
     ],
     queryFn: ({ signal }) =>
       queryEvalLabEvidence(
         {
-          query: search,
+          query: submittedQuery,
           document_ids: normalizedSelection.documentIds,
           chunk_ids: normalizedSelection.chunkIds,
           include_chunks: true,
-          limit: 24,
+          document_limit: 24,
+          chunk_limit: 24,
         },
         signal,
       ),
   });
 
+  const submitSearch = () => {
+    const nextQuery = searchInput.trim();
+    if (nextQuery === submittedQuery) {
+      void evidenceQuery.refetch();
+    } else {
+      setSubmittedQuery(nextQuery);
+    }
+  };
+
   return (
     <div className={styles.picker}>
-      <label className={styles.field} htmlFor={searchId}>
-        {label}
+      <form
+        className={styles.field}
+        onSubmit={(event) => {
+          event.preventDefault();
+          submitSearch();
+        }}
+      >
+        <label htmlFor={searchId}>{label}</label>
         <span className={styles.searchRow}>
           <input
             id={searchId}
-            value={search}
-            onChange={(event) => setSearch(event.currentTarget.value)}
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.currentTarget.value)}
             placeholder="Search path, section, chunk text, or paste an ID"
           />
           <button
             className="secondary-button compact"
-            disabled={evidenceQuery.isFetching}
-            type="button"
-            onClick={() => void evidenceQuery.refetch()}
+            aria-busy={evidenceQuery.isFetching}
+            type="submit"
           >
             {evidenceQuery.isFetching ? (
               <Loader2 aria-hidden="true" className="spin" size={15} />
@@ -80,7 +96,7 @@ export function EvidencePicker({
             Search
           </button>
         </span>
-      </label>
+      </form>
       <p className={styles.empty}>
         Use exact chunks when a specific passage must be retrieved. Use
         document-level evidence only when any suitable chunk from that document
@@ -215,7 +231,8 @@ function EvidenceChunkOptions({
               </strong>
               <span>
                 {chunk.section_title ? `${chunk.section_title} · ` : ""}
-                {chunk.text.slice(0, 150)}
+                {chunk.text_preview}
+                {chunk.preview_truncated ? "…" : ""}
               </span>
               {chunk.quality_flags.length > 0 ? (
                 <span className={styles.badgeRow}>

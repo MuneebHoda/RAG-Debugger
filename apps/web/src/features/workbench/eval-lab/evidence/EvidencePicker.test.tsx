@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -76,6 +76,112 @@ describe("EvidencePicker", () => {
     });
   });
 
+  it("submits search explicitly and does not request on each keystroke", async () => {
+    renderPicker();
+    expect(
+      await findPreview("GPU workers refresh embeddings."),
+    ).toBeInTheDocument();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+    const input = screen.getByLabelText("Search corpus evidence");
+
+    fireEvent.change(input, { target: { value: "v" } });
+    fireEvent.change(input, { target: { value: "vector" } });
+    fireEvent.change(input, { target: { value: "vector index" } });
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(requestBody(fetchMock.mock.calls[0][1])).toMatchObject({
+      query: "vector index",
+      document_limit: 24,
+      chunk_limit: 24,
+      include_chunks: true,
+    });
+    expect(fetchMock.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("submits with Enter and supports bounded empty-query browsing", async () => {
+    renderPicker();
+    await findPreview("GPU workers refresh embeddings.");
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+    const input = screen.getByLabelText("Search corpus evidence");
+
+    fireEvent.change(input, { target: { value: "section title" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(requestBody(fetchMock.mock.calls[0][1]).query).toBe("section title");
+
+    fetchMock.mockClear();
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(requestBody(fetchMock.mock.calls[0][1])).toMatchObject({
+      query: "",
+      document_limit: 24,
+      chunk_limit: 24,
+    });
+  });
+
+  it("refreshes selected metadata without changing the submitted query", async () => {
+    renderPicker();
+    const addChunk = await screen.findByRole("button", {
+      name: "Expect this exact chunk",
+    });
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockClear();
+
+    fireEvent.click(addChunk);
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(requestBody(fetchMock.mock.calls[0][1])).toMatchObject({
+      query: "gpu indexing",
+      chunk_ids: [chunkId],
+    });
+  });
+
+  it("keeps newer search results when an older request resolves late", async () => {
+    const slow = deferred<Response>();
+    let slowSignal: AbortSignal | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        const body = requestBody(init);
+        if (body.query === "slow query") {
+          slowSignal = init?.signal ?? null;
+          return slow.promise;
+        }
+        if (body.query === "fast query") {
+          return responseJson(evidenceWithPreview("Fast evidence"));
+        }
+        return responseJson(evidenceWithPreview("Initial evidence"));
+      }),
+    );
+    renderPicker();
+    await findPreview("Initial evidence");
+    const input = screen.getByLabelText("Search corpus evidence");
+
+    fireEvent.change(input, { target: { value: "slow query" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    await waitFor(() => expect(slowSignal).not.toBeNull());
+    fireEvent.change(input, { target: { value: "fast query" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    expect(await findPreview("Fast evidence")).toBeInTheDocument();
+
+    slow.resolve(await responseJson(evidenceWithPreview("Stale evidence")));
+    await waitFor(() => expect(slowSignal?.aborted).toBe(true));
+    expect(findPreviewNow("Fast evidence")).toBeInTheDocument();
+    expect(findPreviewNow("Stale evidence")).not.toBeInTheDocument();
+  });
+
+  it("renders bounded previews with an explicit truncation marker", async () => {
+    evidenceResponse = evidenceWithPreview("Bounded evidence", true);
+    renderPicker();
+
+    expect(await findPreview("Bounded evidence…")).toBeInTheDocument();
+  });
+
   it("keeps stale evidence visible until its accessible controls remove it", async () => {
     evidenceResponse = resolvedEvidence({
       documents: [],
@@ -94,6 +200,12 @@ describe("EvidencePicker", () => {
     expect(
       screen.getByText("Stale/deleted expected chunk"),
     ).toBeInTheDocument();
+    expect(requestBody(vi.mocked(fetch).mock.calls[0][1])).toMatchObject({
+      document_ids: [staleDocumentId],
+      chunk_ids: [staleChunkId],
+      document_limit: 0,
+      chunk_limit: 0,
+    });
 
     const removeDocument = screen.getByRole("button", {
       name: /Remove stale document/,
@@ -179,11 +291,58 @@ function selectionJson(): EvidenceSelection {
   return JSON.parse(output.textContent ?? "{}") as EvidenceSelection;
 }
 
+function findPreview(text: string) {
+  return screen.findByText((_content, element) =>
+    isPreviewElement(element, text),
+  );
+}
+
+function findPreviewNow(text: string) {
+  return screen.queryByText((_content, element) =>
+    isPreviewElement(element, text),
+  );
+}
+
+function isPreviewElement(element: Element | null, text: string): boolean {
+  return (
+    element?.tagName === "SPAN" && element.textContent?.includes(text) === true
+  );
+}
+
 function responseJson(json: unknown) {
   return Promise.resolve({
     status: 200,
     json: async () => json,
+  } as Response);
+}
+
+function requestBody(init?: RequestInit): Record<string, unknown> {
+  return typeof init?.body === "string"
+    ? (JSON.parse(init.body) as Record<string, unknown>)
+    : {};
+}
+
+function evidenceWithPreview(
+  textPreview: string,
+  previewTruncated = false,
+): QueryEvalLabEvidenceResponse {
+  const response = baseEvidence();
+  return {
+    ...response,
+    chunks: response.chunks.map((chunk) => ({
+      ...chunk,
+      text_preview: textPreview,
+      preview_truncated: previewTruncated,
+    })),
+  };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
   });
+  return { promise, resolve };
 }
 
 function resolvedEvidence(
@@ -214,7 +373,8 @@ function baseEvidence(): QueryEvalLabEvidenceResponse {
         source_name: "Corpus",
         document_path: "platform-guide.md",
         ordinal: 1,
-        text: "GPU workers refresh embeddings.",
+        text_preview: "GPU workers refresh embeddings.",
+        preview_truncated: false,
         token_count: 5,
         checksum: "abcdef123456",
         section_title: "Indexing",

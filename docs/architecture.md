@@ -9,7 +9,7 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 - **API service:** Axum backend for health checks, runtime config, local auth, workspaces, API keys, ingestion, embedding status/indexing, retrieval, traces, evals, CI gates, and reports.
 - **Core crate:** Shared domain contracts for projects, sources, documents, chunks, traces, retrieval runs, evals, reports, config, models, and privacy mode.
 - **RAG crate:** File text extraction, structured and whitespace chunking, document intelligence, local embedding generation, hybrid retrieval, trace construction, eval scoring, ingestion, and retrieval interfaces. Implementations are intentionally replaceable.
-- **Storage crate:** Bounded repository traits for health, projects, sources, documents, embeddings, retrieval, traces, evals, auth, CI evals, and audit reports, plus Postgres and in-memory adapters.
+- **Storage crate:** Bounded repository traits for health, projects, sources, documents, evidence lookup, embeddings, retrieval, traces, evals, auth, CI evals, and audit reports, plus Postgres and in-memory adapters.
 - **Local collector:** Future local process that reads raw documents, builds indexes, runs local traces, and syncs approved summaries.
 - **Workers:** Future local or remote jobs for parsing, embedding, indexing, retrieval, reranking, generation, and eval scoring.
 
@@ -65,6 +65,7 @@ Current ingestion APIs:
 - `GET /api/v1/eval-lab/datasets`
 - `POST /api/v1/eval-lab/datasets`
 - `GET /api/v1/eval-lab/datasets/:dataset_id`
+- `POST /api/v1/eval-lab/evidence/query`
 - `POST /api/v1/eval-lab/datasets/:dataset_id/cases`
 - `PATCH /api/v1/eval-lab/cases/:case_id`
 - `DELETE /api/v1/eval-lab/cases/:case_id`
@@ -98,6 +99,8 @@ Trace debugging wraps retrieval responses into inspectable timelines. A trace st
 The guided demo is an orchestration layer over existing bounded contexts, not a parallel data model. Its fixtures pass through the shared API ingestion preparation service, then persist as normal workspace-owned project/source/document/chunk records. `DemoRepository` owns deterministic upserts and source-specific progress lookups. SHA-256-derived IDs and a versioned source marker make repeated loads repairable without a migration.
 
 Eval Lab is the release-readiness layer. It stores datasets, expected-evidence cases, cross-mode experiments, deterministic failure labels, and pass/fail gates. Retrieval and trace workflows can save observed evidence directly into a dataset so real debugging sessions become regression coverage.
+
+`EvidenceRepository` separates direct expected-evidence resolution from bounded candidate search. The API performs a fixed number of repository operations rather than walking sources and loading chunks once per document. Requested IDs retain stable request order and sit outside candidate limits. Postgres uses primary-key joins plus bounded trigram-indexed search; MemoryStore maintains a chunk-ID index for direct resolution. Evidence responses expose 280-character UTF-8-safe previews rather than complete chunk bodies.
 
 Local auth protects workbench APIs with opaque HttpOnly session cookies. Workspace-scoped API keys authorize CI automation and are stored only as hashes. The local auth provider owns signup/login/session validation today; an external provider can replace that boundary later.
 

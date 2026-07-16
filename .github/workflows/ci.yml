@@ -80,6 +80,12 @@ jobs:
         run: cargo install sqlx-cli --no-default-features --features rustls,postgres --locked
       - name: Run migrations
         run: sqlx migrate run
+      - name: Verify Postgres evidence repository contract
+        run: >-
+          cargo test -p rag-debugger-storage
+          --test evidence_repository_contract
+          postgres_evidence_repository_is_deterministic_and_bounded
+          -- --ignored
 
   docs:
     name: Documentation

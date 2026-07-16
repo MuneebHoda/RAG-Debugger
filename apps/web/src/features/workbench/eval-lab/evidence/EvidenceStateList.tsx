@@ -40,10 +40,8 @@ export function EvidenceStateList({
           document_ids: normalizedSelection.documentIds,
           chunk_ids: requestedChunkIds,
           include_chunks: false,
-          limit:
-            normalizedSelection.documentIds.length +
-            requestedChunkIds.length +
-            10,
+          document_limit: 0,
+          chunk_limit: 0,
         },
         signal,
       ),

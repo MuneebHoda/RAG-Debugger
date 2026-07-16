@@ -58,3 +58,7 @@ The guided demo uses only checked-in synthetic Markdown fixtures and local proce
 ## Debugger Intelligence v2 Review Note
 
 Structured diagnosis is derived locally from already persisted retrieval metadata. The diagnosis snapshot contains opaque IDs, ranks, scores, failure codes, counts, and deterministic remediation text; it does not copy raw queries, paths, section titles, snippets, chunk text, credentials, headers, cookies, or report bodies. No external call, new telemetry, sharing path, retention class, or authorization boundary is introduced. Metadata-only report tests verify that private source content cannot enter the diagnosis export, and full-local-only export remains blocked.
+
+## Expected-Evidence Lookup Review Note
+
+Evidence lookup remains an authenticated local workbench operation and introduces no external provider, telemetry, export, or retention class. Requested IDs resolve through existing storage authorization behavior. Candidate search returns only bounded metadata and 280-character chunk previews; unrestricted chunk bodies are no longer copied into evidence lookup responses. Queries, previews, credentials, headers, cookies, and database values are not logged. Broader workspace-isolation hardening remains a separate follow-up and is not claimed here.

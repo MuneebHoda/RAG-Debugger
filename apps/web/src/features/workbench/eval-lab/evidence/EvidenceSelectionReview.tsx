@@ -33,10 +33,8 @@ export function EvidenceSelectionReview({
           document_ids: normalizedSelection.documentIds,
           chunk_ids: normalizedSelection.chunkIds,
           include_chunks: true,
-          limit:
-            normalizedSelection.documentIds.length +
-            normalizedSelection.chunkIds.length +
-            10,
+          document_limit: 0,
+          chunk_limit: 0,
         },
         signal,
       ),

@@ -58,6 +58,7 @@ ci-check: rust-check web-check
     cd apps/web && npm run docs:pdf
     docker compose up -d postgres
     DATABASE_URL='{{ database_url }}' sqlx migrate run
+    DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test evidence_repository_contract postgres_evidence_repository_is_deterministic_and_bounded -- --ignored
 
 check: rust-check web-check
 

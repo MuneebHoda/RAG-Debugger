@@ -41,6 +41,8 @@ describe("EvidenceStateList", () => {
       document_ids: [documentId],
       chunk_ids: [expectedChunkId, retrievedChunkId],
       include_chunks: false,
+      document_limit: 0,
+      chunk_limit: 0,
     });
   });
 
@@ -136,7 +138,8 @@ function evidenceChunk(id: string, ordinal: number, text: string) {
     source_name: "Corpus",
     document_path: "platform-guide.md",
     ordinal,
-    text,
+    text_preview: text,
+    preview_truncated: false,
     token_count: 4,
     checksum: `checksum-${ordinal}`,
     section_title: "GPU Indexing",

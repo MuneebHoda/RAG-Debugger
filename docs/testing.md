@@ -28,6 +28,7 @@ Expected coverage in the scaffold:
 - API error contract tests for structured 400, 401, 404, and sanitized internal/storage responses.
 - Report API tests for session auth, trace/experiment/CI creation, default privacy, workspace-scoped list/detail, Markdown headers, missing reports, and full-local export rejection.
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
+- Evidence repository contract coverage for direct ordered ID resolution, bounded deterministic search, exclusions, source/path/section/body/ID matching, compact UTF-8 previews, and empty-query browsing across MemoryStore and migrated Postgres. An API call-count fake guards the fixed lookup shape: one document resolution, one chunk resolution, and at most one candidate search; case validation never invokes candidate search.
 - ReportRepository contract coverage for snapshot ordering, duplicate IDs, missing reports, and workspace isolation.
 - Domain serialization tests as contracts become public.
 - Audit-report contract tests for source discriminators, privacy-mode wire values, optional evidence metadata, RFC3339 timestamps, and JSON round trips.
@@ -46,6 +47,8 @@ Run the focused in-memory storage contract with:
 ```sh
 cargo test -p rag-debugger-storage --test memory_store_contract
 cargo test -p rag-debugger-storage --test report_store_contract
+cargo test -p rag-debugger-storage --test evidence_repository_contract
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/rag_debugger cargo test -p rag-debugger-storage --test evidence_repository_contract postgres_evidence_repository_is_deterministic_and_bounded -- --ignored
 cargo test -p rag-debugger-rag --test report_markdown_snapshots
 cargo test -p rag-debugger-rag --test public_fixtures
 ```
@@ -72,7 +75,7 @@ Expected coverage in the scaffold:
 - Test Retrieval render and mocked query tests, including one mode control, collapsed advanced settings, evidence summary, score bars, citations, and direct debugger navigation.
 - Runs tests for search/list navigation, primary diagnosis, backend failure labels and recommendations, per-evidence score explanations, rerun diagnosis comparison, and explicit dataset/evidence selection for Quality.
 - Quality tests for the overview, focused dataset case management, experiment controls, gate-first result view, mode metrics, and failure diagnosis.
-- Eval Lab expected-evidence tests for searchable document/chunk lookup, deduplication, stale evidence labels and removal, omitted-versus-present PATCH semantics, nullable note clearing, atomic repair failures, cancellation, immediate reopen during delayed refetch, similar-case warnings, save-from-Retrieval, save-from-Trace, and text-labeled evidence states.
+- Eval Lab expected-evidence tests for explicit Search/Enter submission, cancellable stale requests, independent candidate limits, searchable document/chunk lookup, compact previews, deduplication, stale evidence labels and removal, omitted-versus-present PATCH semantics, nullable note clearing, atomic repair failures, cancellation, immediate reopen during delayed refetch, similar-case warnings, save-from-Retrieval, save-from-Trace, and text-labeled evidence states.
 - Auth tests for backend login/signup integration and session validation.
 - Settings tests for CI API key creation, one-time secret display, listing, and revoke behavior.
 - CI Gates tests for run history, failed-gate reports, metric deltas, and GitHub Actions setup copy.

@@ -28,6 +28,8 @@ use crate::{
     StorageError,
 };
 
+mod evidence;
+
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStore {
     inner: Arc<Mutex<MemoryStoreInner>>,
@@ -41,6 +43,7 @@ struct MemoryStoreInner {
     runs: HashMap<IngestionRunId, IngestionRun>,
     documents: HashMap<DocumentId, Document>,
     chunks: HashMap<DocumentId, Vec<Chunk>>,
+    chunks_by_id: HashMap<ChunkId, Chunk>,
     embeddings: HashMap<ChunkId, ChunkEmbedding>,
     retrieval_runs: HashMap<rag_debugger_core::RetrievalQueryRunId, RetrievalQueryResponse>,
     retrieval_eval_cases: HashMap<RetrievalEvalCaseId, RetrievalEvalCase>,
@@ -157,6 +160,18 @@ impl DocumentRepository for MemoryStore {
         chunks: Vec<Chunk>,
     ) -> Result<Document, StorageError> {
         let mut inner = self.lock()?;
+        if let Some(previous_chunks) = inner.chunks.get(&document.id) {
+            let previous_ids = previous_chunks
+                .iter()
+                .map(|chunk| chunk.id)
+                .collect::<Vec<_>>();
+            for chunk_id in previous_ids {
+                inner.chunks_by_id.remove(&chunk_id);
+            }
+        }
+        for chunk in &chunks {
+            inner.chunks_by_id.insert(chunk.id, chunk.clone());
+        }
         inner.documents.insert(document.id, document.clone());
         inner.chunks.insert(document.id, chunks);
         Ok(document)
@@ -856,6 +871,9 @@ impl DemoRepository for MemoryStore {
         }
         let created = !inner.documents.contains_key(&document.id);
         inner.documents.insert(document.id, document.clone());
+        for chunk in &chunks {
+            inner.chunks_by_id.insert(chunk.id, chunk.clone());
+        }
         let stored = inner.chunks.entry(document.id).or_default();
         for chunk in chunks {
             if let Some(existing) = stored.iter_mut().find(|item| item.id == chunk.id) {

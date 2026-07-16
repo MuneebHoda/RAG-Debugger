@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Bounded MemoryStore/Postgres evidence repositories with deterministic direct-ID resolution, independent candidate limits, compact UTF-8 previews, and trigram-indexed corpus search.
 - Expected-evidence editor for Eval Lab with authenticated document/chunk lookup, readable multi-evidence selection, independent exact-chunk versus document-level expectations, stale evidence warnings, shared Retrieval/Trace save-to-Quality panels, and text-labeled evidence state visualization.
 - Eval Lab v2 regression history with dataset experiment timelines, trend summaries, baseline comparisons, newly failed/recovered case detection, and regression-aware audit reports.
 - Shared workbench workflow guidance that explains each page's purpose, position in the RAG quality loop, recommended next action, and retrieval-quality impact.
@@ -42,6 +43,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Eval Lab evidence search now runs only on explicit Search or Enter submission, keeps selected evidence outside candidate limits, and avoids corpus-wide document-by-document chunk loading.
 - Eval Lab case notes now distinguish omitted, replacement, and explicit-null PATCH values, while successful edits update the dataset cache synchronously so immediate reopen uses the saved case before background refetch completes.
 - Eval Lab case editing now preserves unchanged legacy stale evidence during scalar-only updates, exposes explicit stale-item removal, validates modified selections atomically, supports intentional evidence clearing, and restores persisted drafts on cancellation.
 - Eval Lab evidence states now distinguish saved expectations from completed retrievals, resolve experiment hits through real chunk/document metadata, and represent unavailable metadata without false missing, retrieved, or wrong-chunk claims.

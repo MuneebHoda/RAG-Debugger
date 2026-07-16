@@ -1,14 +1,15 @@
 use async_trait::async_trait;
 use rag_debugger_core::{
     ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
-    CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
+    ChunkId, CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
     EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus,
-    IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals, Organization, Project,
-    RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId,
-    RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
-    RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse, RetrievalQueryRunId,
-    SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary, User, UserId,
-    UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
+    EvalLabEvidenceChunk, EvalLabEvidenceDocument, EvalLabEvidenceSearchRequest,
+    EvalLabEvidenceSearchResult, IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals,
+    Organization, Project, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset,
+    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
+    RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse,
+    RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary,
+    User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
 };
 
 use crate::StorageError;
@@ -47,6 +48,22 @@ pub trait DocumentRepository: Send + Sync {
         &self,
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError>;
+}
+
+#[async_trait]
+pub trait EvidenceRepository: Send + Sync {
+    async fn resolve_evidence_documents(
+        &self,
+        document_ids: &[DocumentId],
+    ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError>;
+    async fn resolve_evidence_chunks(
+        &self,
+        chunk_ids: &[ChunkId],
+    ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError>;
+    async fn search_evidence(
+        &self,
+        request: &EvalLabEvidenceSearchRequest,
+    ) -> Result<EvalLabEvidenceSearchResult, StorageError>;
 }
 
 #[async_trait]
@@ -261,6 +278,7 @@ impl<T> IngestionRepository for T where
 pub trait AppRepository:
     HealthRepository
     + IngestionRepository
+    + EvidenceRepository
     + EmbeddingRepository
     + RetrievalRepository
     + TraceRepository
@@ -275,6 +293,7 @@ pub trait AppRepository:
 impl<T> AppRepository for T where
     T: HealthRepository
         + IngestionRepository
+        + EvidenceRepository
         + EmbeddingRepository
         + RetrievalRepository
         + TraceRepository

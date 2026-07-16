@@ -7,8 +7,8 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
-        EvalRepository, HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
-        SourceRepository, TraceRepository,
+        EvalRepository, EvidenceRepository, HealthRepository, ProjectRepository, ReportRepository,
+        RetrievalRepository, SourceRepository, TraceRepository,
     },
     StorageError,
 };
@@ -19,6 +19,7 @@ mod codec;
 mod demo;
 mod embeddings;
 mod eval_lab;
+mod evidence;
 mod ingestion;
 mod projects;
 mod reports;
@@ -107,6 +108,30 @@ impl DocumentRepository for PostgresStore {
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError> {
         PostgresStore::list_document_chunks(self, document_id).await
+    }
+}
+
+#[async_trait]
+impl EvidenceRepository for PostgresStore {
+    async fn resolve_evidence_documents(
+        &self,
+        document_ids: &[DocumentId],
+    ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError> {
+        PostgresStore::resolve_evidence_documents(self, document_ids).await
+    }
+
+    async fn resolve_evidence_chunks(
+        &self,
+        chunk_ids: &[ChunkId],
+    ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError> {
+        PostgresStore::resolve_evidence_chunks(self, chunk_ids).await
+    }
+
+    async fn search_evidence(
+        &self,
+        request: &EvalLabEvidenceSearchRequest,
+    ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
+        PostgresStore::search_evidence(self, request).await
     }
 }
 

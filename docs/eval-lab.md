@@ -35,6 +35,20 @@ Eval Lab routes live under `/api/v1/eval-lab`.
 
 The older `/api/v1/retrieval/evals` endpoints remain available for compatibility. New UI workflows save cases into Eval Lab datasets.
 
+### Evidence lookup contract
+
+Evidence lookup separates explicit selection from candidate discovery. Requested document and chunk IDs are deduplicated in first-occurrence order and resolved directly. Every requested ID is either returned before candidates or included in the corresponding unresolved array. Requested items never consume candidate limits and cannot disappear because a search produced earlier matches.
+
+`document_limit` and `chunk_limit` independently bound additional candidates. Each defaults to 25 and is capped at 100. A value of zero performs resolution without candidate browsing. The older `limit` field remains a compatibility fallback for both candidate limits. `include_chunks=false` disables chunk candidate search but never prevents an explicitly requested chunk from resolving.
+
+Candidate documents are ordered by ID/path/source match priority, then normalized path, source name, and ID. Candidate chunks are ordered by chunk/document ID, path, section, source, and body match priority, then normalized path, ordinal, and ID. Empty queries perform the same bounded deterministic browse. Requested IDs are excluded from candidates, so one item appears at most once per result type.
+
+Chunk lookup returns at most 280 Unicode characters in `text_preview` plus `preview_truncated`; it never returns the unrestricted chunk body. Postgres resolves IDs through primary-key joins and searches through bounded queries backed by trigram indexes for source names, paths, section titles, and chunk text. The API no longer lists every source or loads chunks document by document. Memory storage keeps a direct chunk-ID index and follows the same ordering and limit contract.
+
+The picker keeps input text separate from the submitted query. Typing does not request data; Search or Enter submits. Selected IDs remain in the query key so their metadata refreshes immediately, and React Query continues forwarding `AbortSignal` so obsolete requests cannot replace a newer search.
+
+Evidence lookup retains the current local workspace behavior. Broader workspace-isolation hardening is tracked separately and is not claimed by this change.
+
 ## Metrics
 
 Eval Lab calculates deterministic retrieval metrics from retrieved hits and expected evidence.
