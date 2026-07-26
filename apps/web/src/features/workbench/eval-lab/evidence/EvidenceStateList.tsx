@@ -72,7 +72,9 @@ export function EvidenceStateList({
     <section className={styles.stateList} aria-label={title}>
       <h3>{title}</h3>
       {isLoadingMetadata ? (
-        <p className={styles.empty}>Loading evidence metadata…</p>
+        <p aria-live="polite" className={styles.loading} role="status">
+          Loading evidence metadata…
+        </p>
       ) : states.length > 0 ? (
         states.map((state) => (
           <article

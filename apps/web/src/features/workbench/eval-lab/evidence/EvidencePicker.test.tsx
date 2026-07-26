@@ -36,6 +36,9 @@ describe("EvidencePicker", () => {
       await screen.findByRole("button", { name: "Expect this exact chunk" }),
     );
 
+    expect(
+      await screen.findByRole("button", { name: "Expect this exact chunk" }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(selectionJson()).toEqual({
       documentIds: [],
       chunkIds: [chunkId],
@@ -50,6 +53,19 @@ describe("EvidencePicker", () => {
     expect(selectionJson()).toEqual({
       documentIds: [documentId],
       chunkIds: [chunkId],
+    });
+    expect(
+      await screen.findByRole("button", {
+        name: "Accept evidence from this document",
+      }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Expect this exact chunk" }),
+    );
+    expect(selectionJson()).toEqual({
+      documentIds: [documentId],
+      chunkIds: [],
     });
   });
 
@@ -196,6 +212,63 @@ describe("EvidencePicker", () => {
     expect(findPreviewNow("Stale evidence")).not.toBeInTheDocument();
   });
 
+  it("resets search state only when the source identity changes", async () => {
+    const client = testClient();
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SourcePickerHarness query="first evidence" sourceIdentity="run-1" />
+      </QueryClientProvider>,
+    );
+    const input = screen.getByLabelText("Search corpus evidence");
+    fireEvent.change(input, { target: { value: "ab" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /Enter at least 3 characters/i,
+    );
+    input.focus();
+    expect(input).toHaveFocus();
+
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SourcePickerHarness query="second evidence" sourceIdentity="run-2" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText("Search corpus evidence")).toHaveValue(
+      "second evidence",
+    );
+    expect(screen.getByLabelText("Search corpus evidence")).toHaveFocus();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Search corpus evidence"), {
+      target: { value: "deliberate edit" },
+    });
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SourcePickerHarness query="second evidence" sourceIdentity="run-2" />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText("Search corpus evidence")).toHaveValue(
+      "deliberate edit",
+    );
+  });
+
+  it("announces evidence-search loading and failure", async () => {
+    const searchResponse = deferred<Response>();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => searchResponse.promise),
+    );
+    renderPicker();
+
+    expect(await screen.findByRole("status", { name: "" })).toHaveTextContent(
+      "Searching evidence",
+    );
+    searchResponse.resolve(await responseError(503));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Evidence search failed",
+    );
+  });
+
   it("renders bounded previews with an explicit truncation marker", async () => {
     evidenceResponse = evidenceWithPreview("Bounded evidence", true);
     renderPicker();
@@ -278,14 +351,32 @@ describe("EvidencePicker", () => {
 });
 
 function renderPicker(candidateHits: EvidenceHitRef[] = []) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = testClient();
 
   return render(
     <QueryClientProvider client={client}>
       <PickerHarness candidateHits={candidateHits} />
     </QueryClientProvider>,
+  );
+}
+
+function SourcePickerHarness({
+  query,
+  sourceIdentity,
+}: {
+  query: string;
+  sourceIdentity: string;
+}) {
+  const [selection, setSelection] = useState<EvidenceSelection>(() =>
+    emptyEvidenceSelection(),
+  );
+  return (
+    <EvidencePicker
+      query={query}
+      selection={selection}
+      sourceIdentity={sourceIdentity}
+      onSelectionChange={setSelection}
+    />
   );
 }
 
@@ -300,6 +391,7 @@ function PickerHarness({ candidateHits }: { candidateHits: EvidenceHitRef[] }) {
         candidateHits={candidateHits}
         query="gpu indexing"
         selection={selection}
+        sourceIdentity="retrieval-run-1"
         onSelectionChange={setSelection}
       />
       <output aria-label="selection">{JSON.stringify(selection)}</output>
@@ -308,9 +400,7 @@ function PickerHarness({ candidateHits }: { candidateHits: EvidenceHitRef[] }) {
 }
 
 function renderReview(initialSelection: EvidenceSelection) {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+  const client = testClient();
   return render(
     <QueryClientProvider client={client}>
       <ReviewHarness initialSelection={initialSelection} />
@@ -363,6 +453,19 @@ function responseJson(json: unknown) {
     status: 200,
     json: async () => json,
   } as Response);
+}
+
+function responseError(status: number) {
+  return Promise.resolve({
+    status,
+    text: async () => JSON.stringify({ error: { message: "lookup failed" } }),
+  } as Response);
+}
+
+function testClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
 }
 
 function requestBody(init?: RequestInit): Record<string, unknown> {

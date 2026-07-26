@@ -149,6 +149,8 @@ This helps users see whether lexical, vector, or hybrid retrieval is improving e
 
 Summary also exposes **Add to Quality**. It uses the shared Eval Lab evidence picker and requires an explicit dataset plus reviewed expected evidence before saving. Users explicitly choose exact chunks or whole-document expectations, search other corpus evidence, and review stale or unresolved evidence before creating the Quality case. CorpusLab never silently treats the first dataset, first chunk, or parent document as correct.
 
+The save draft is keyed to the trace ID. Reruns and comparison updates for the same trace preserve deliberate edits, while navigation to another trace clears source-owned fields, picker search, selection, validation, and mutation feedback without discarding the selected dataset or closing the panel. Submissions snapshot the trace identity and normalized evidence, prevent duplicate activation, and ignore stale completion feedback.
+
 Trace Detail also exposes **Create audit report** above the debugger tabs. The action defaults to metadata-only output, requires privacy confirmation, and opens the generated report at `/app/reports/:reportId`.
 
 ## Privacy

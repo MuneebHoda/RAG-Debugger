@@ -16,6 +16,9 @@ import { AnswerPanel } from "./RetrievalResults";
 const sourceId = "018f7a2a-6e2e-7000-a000-000000000101";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000102";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000103";
+const secondDocumentId = "018f7a2a-6e2e-7000-a000-000000000112";
+const secondChunkId = "018f7a2a-6e2e-7000-a000-000000000113";
+const secondRunId = "018f7a2a-6e2e-7000-a000-000000000115";
 const datasetId = "018f7a2a-6e2e-7000-a000-000000000107";
 let createdCaseBody: unknown;
 
@@ -483,7 +486,214 @@ describe("RetrievalPage", () => {
       expected_document_ids: [],
     });
   });
+
+  it("saves only the latest run after a sequential retrieval transition", async () => {
+    const baseFetch = vi.mocked(fetch);
+    const secondResponse = deferred<Response>();
+    let firstResponse: RetrievalQueryResponse | null = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input.toString();
+        const body = requestBody(init);
+        if (
+          url.endsWith("/api/v1/retrieval/query") &&
+          body.query === "beta retrieval"
+        ) {
+          return secondResponse.promise;
+        }
+        if (url.endsWith("/api/v1/retrieval/query")) {
+          const response = await baseFetch(input, init);
+          firstResponse = (await response.json()) as RetrievalQueryResponse;
+          return responseJson(firstResponse);
+        }
+        if (
+          url.endsWith("/api/v1/eval-lab/evidence/query") &&
+          (body.query === "beta retrieval" ||
+            (body.chunk_ids as string[] | undefined)?.includes(secondChunkId))
+        ) {
+          return responseJson(secondEvidenceLookup());
+        }
+        return baseFetch(input, init);
+      }),
+    );
+
+    renderWithClient(<RetrievalPage />);
+    const question = await screen.findByLabelText(
+      /what should the corpus answer/i,
+    );
+    fireEvent.change(question, { target: { value: "gpu indexing" } });
+    fireEvent.click(screen.getByRole("button", { name: /run retrieval/i }));
+    await screen.findByText("Built GPU indexing experiments [1]");
+    fireEvent.click(screen.getByRole("button", { name: /choose evidence/i }));
+    const datasetSelect = await screen.findByLabelText(/quality dataset/i);
+    await screen.findByRole("option", {
+      name: "Critical retrieval questions",
+    });
+    fireEvent.change(datasetSelect, { target: { value: datasetId } });
+    fireEvent.change(screen.getByLabelText("Case name"), {
+      target: { value: "Run A edited name" },
+    });
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "Run A private note" },
+    });
+    selectCandidateEvidence("Expect this exact chunk");
+    selectCandidateEvidence("Accept evidence from this document");
+
+    fireEvent.change(question, { target: { value: "beta retrieval" } });
+    fireEvent.click(screen.getByText("Advanced"));
+    fireEvent.change(screen.getByLabelText("Results to return"), {
+      target: { value: "9" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /run retrieval/i }));
+    expect(
+      await screen.findByText(/saving this previous result is paused/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Save quality case" }),
+    ).toBeDisabled();
+
+    expect(firstResponse).not.toBeNull();
+    secondResponse.resolve(
+      await responseJson(secondRetrievalResponse(firstResponse!)),
+    );
+    await screen.findByText("Beta retrieval evidence [1]");
+    expect(datasetSelect).toHaveValue(datasetId);
+    expect(screen.getByLabelText("Case name")).toHaveValue("beta retrieval");
+    expect(screen.getByLabelText("Notes")).toHaveValue(
+      `Saved from retrieval run ${secondRunId.slice(0, 8)}.`,
+    );
+    expect(
+      screen.getByText(/Select at least one expected document or chunk/i),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Case name"), {
+      target: { value: "Run B quality case" },
+    });
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "Run B note" },
+    });
+    selectCandidateEvidence("Expect this exact chunk");
+    selectCandidateEvidence("Accept evidence from this document");
+    fireEvent.click(screen.getByRole("button", { name: "Save quality case" }));
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toEqual({
+      name: "Run B quality case",
+      query: "beta retrieval",
+      top_k: 9,
+      expected_chunk_ids: [secondChunkId],
+      expected_document_ids: [secondDocumentId],
+      notes: "Run B note",
+    });
+    expect(JSON.stringify(createdCaseBody)).not.toContain("Run A");
+    expect(JSON.stringify(createdCaseBody)).not.toContain(chunkId);
+    expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
+  });
 });
+
+function selectCandidateEvidence(name: string) {
+  const candidateRegion = screen.getByRole("region", {
+    name: "Retrieved evidence from this run",
+  });
+  fireEvent.click(within(candidateRegion).getByRole("button", { name }));
+}
+
+function secondRetrievalResponse(
+  template: RetrievalQueryResponse,
+): RetrievalQueryResponse {
+  const hit = template.hits[0];
+  return {
+    ...template,
+    run: {
+      ...template.run,
+      id: secondRunId,
+      query: "beta retrieval",
+      top_k: 9,
+    },
+    answer: {
+      ...template.answer,
+      text: "Beta retrieval evidence [1]",
+      citations: [],
+    },
+    hits: [
+      {
+        ...hit,
+        chunk: {
+          ...hit.chunk,
+          id: secondChunkId,
+          document_id: secondDocumentId,
+          text: "Beta retrieval evidence.",
+        },
+        document: {
+          ...hit.document,
+          id: secondDocumentId,
+          path: "beta.md",
+        },
+        snippet: "Beta retrieval evidence.",
+        citation: {
+          ...hit.citation,
+          chunk_id: secondChunkId,
+          document_id: secondDocumentId,
+          document_path: "beta.md",
+          snippet: "Beta retrieval evidence.",
+        },
+      },
+    ],
+  };
+}
+
+function secondEvidenceLookup() {
+  return {
+    documents: [
+      {
+        id: secondDocumentId,
+        source_id: sourceId,
+        source_name: "Corpus upload",
+        path: "beta.md",
+        profile: "technical_docs",
+        extraction_quality: "high",
+        warnings: [],
+        chunk_count: 1,
+      },
+    ],
+    chunks: [
+      {
+        id: secondChunkId,
+        document_id: secondDocumentId,
+        source_id: sourceId,
+        source_name: "Corpus upload",
+        document_path: "beta.md",
+        ordinal: 0,
+        text_preview: "Beta retrieval evidence.",
+        preview_truncated: false,
+        token_count: 3,
+        checksum: "beta-checksum",
+        section_title: "Beta",
+        quality_flags: [],
+        is_duplicate: false,
+        text_density: 0.9,
+        evidence_score_hint: 0.8,
+      },
+    ],
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
+  };
+}
+
+function requestBody(init?: RequestInit): Record<string, unknown> {
+  return typeof init?.body === "string"
+    ? (JSON.parse(init.body) as Record<string, unknown>)
+    : {};
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 function renderWithClient(children: React.ReactNode) {
   const client = new QueryClient({
@@ -509,9 +719,9 @@ function isRouterElement(children: React.ReactNode): boolean {
   );
 }
 
-function responseJson(json: unknown) {
+function responseJson(json: unknown): Promise<Response> {
   return Promise.resolve({
     status: 200,
     json: async () => json,
-  });
+  } as Response);
 }

@@ -54,12 +54,69 @@ test("completes the real guided workflow against the memory API", async ({
   await page
     .getByLabel("Quality dataset")
     .selectOption({ label: "Default retrieval dataset" });
-  await page
-    .getByRole("button", { name: "Expect this exact chunk" })
-    .first()
-    .click();
+  const searchInput = page.getByLabel("Search corpus evidence");
+  await searchInput.fill("indexing");
+  await searchInput.press("Enter");
+  await expect(
+    page.getByText(/document results and .* chunk results/i),
+  ).toBeVisible();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  const resultGrid = page.getByLabel("Evidence search results");
+  await expect(resultGrid).toBeVisible();
+  expect(
+    await resultGrid.evaluate(
+      (element) =>
+        getComputedStyle(element).gridTemplateColumns.split(" ").length,
+    ),
+  ).toBe(1);
+  await expectNoHorizontalOverflow(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  const candidateEvidence = page.getByRole("region", {
+    name: "Retrieved evidence from this run",
+  });
+  const exactChunk = candidateEvidence.getByRole("button", {
+    name: "Expect this exact chunk",
+  });
+  await exactChunk.focus();
+  await page.keyboard.press("Enter");
+  await expect(exactChunk).toHaveAttribute("aria-pressed", "true");
+  const wholeDocument = candidateEvidence.getByRole("button", {
+    name: "Accept evidence from this document",
+  });
+  await wholeDocument.focus();
+  await page.keyboard.press("Enter");
+  await expect(wholeDocument).toHaveAttribute("aria-pressed", "true");
+
+  await exactChunk.focus();
+  await page.keyboard.press("Enter");
+  await expect(exactChunk).toHaveAttribute("aria-pressed", "false");
+  await page.keyboard.press("Enter");
+  await expect(exactChunk).toHaveAttribute("aria-pressed", "true");
+
+  const clearEvidence = page.getByRole("button", {
+    name: "Clear all selected evidence",
+  });
+  await clearEvidence.focus();
+  await page.keyboard.press("Enter");
+  await expect(exactChunk).toHaveAttribute("aria-pressed", "false");
+  await expect(wholeDocument).toHaveAttribute("aria-pressed", "false");
+  await exactChunk.focus();
+  await page.keyboard.press("Enter");
+  await wholeDocument.focus();
+  await page.keyboard.press("Enter");
+  await expect(exactChunk).toHaveAttribute("aria-pressed", "true");
+  await expect(wholeDocument).toHaveAttribute("aria-pressed", "true");
+
   await expect(page.getByText("Selected expected evidence")).toBeVisible();
-  await page.getByRole("button", { name: "Save quality case" }).click();
+  await expect(page.getByText(/Exact chunk expectation/i)).toBeVisible();
+  await expect(page.getByText(/Document-level expectation/i)).toBeVisible();
+  const saveQualityCase = page.getByRole("button", {
+    name: "Save quality case",
+  });
+  await saveQualityCase.focus();
+  await page.keyboard.press("Enter");
   await expect(page.getByText("Quality case saved.")).toBeVisible();
 
   await page.goto("/app/evals");
@@ -70,6 +127,11 @@ test("completes the real guided workflow against the memory API", async ({
   await expect(
     page.getByRole("heading", { name: "Run an experiment" }),
   ).toBeVisible();
+  await expect(
+    page.getByText("How do GPU workers help indexing?").first(),
+  ).toBeVisible();
+  await expect(page.getByText("Expected exact chunk").first()).toBeVisible();
+  await expect(page.getByText("Expected document").first()).toBeVisible();
 
   for (const viewport of [
     { width: 1440, height: 900 },

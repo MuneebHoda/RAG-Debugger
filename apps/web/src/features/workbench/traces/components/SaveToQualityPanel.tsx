@@ -17,6 +17,7 @@ export function SaveToQualityPanel({ trace }: { trace: Trace }) {
         duplicate: hit.duplicate_count > 1,
       }))}
       query={trace.input}
+      sourceIdentity={trace.id}
       sourceNote={`Saved from trace ${trace.id.slice(0, 8)}.`}
       topK={trace.retrieval?.run.top_k ?? 5}
     />

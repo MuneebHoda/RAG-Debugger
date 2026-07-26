@@ -111,7 +111,9 @@ export function RetrievalPage() {
                 duplicate: hit.duplicate_count > 1,
               }))}
               query={workbench.response.run.query}
+              sourceIdentity={workbench.response.run.id}
               sourceNote={`Saved from retrieval run ${workbench.response.run.id.slice(0, 8)}.`}
+              sourcePending={workbench.isQuerying}
               topK={workbench.response.run.top_k}
             />
           ) : null}

@@ -15,10 +15,12 @@ export function EvidenceSelectionReview({
   selection,
   onSelectionChange,
   allowEmptySelection = false,
+  disabled = false,
 }: {
   selection: EvidenceSelection;
   onSelectionChange: (selection: EvidenceSelection) => void;
   allowEmptySelection?: boolean;
+  disabled?: boolean;
 }) {
   const normalizedSelection = normalizeEvidenceSelection(selection);
   const evidenceQuery = useQuery({
@@ -62,7 +64,7 @@ export function EvidenceSelectionReview({
     normalizedSelection.chunkIds.length === 0
   ) {
     return (
-      <div className={styles.warning} role="status">
+      <div aria-live="polite" className={styles.warning} role="status">
         {allowEmptySelection
           ? "No expected evidence is selected. Saving will clear this case's evidence, so it will not measure retrieval quality until evidence is added."
           : "Select at least one expected document or chunk before saving. Good eval cases need evidence they can measure."}
@@ -77,14 +79,23 @@ export function EvidenceSelectionReview({
         Exact chunks require that specific chunk to be retrieved. Document-level
         evidence accepts any suitable chunk from that document.
       </p>
+      {evidenceQuery.isPending ? (
+        <p aria-live="polite" className={styles.loading} role="status">
+          Loading selected evidence metadata…
+        </p>
+      ) : null}
       <div className={styles.selectedList}>
         {(evidenceQuery.data?.documents ?? []).map((document) => (
-          <article className={styles.selectedItem} key={document.id}>
+          <article
+            className={`${styles.selectedItem} ${styles.selected}`}
+            key={document.id}
+          >
             <div className={styles.selectedHeader}>
               <strong>{document.path}</strong>
               <button
                 aria-label={`Remove document ${document.path}`}
                 className="secondary-button compact"
+                disabled={disabled}
                 type="button"
                 onClick={() =>
                   onSelectionChange(
@@ -103,7 +114,10 @@ export function EvidenceSelectionReview({
           </article>
         ))}
         {(evidenceQuery.data?.chunks ?? []).map((chunk) => (
-          <article className={styles.selectedItem} key={chunk.id}>
+          <article
+            className={`${styles.selectedItem} ${styles.selected}`}
+            key={chunk.id}
+          >
             <div className={styles.selectedHeader}>
               <strong>
                 {chunk.document_path} · chunk {chunk.ordinal + 1}
@@ -111,6 +125,7 @@ export function EvidenceSelectionReview({
               <button
                 aria-label={`Remove chunk ${chunk.ordinal + 1}`}
                 className="secondary-button compact"
+                disabled={disabled}
                 type="button"
                 onClick={() =>
                   onSelectionChange(removeEvidenceChunk(selection, chunk.id))
@@ -129,7 +144,7 @@ export function EvidenceSelectionReview({
         ))}
         {(evidenceQuery.data?.unresolved_document_ids ?? []).map((id) => (
           <article
-            className={`${styles.selectedItem} ${styles.danger}`}
+            className={`${styles.selectedItem} ${styles.stale}`}
             key={id}
           >
             <div className={styles.selectedHeader}>
@@ -137,6 +152,7 @@ export function EvidenceSelectionReview({
               <button
                 aria-label={`Remove stale document ${compactId(id)}`}
                 className="secondary-button compact"
+                disabled={disabled}
                 type="button"
                 onClick={() =>
                   onSelectionChange(removeEvidenceDocument(selection, id))
@@ -151,7 +167,7 @@ export function EvidenceSelectionReview({
         ))}
         {(evidenceQuery.data?.unresolved_chunk_ids ?? []).map((id) => (
           <article
-            className={`${styles.selectedItem} ${styles.danger}`}
+            className={`${styles.selectedItem} ${styles.stale}`}
             key={id}
           >
             <div className={styles.selectedHeader}>
@@ -159,6 +175,7 @@ export function EvidenceSelectionReview({
               <button
                 aria-label={`Remove stale chunk ${compactId(id)}`}
                 className="secondary-button compact"
+                disabled={disabled}
                 type="button"
                 onClick={() =>
                   onSelectionChange(removeEvidenceChunk(selection, id))
@@ -173,7 +190,7 @@ export function EvidenceSelectionReview({
         ))}
         {unavailableDocumentIds.map((id) => (
           <article
-            className={`${styles.selectedItem} ${styles.danger}`}
+            className={`${styles.selectedItem} ${styles.warning}`}
             key={`unavailable-document-${id}`}
           >
             <div className={styles.selectedHeader}>
@@ -181,6 +198,7 @@ export function EvidenceSelectionReview({
               <button
                 aria-label={`Remove document ${compactId(id)}`}
                 className="secondary-button compact"
+                disabled={disabled}
                 type="button"
                 onClick={() =>
                   onSelectionChange(removeEvidenceDocument(selection, id))
@@ -197,7 +215,7 @@ export function EvidenceSelectionReview({
         ))}
         {unavailableChunkIds.map((id) => (
           <article
-            className={`${styles.selectedItem} ${styles.danger}`}
+            className={`${styles.selectedItem} ${styles.warning}`}
             key={`unavailable-chunk-${id}`}
           >
             <div className={styles.selectedHeader}>
@@ -205,6 +223,7 @@ export function EvidenceSelectionReview({
               <button
                 aria-label={`Remove chunk ${compactId(id)}`}
                 className="secondary-button compact"
+                disabled={disabled}
                 type="button"
                 onClick={() =>
                   onSelectionChange(removeEvidenceChunk(selection, id))

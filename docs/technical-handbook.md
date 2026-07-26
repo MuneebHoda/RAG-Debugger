@@ -267,6 +267,10 @@ Legacy cases may retain expected-evidence IDs whose source data was deleted or i
 
 The same PATCH contract distinguishes case-note omission, replacement, and clearing: an omitted `notes` property preserves the stored value, a string replaces it, and `null` clears it. Successful edits synchronously replace the matching case in the dataset query cache before background invalidation, so an immediate reopen cannot restore pre-save scalar or evidence values from a stale prop.
 
+Retrieval and Trace Debugger share one source-aware save-to-Quality lifecycle. The source key is the retrieval run ID or trace ID. Source transitions preserve workflow intent (the selected dataset and open panel) but reset source-owned drafts, picker search, validation, duplicate feedback, and mutation status. Retrieval disables the mounted panel while a replacement run is pending. Every mutation receives an immutable source/dataset/query/`top_k`/notes/evidence snapshot, aborts on source changes, invalidates the dataset it actually wrote, and cannot surface stale feedback for another source.
+
+Expected-evidence interaction is explicitly accessible: exact chunks and document-level expectations are independent native toggle buttons with `aria-pressed` and visible state text; remove, clear-all, Search, and save work from the keyboard; async progress and success use polite status regions; errors use alerts. The result grid is container-responsive, and evidence styling composes existing Eval Lab and workbench primitives so status meaning remains text-first without increasing the CSS budget.
+
 The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts

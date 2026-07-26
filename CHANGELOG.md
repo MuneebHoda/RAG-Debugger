@@ -44,6 +44,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Retrieval and Trace save-to-Quality panels now key drafts and mutations to the active run or trace, preserve dataset intent across source changes, block stale submissions during retrieval transitions, expose keyboard-operable evidence toggles and announced async states, and verify submitted payloads against the current source.
 - Expected-evidence lookup now caps submitted ID work before storage access, routes browse/exact/text searches explicitly, uses synchronized ordered MemoryStore browse indexes and bounded text-search retention, follows index-compatible Postgres paths, rejects unsafe short text without clearing picker results, and preserves removable selections when metadata is unavailable.
 - Eval Lab evidence search now runs only on explicit Search or Enter submission, keeps selected evidence outside candidate limits, and avoids corpus-wide document-by-document chunk loading.
 - Eval Lab case notes now distinguish omitted, replacement, and explicit-null PATCH values, while successful edits update the dataset cache synchronously so immediate reopen uses the saved case before background refetch completes.

@@ -208,6 +208,7 @@ export function DatasetDetailPage() {
             <EvidencePicker
               query={query}
               selection={evidenceSelection}
+              sourceIdentity={`new-case:${dataset.id}`}
               onSelectionChange={setEvidenceSelection}
             />
             <EvidenceSelectionReview
@@ -450,6 +451,7 @@ function EditableCase({
           <EvidencePicker
             query={query}
             selection={evidenceSelection}
+            sourceIdentity={`case:${evalCase.id}`}
             onSelectionChange={setEvidenceSelection}
           />
           <EvidenceSelectionReview

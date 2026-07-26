@@ -5,18 +5,23 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Trace } from "../../../lib/api/traces";
 import { RunsPage } from "./RunsPage";
 import { TraceDetailPage } from "./TraceDetailPage";
+import { SaveToQualityPanel } from "./components/SaveToQualityPanel";
 
 const traceId = "018f7a2a-6e2e-7000-a000-000000000201";
 const secondTraceId = "018f7a2a-6e2e-7000-a000-000000000202";
 const datasetId = "018f7a2a-6e2e-7000-a000-000000000210";
 const documentId = "document-1";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000205";
+const secondDocumentId = "document-2";
+const secondChunkId = "018f7a2a-6e2e-7000-a000-000000000206";
 let createdCaseBody: unknown;
 
 describe("guided run workflow", () => {
@@ -215,6 +220,65 @@ describe("guided run workflow", () => {
     ).toBeInTheDocument();
   });
 
+  it("resets source-owned Quality state when the trace identity changes", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SaveToQualityPanel trace={trace} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose evidence" }));
+    const datasetSelect = await screen.findByLabelText("Quality dataset");
+    await screen.findByRole("option", { name: "Critical questions" });
+    fireEvent.change(datasetSelect, { target: { value: datasetId } });
+    fireEvent.change(screen.getByLabelText("Case name"), {
+      target: { value: "Edited first trace" },
+    });
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "First trace note" },
+    });
+    selectTraceCandidate("Expect this exact chunk");
+    selectTraceCandidate("Accept evidence from this document");
+
+    const nextTrace = secondTrace();
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SaveToQualityPanel trace={nextTrace} />
+      </QueryClientProvider>,
+    );
+
+    expect(datasetSelect).toHaveValue(datasetId);
+    expect(screen.getByLabelText("Case name")).toHaveValue(nextTrace.input);
+    expect(screen.getByLabelText("Notes")).toHaveValue(
+      `Saved from trace ${secondTraceId.slice(0, 8)}.`,
+    );
+    expect(
+      screen.getByText(/Select at least one expected document or chunk/i),
+    ).toBeInTheDocument();
+    selectTraceCandidate("Expect this exact chunk");
+    selectTraceCandidate("Accept evidence from this document");
+    const saveButton = screen.getByRole("button", {
+      name: "Save quality case",
+    });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toEqual({
+      name: nextTrace.input,
+      query: nextTrace.input,
+      top_k: 7,
+      expected_chunk_ids: [secondChunkId],
+      expected_document_ids: [secondDocumentId],
+      notes: `Saved from trace ${secondTraceId.slice(0, 8)}.`,
+    });
+    expect(JSON.stringify(createdCaseBody)).not.toContain(chunkId);
+    expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
+  });
+
   it("keeps legacy traces readable when structured diagnosis is absent", async () => {
     vi.stubGlobal(
       "fetch",
@@ -235,6 +299,52 @@ describe("guided run workflow", () => {
     ).toBeInTheDocument();
   });
 });
+
+function selectTraceCandidate(name: string) {
+  const candidateRegion = screen.getByRole("region", {
+    name: "Retrieved evidence from this run",
+  });
+  fireEvent.click(within(candidateRegion).getByRole("button", { name }));
+}
+
+function secondTrace(): Trace {
+  const hit = trace.retrieval!.hits[0];
+  return {
+    ...trace,
+    id: secondTraceId,
+    input: "second trace evidence",
+    retrieval: {
+      ...trace.retrieval!,
+      run: {
+        ...trace.retrieval!.run,
+        id: "run-2",
+        query: "second trace evidence",
+        top_k: 7,
+      },
+      hits: [
+        {
+          ...hit,
+          chunk: {
+            ...hit.chunk,
+            id: secondChunkId,
+            document_id: secondDocumentId,
+          },
+          document: {
+            ...hit.document,
+            id: secondDocumentId,
+            path: "second-guide.md",
+          },
+          citation: {
+            ...hit.citation,
+            chunk_id: secondChunkId,
+            document_id: secondDocumentId,
+            document_path: "second-guide.md",
+          },
+        },
+      ],
+    },
+  };
+}
 
 function renderWithClient(children: React.ReactNode) {
   const client = new QueryClient({
@@ -497,7 +607,7 @@ const trace = {
   retrieval,
   reruns: [],
   diagnosis: retrieval.diagnosis,
-};
+} as Trace;
 
 const comparison = {
   id: "comparison-1",
