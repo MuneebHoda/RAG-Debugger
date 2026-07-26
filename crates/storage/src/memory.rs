@@ -29,6 +29,7 @@ use crate::{
 };
 
 mod evidence;
+mod evidence_index;
 
 #[derive(Debug, Clone, Default)]
 pub struct MemoryStore {
@@ -44,6 +45,7 @@ struct MemoryStoreInner {
     documents: HashMap<DocumentId, Document>,
     chunks: HashMap<DocumentId, Vec<Chunk>>,
     chunks_by_id: HashMap<ChunkId, Chunk>,
+    evidence_browse_indexes: evidence_index::EvidenceBrowseIndexes,
     embeddings: HashMap<ChunkId, ChunkEmbedding>,
     retrieval_runs: HashMap<rag_debugger_core::RetrievalQueryRunId, RetrievalQueryResponse>,
     retrieval_eval_cases: HashMap<RetrievalEvalCaseId, RetrievalEvalCase>,
@@ -160,20 +162,7 @@ impl DocumentRepository for MemoryStore {
         chunks: Vec<Chunk>,
     ) -> Result<Document, StorageError> {
         let mut inner = self.lock()?;
-        if let Some(previous_chunks) = inner.chunks.get(&document.id) {
-            let previous_ids = previous_chunks
-                .iter()
-                .map(|chunk| chunk.id)
-                .collect::<Vec<_>>();
-            for chunk_id in previous_ids {
-                inner.chunks_by_id.remove(&chunk_id);
-            }
-        }
-        for chunk in &chunks {
-            inner.chunks_by_id.insert(chunk.id, chunk.clone());
-        }
-        inner.documents.insert(document.id, document.clone());
-        inner.chunks.insert(document.id, chunks);
+        inner.replace_document_with_chunks(document.clone(), chunks);
         Ok(document)
     }
 
@@ -870,19 +859,7 @@ impl DemoRepository for MemoryStore {
             return Err(StorageError::NotFound);
         }
         let created = !inner.documents.contains_key(&document.id);
-        inner.documents.insert(document.id, document.clone());
-        for chunk in &chunks {
-            inner.chunks_by_id.insert(chunk.id, chunk.clone());
-        }
-        let stored = inner.chunks.entry(document.id).or_default();
-        for chunk in chunks {
-            if let Some(existing) = stored.iter_mut().find(|item| item.id == chunk.id) {
-                *existing = chunk;
-            } else {
-                stored.push(chunk);
-            }
-        }
-        stored.sort_by_key(|chunk| chunk.ordinal);
+        inner.merge_document_with_chunks(document, chunks);
         Ok(created)
     }
 
@@ -935,6 +912,70 @@ impl MemoryStore {
         self.inner
             .lock()
             .map_err(|_| StorageError::Internal("memory store lock poisoned".to_owned()))
+    }
+}
+
+impl MemoryStoreInner {
+    fn replace_document_with_chunks(&mut self, document: Document, mut chunks: Vec<Chunk>) {
+        self.remove_document_with_chunks(document.id);
+        chunks.sort_by_key(|chunk| (chunk.ordinal, chunk.id.0));
+
+        self.evidence_browse_indexes
+            .insert_document(&document.path, document.id);
+        self.documents.insert(document.id, document.clone());
+
+        for chunk in &chunks {
+            if let Some(referenced_document) = self.documents.get(&chunk.document_id) {
+                self.evidence_browse_indexes.insert_chunk(
+                    &referenced_document.path,
+                    referenced_document.id,
+                    chunk.ordinal,
+                    chunk.id,
+                );
+            }
+            self.chunks_by_id.insert(chunk.id, chunk.clone());
+        }
+        self.chunks.insert(document.id, chunks);
+    }
+
+    fn merge_document_with_chunks(&mut self, document: Document, chunks: Vec<Chunk>) {
+        let mut merged = self.chunks.get(&document.id).cloned().unwrap_or_default();
+        for chunk in chunks {
+            if let Some(existing) = merged.iter_mut().find(|item| item.id == chunk.id) {
+                *existing = chunk;
+            } else {
+                merged.push(chunk);
+            }
+        }
+        self.replace_document_with_chunks(document, merged);
+    }
+
+    fn remove_document_with_chunks(&mut self, document_id: DocumentId) -> Option<Document> {
+        let previous_document = self.documents.get(&document_id).cloned();
+        if let Some(previous_chunks) = self.chunks.remove(&document_id) {
+            for chunk in previous_chunks {
+                let referenced_document = if chunk.document_id == document_id {
+                    previous_document.as_ref()
+                } else {
+                    self.documents.get(&chunk.document_id)
+                };
+                if let Some(referenced_document) = referenced_document {
+                    self.evidence_browse_indexes.remove_chunk(
+                        &referenced_document.path,
+                        referenced_document.id,
+                        chunk.ordinal,
+                        chunk.id,
+                    );
+                }
+                self.chunks_by_id.remove(&chunk.id);
+            }
+        }
+
+        if let Some(document) = &previous_document {
+            self.evidence_browse_indexes
+                .remove_document(&document.path, document.id);
+        }
+        self.documents.remove(&document_id)
     }
 }
 
