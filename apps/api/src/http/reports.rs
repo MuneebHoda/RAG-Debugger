@@ -78,17 +78,18 @@ pub async fn create_report_from_experiment(
     Json(request): Json<CreateDebugReportFromExperimentRequest>,
 ) -> Result<(StatusCode, Json<DebugReport>), ApiError> {
     let (repository, user) = authenticated_repository(&state, &headers).await?;
+    let workspace_id = user.workspace.id;
     let experiment = repository
-        .get_retrieval_eval_experiment(request.experiment_id)
+        .get_retrieval_eval_experiment(workspace_id, request.experiment_id)
         .await
         .map_err(source_storage_error("eval experiment"))?;
     let dataset_experiments = repository
-        .list_retrieval_eval_experiments_for_dataset(experiment.dataset_id)
+        .list_retrieval_eval_experiments_for_dataset(workspace_id, experiment.dataset_id)
         .await?;
     let experiment_refs = dataset_experiments.iter().collect::<Vec<_>>();
     let regression = previous_comparable_experiment(&experiment, &experiment_refs)
         .map(|baseline| compare_experiment_regression(&experiment, Some(baseline)));
-    let project = repository.ensure_default_project().await?;
+    let project = repository.ensure_default_project(workspace_id).await?;
     let report = build_eval_experiment_debug_report_with_regression(
         build_context(user.workspace.id, project.id, request.privacy_mode),
         &experiment,
@@ -106,14 +107,15 @@ pub async fn create_report_from_ci_run(
     Json(request): Json<CreateDebugReportFromCiRunRequest>,
 ) -> Result<(StatusCode, Json<DebugReport>), ApiError> {
     let (repository, user) = authenticated_repository(&state, &headers).await?;
+    let workspace_id = user.workspace.id;
     let run = repository
-        .get_ci_eval_run(request.run_id)
+        .get_ci_eval_run(workspace_id, request.run_id)
         .await
         .map_err(source_storage_error("CI eval run"))?;
     if run.workspace_id != user.workspace.id {
         return Err(ApiError::NotFound("CI eval run not found".to_owned()));
     }
-    let project = repository.ensure_default_project().await?;
+    let project = repository.ensure_default_project(workspace_id).await?;
     let report = build_ci_eval_debug_report(
         build_context(user.workspace.id, project.id, request.privacy_mode),
         &run,

@@ -1,45 +1,22 @@
-use std::sync::Arc;
+mod support;
 
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use rag_debugger_api::{
-    app,
-    config::{ApiConfig, RuntimeEnvironment, StorageBackend},
-    state::AppState,
-};
-use rag_debugger_core::{ChunkId, DocumentId, ProductConfig, RetrievalEvalCase};
-use rag_debugger_storage::{memory::MemoryStore, repository::EvalRepository};
+use rag_debugger_core::{ChunkId, DocumentId, RetrievalEvalCase};
+use rag_debugger_storage::repository::{EvalRepository, SubmittedExpectedEvidence};
 use serde_json::{json, Value};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-fn test_app() -> axum::Router {
-    test_app_with_store().0
-}
-
-fn test_app_with_store() -> (axum::Router, Arc<MemoryStore>) {
-    let store = Arc::new(MemoryStore::default());
-    let router = app(AppState::new(
-        ApiConfig {
-            environment: RuntimeEnvironment::Test,
-            bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
-            storage_backend: StorageBackend::Memory,
-            database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
-                .to_owned(),
-            web_origin: "http://127.0.0.1:5173".to_owned(),
-            auth: Default::default(),
-            product: ProductConfig::default(),
-        },
-        store.clone(),
-    ));
-    (router, store)
+async fn test_app() -> axum::Router {
+    support::authenticated_test_app().await.router
 }
 
 #[tokio::test]
 async fn eval_lab_manages_datasets_and_cases() {
-    let app = test_app();
+    let app = test_app().await;
     let upload_body = upload_text_file(
         &app,
         "refund-policy.md",
@@ -186,7 +163,7 @@ async fn eval_lab_manages_datasets_and_cases() {
 
 #[tokio::test]
 async fn evidence_lookup_separates_requested_items_from_bounded_candidates() {
-    let app = test_app();
+    let app = test_app().await;
     let _alpha = upload_text_file(&app, "aaa-indexing.md", "Indexing candidate alpha.").await;
     let beta = upload_text_file(&app, "bbb-indexing.md", "Indexing candidate beta.").await;
     let _gamma = upload_text_file(&app, "ccc-indexing.md", "Indexing candidate gamma.").await;
@@ -319,7 +296,7 @@ async fn evidence_lookup_separates_requested_items_from_bounded_candidates() {
 
 #[tokio::test]
 async fn evidence_lookup_and_case_mutations_enforce_request_work_limits() {
-    let app = test_app();
+    let app = test_app().await;
     let repeated_document_id = "018f7a2a-6e2e-7000-a000-000000000901";
     let repeated_chunk_id = "018f7a2a-6e2e-7000-a000-000000000902";
 
@@ -413,7 +390,10 @@ async fn evidence_lookup_and_case_mutations_enforce_request_work_limits() {
 
 #[tokio::test]
 async fn update_case_repairs_legacy_stale_evidence_atomically() {
-    let (app, store) = test_app_with_store();
+    let context = support::authenticated_test_app().await;
+    let app = context.router;
+    let store = context.store;
+    let workspace_id = context.workspace_id;
     let upload = upload_text_file(
         &app,
         "repair-guide.md",
@@ -468,7 +448,11 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
     legacy.expected_document_ids = vec![stale_document];
     legacy.notes = Some("Original legacy note.".to_owned());
     store
-        .update_retrieval_eval_case(legacy.clone())
+        .update_retrieval_eval_case(
+            workspace_id,
+            legacy.clone(),
+            SubmittedExpectedEvidence::default(),
+        )
         .await
         .expect("seed legacy stale case");
 
@@ -592,7 +576,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
 
     legacy.notes = Some("Protected note.".to_owned());
     store
-        .update_retrieval_eval_case(legacy)
+        .update_retrieval_eval_case(workspace_id, legacy, SubmittedExpectedEvidence::default())
         .await
         .expect("restore legacy stale case");
     let invalid = app
@@ -643,7 +627,7 @@ async fn update_case_repairs_legacy_stale_evidence_atomically() {
 
 #[tokio::test]
 async fn evidence_lookup_prioritizes_explicit_document_and_chunk_ids() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(&app, "unrelated.md", "Unrelated\nBackground material.").await;
     let target = upload_text_file(
         &app,
@@ -679,7 +663,7 @@ async fn evidence_lookup_prioritizes_explicit_document_and_chunk_ids() {
 
 #[tokio::test]
 async fn eval_lab_runs_multi_mode_experiment_with_gate() {
-    let app = test_app();
+    let app = test_app().await;
     let upload_body = upload_text_file_with_target(
         &app,
         "platform-guide.md",

@@ -1,38 +1,19 @@
-use std::sync::Arc;
+mod support;
 
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use rag_debugger_api::{
-    app,
-    config::{ApiConfig, RuntimeEnvironment, StorageBackend},
-    state::AppState,
-};
-use rag_debugger_core::ProductConfig;
-use rag_debugger_storage::memory::MemoryStore;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-fn test_app() -> axum::Router {
-    app(AppState::new(
-        ApiConfig {
-            environment: RuntimeEnvironment::Test,
-            bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
-            storage_backend: StorageBackend::Memory,
-            database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
-                .to_owned(),
-            web_origin: "http://127.0.0.1:5173".to_owned(),
-            auth: Default::default(),
-            product: ProductConfig::default(),
-        },
-        Arc::new(MemoryStore::default()),
-    ))
+async fn test_app() -> axum::Router {
+    support::authenticated_test_app().await.router
 }
 
 #[tokio::test]
 async fn overview_empty_state_recommends_ingestion() {
-    let app = test_app();
+    let app = test_app().await;
 
     let response = app
         .oneshot(empty_request(Method::GET, "/api/v1/overview"))
@@ -53,7 +34,7 @@ async fn overview_empty_state_recommends_ingestion() {
 
 #[tokio::test]
 async fn overview_with_documents_and_missing_embeddings_recommends_indexing() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "platform-guide.md",
@@ -80,7 +61,7 @@ async fn overview_with_documents_and_missing_embeddings_recommends_indexing() {
 
 #[tokio::test]
 async fn overview_populated_state_summarizes_workflow_activity() {
-    let app = test_app();
+    let app = test_app().await;
     let upload_body = upload_text_file(
         &app,
         "operations-guide.md",

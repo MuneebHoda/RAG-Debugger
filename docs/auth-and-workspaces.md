@@ -88,6 +88,12 @@ The migration `migrations/20260625170000_hosted_ci_eval_workflows.sql` adds:
 
 Passwords are hashed with Argon2. Sessions and API key secrets are hashed before storage. API key prefixes are stored for display and support workflows.
 
+`migrations/20260726120000_workspace_evidence_isolation.sql` attaches Eval Lab datasets and legacy eval runs to workspaces and adds workspace/date indexes. Projects, sources, documents, chunks, evidence search, retrieval candidates, datasets, cases, experiments, CI runs, reports, and overview eval reads are authorized at the repository boundary. Protected-route middleware validates the session in every runtime environment and inserts the resulting `AuthenticatedUser` for handlers; tests use real memberships and session cookies rather than bypassing this boundary.
+
+Corpus and evidence searches currently span all projects owned by the active workspace because sessions do not yet carry an active-project selection. Source and document filters narrow that set and are still ownership checked. Cross-workspace and nonexistent resources return equivalent unresolved-ID or resource-specific `404` responses.
+
+Legacy ownership is privacy conservative. Records with one uniquely attributable workspace are backfilled. Records in a single-workspace installation are assigned to that workspace. Ambiguous records in a multi-workspace installation remain unowned and are quarantined from normal reads until deliberately repaired.
+
 ## Provider Boundary
 
 `RAG_DEBUGGER_AUTH_PROVIDER=local` is the only implemented provider in this pass. The code shape keeps auth behavior behind API helpers and repository methods so a hosted provider can later validate identity/session state without rewriting route handlers.

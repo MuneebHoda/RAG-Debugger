@@ -324,18 +324,37 @@ pub(super) fn eval_experiment_from_row(
         .0)
 }
 
-pub(super) fn default_eval_dataset_id() -> RetrievalEvalDatasetId {
-    RetrievalEvalDatasetId(Uuid::from_u128(0x018f_7a2a_6e2e_7000_a000_0000_0000_e001))
-}
-
-pub(super) async fn ensure_default_eval_dataset(pool: &PgPool) -> Result<(), StorageError> {
-    let now = OffsetDateTime::now_utc();
-    sqlx::query(
-        "INSERT INTO retrieval_eval_datasets (id, name, description, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (id) DO NOTHING",
+pub(super) async fn ensure_default_eval_dataset(
+    pool: &PgPool,
+    workspace_id: WorkspaceId,
+) -> Result<RetrievalEvalDatasetId, StorageError> {
+    if let Some(id) = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id
+         FROM retrieval_eval_datasets
+         WHERE workspace_id = $1 AND is_default
+         LIMIT 1",
     )
-    .bind(default_eval_dataset_id().0)
+    .bind(workspace_id.0)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(RetrievalEvalDatasetId(id));
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let dataset_id = RetrievalEvalDatasetId(Uuid::now_v7());
+    sqlx::query(
+        "INSERT INTO retrieval_eval_datasets (
+             id, workspace_id, is_default, name, description, created_at, updated_at
+         )
+         SELECT $1, $2, TRUE, $3, $4, $5, $6
+         WHERE EXISTS (SELECT 1 FROM workspaces WHERE id = $2)
+         ON CONFLICT (workspace_id)
+         WHERE workspace_id IS NOT NULL AND is_default
+         DO NOTHING",
+    )
+    .bind(dataset_id.0)
+    .bind(workspace_id.0)
     .bind("Default retrieval dataset")
     .bind("Backfilled and manually saved retrieval eval cases.")
     .bind(now)
@@ -345,14 +364,28 @@ pub(super) async fn ensure_default_eval_dataset(pool: &PgPool) -> Result<(), Sto
 
     sqlx::query(
         "UPDATE retrieval_eval_cases
-         SET dataset_id = $1
-         WHERE dataset_id IS NULL",
+         SET dataset_id = default_dataset.id
+         FROM retrieval_eval_datasets default_dataset
+         WHERE retrieval_eval_cases.dataset_id IS NULL
+           AND default_dataset.workspace_id = $1
+           AND default_dataset.is_default
+           AND (SELECT COUNT(*) FROM workspaces) = 1",
     )
-    .bind(default_eval_dataset_id().0)
+    .bind(workspace_id.0)
     .execute(pool)
     .await?;
 
-    Ok(())
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT id
+         FROM retrieval_eval_datasets
+         WHERE workspace_id = $1 AND is_default
+         LIMIT 1",
+    )
+    .bind(workspace_id.0)
+    .fetch_optional(pool)
+    .await?
+    .map(RetrievalEvalDatasetId)
+    .ok_or(StorageError::NotFound)
 }
 
 pub(super) fn retrieval_response_from_row(

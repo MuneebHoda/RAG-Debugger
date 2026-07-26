@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use rag_debugger_core::{
     Chunk, ChunkId, Document, DocumentId, EvalLabEvidenceChunk, EvalLabEvidenceDocument,
     EvalLabEvidenceSearchQuery, EvalLabEvidenceSearchRequest, EvalLabEvidenceSearchResult, Source,
-    EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT,
+    WorkspaceId, EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT,
 };
 use uuid::Uuid;
 
@@ -15,11 +15,15 @@ use crate::{repository::EvidenceRepository, StorageError};
 impl EvidenceRepository for MemoryStore {
     async fn resolve_evidence_documents(
         &self,
+        workspace_id: WorkspaceId,
         document_ids: &[DocumentId],
     ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError> {
         let inner = self.lock()?;
         Ok(deduplicated(document_ids)
             .filter_map(|document_id| {
+                if !super::workspace_owns_document(&inner, workspace_id, *document_id) {
+                    return None;
+                }
                 inner
                     .documents
                     .get(document_id)
@@ -30,11 +34,15 @@ impl EvidenceRepository for MemoryStore {
 
     async fn resolve_evidence_chunks(
         &self,
+        workspace_id: WorkspaceId,
         chunk_ids: &[ChunkId],
     ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError> {
         let inner = self.lock()?;
         Ok(deduplicated(chunk_ids)
             .filter_map(|chunk_id| {
+                if !super::workspace_owns_chunk(&inner, workspace_id, *chunk_id) {
+                    return None;
+                }
                 inner
                     .chunks_by_id
                     .get(chunk_id)
@@ -45,6 +53,7 @@ impl EvidenceRepository for MemoryStore {
 
     async fn search_evidence(
         &self,
+        workspace_id: WorkspaceId,
         request: &EvalLabEvidenceSearchRequest,
     ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
         if request.document_limit == 0 && request.chunk_limit == 0 {
@@ -52,12 +61,13 @@ impl EvidenceRepository for MemoryStore {
         }
 
         let inner = self.lock()?;
-        Ok(search_evidence_snapshot(&inner, request).0)
+        Ok(search_evidence_snapshot(&inner, workspace_id, request).0)
     }
 }
 
 fn search_evidence_snapshot(
     inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
     request: &EvalLabEvidenceSearchRequest,
 ) -> (EvalLabEvidenceSearchResult, EvidenceSearchStats) {
     let excluded_documents = request
@@ -72,20 +82,35 @@ fn search_evidence_snapshot(
         .collect::<HashSet<_>>();
 
     match &request.query {
-        EvalLabEvidenceSearchQuery::Browse => {
-            browse_evidence(inner, request, &excluded_documents, &excluded_chunks)
-        }
-        EvalLabEvidenceSearchQuery::ExactId(id) => {
-            exact_evidence(inner, *id, request, &excluded_documents, &excluded_chunks)
-        }
-        EvalLabEvidenceSearchQuery::Text(query) => {
-            text_evidence(inner, query, request, &excluded_documents, &excluded_chunks)
-        }
+        EvalLabEvidenceSearchQuery::Browse => browse_evidence(
+            inner,
+            workspace_id,
+            request,
+            &excluded_documents,
+            &excluded_chunks,
+        ),
+        EvalLabEvidenceSearchQuery::ExactId(id) => exact_evidence(
+            inner,
+            workspace_id,
+            *id,
+            request,
+            &excluded_documents,
+            &excluded_chunks,
+        ),
+        EvalLabEvidenceSearchQuery::Text(query) => text_evidence(
+            inner,
+            workspace_id,
+            query,
+            request,
+            &excluded_documents,
+            &excluded_chunks,
+        ),
     }
 }
 
 fn browse_evidence(
     inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
     request: &EvalLabEvidenceSearchRequest,
     excluded_documents: &HashSet<DocumentId>,
     excluded_chunks: &HashSet<ChunkId>,
@@ -94,6 +119,9 @@ fn browse_evidence(
         excluded_documents,
         request.document_limit as usize,
         |id| {
+            if !super::workspace_owns_document(inner, workspace_id, id) {
+                return false;
+            }
             inner
                 .documents
                 .get(&id)
@@ -104,6 +132,9 @@ fn browse_evidence(
         excluded_chunks,
         request.chunk_limit as usize,
         |id| {
+            if !super::workspace_owns_chunk(inner, workspace_id, id) {
+                return false;
+            }
             inner.chunks_by_id.get(&id).is_some_and(|chunk| {
                 inner.documents.contains_key(&chunk.document_id)
                     && inner.sources.contains_key(&chunk.source_id)
@@ -141,6 +172,7 @@ fn browse_evidence(
 
 fn exact_evidence(
     inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
     id: Uuid,
     request: &EvalLabEvidenceSearchRequest,
     excluded_documents: &HashSet<DocumentId>,
@@ -148,7 +180,10 @@ fn exact_evidence(
 ) -> (EvalLabEvidenceSearchResult, EvidenceSearchStats) {
     let document_id = DocumentId(id);
     let mut documents = Vec::with_capacity(usize::from(request.document_limit > 0));
-    if request.document_limit > 0 && !excluded_documents.contains(&document_id) {
+    if request.document_limit > 0
+        && !excluded_documents.contains(&document_id)
+        && super::workspace_owns_document(inner, workspace_id, document_id)
+    {
         if let Some(document) = inner.documents.get(&document_id) {
             if let Some(evidence) = evidence_document(inner, document) {
                 documents.push(evidence);
@@ -160,7 +195,9 @@ fn exact_evidence(
     let mut seen_chunks = HashSet::new();
     if request.chunk_limit > 0 {
         let chunk_id = ChunkId(id);
-        if !excluded_chunks.contains(&chunk_id) {
+        if !excluded_chunks.contains(&chunk_id)
+            && super::workspace_owns_chunk(inner, workspace_id, chunk_id)
+        {
             if let Some(chunk) = inner.chunks_by_id.get(&chunk_id) {
                 if let Some(evidence) = evidence_chunk(inner, chunk) {
                     seen_chunks.insert(chunk_id);
@@ -169,7 +206,9 @@ fn exact_evidence(
             }
         }
 
-        if chunks.len() < request.chunk_limit as usize {
+        if chunks.len() < request.chunk_limit as usize
+            && super::workspace_owns_document(inner, workspace_id, document_id)
+        {
             if let Some(document_chunks) = inner.chunks.get(&document_id) {
                 for chunk in document_chunks {
                     if chunks.len() == request.chunk_limit as usize {
@@ -194,6 +233,7 @@ fn exact_evidence(
 
 fn text_evidence(
     inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
     query: &str,
     request: &EvalLabEvidenceSearchRequest,
     excluded_documents: &HashSet<DocumentId>,
@@ -209,6 +249,9 @@ fn text_evidence(
         for document in inner.documents.values() {
             stats.text_document_records_examined += 1;
             if excluded_documents.contains(&document.id) {
+                continue;
+            }
+            if !super::workspace_owns_document(inner, workspace_id, document.id) {
                 continue;
             }
             let Some(source) = inner.sources.get(&document.source_id) else {
@@ -234,6 +277,9 @@ fn text_evidence(
         for chunk in inner.chunks_by_id.values() {
             stats.text_chunk_records_examined += 1;
             if excluded_chunks.contains(&chunk.id) {
+                continue;
+            }
+            if !super::workspace_owns_chunk(inner, workspace_id, chunk.id) {
                 continue;
             }
             let Some(document) = inner.documents.get(&chunk.document_id) else {
@@ -518,8 +564,11 @@ mod tests {
         assert_eq!(inner.evidence_browse_indexes.document_len(), 10_000);
         assert_eq!(inner.evidence_browse_indexes.chunk_len(), 60_000);
 
-        let (first, first_stats) = search_evidence_snapshot(&inner, &browse_request(1, 1));
-        let (repeated, repeated_stats) = search_evidence_snapshot(&inner, &browse_request(1, 1));
+        let workspace_id = fixture_workspace_id();
+        let (first, first_stats) =
+            search_evidence_snapshot(&inner, workspace_id, &browse_request(1, 1));
+        let (repeated, repeated_stats) =
+            search_evidence_snapshot(&inner, workspace_id, &browse_request(1, 1));
 
         assert_eq!(first, repeated);
         assert_eq!(first.documents[0].path, "documents/00000.md");
@@ -536,7 +585,8 @@ mod tests {
         excluded_request.excluded_chunk_ids = (0_u128..5)
             .map(|ordinal| fixture_chunk_id(0, ordinal as u32))
             .collect();
-        let (excluded_result, excluded_stats) = search_evidence_snapshot(&inner, &excluded_request);
+        let (excluded_result, excluded_stats) =
+            search_evidence_snapshot(&inner, workspace_id, &excluded_request);
         assert_eq!(excluded_result.documents[0].path, "documents/00005.md");
         assert_eq!(excluded_result.chunks[0].ordinal, 5);
         assert_eq!(excluded_stats.browse_document_entries_examined, 6);
@@ -546,6 +596,7 @@ mod tests {
         let chunk_id = fixture_chunk_id(9_999, 5);
         let (document_result, document_stats) = search_evidence_snapshot(
             &inner,
+            workspace_id,
             &EvalLabEvidenceSearchRequest {
                 query: EvalLabEvidenceSearchQuery::ExactId(document_id.0),
                 excluded_document_ids: Vec::new(),
@@ -556,6 +607,7 @@ mod tests {
         );
         let (chunk_result, chunk_stats) = search_evidence_snapshot(
             &inner,
+            workspace_id,
             &EvalLabEvidenceSearchRequest {
                 query: EvalLabEvidenceSearchQuery::ExactId(chunk_id.0),
                 excluded_document_ids: Vec::new(),
@@ -578,7 +630,8 @@ mod tests {
             document_limit: 1,
             chunk_limit: 1,
         };
-        let (text_result, text_stats) = search_evidence_snapshot(&inner, &text_request);
+        let (text_result, text_stats) =
+            search_evidence_snapshot(&inner, workspace_id, &text_request);
         assert_eq!(text_result.chunks.len(), 1);
         assert_eq!(text_stats.text_document_records_examined, 10_000);
         assert_eq!(text_stats.text_chunk_records_examined, 60_000);
@@ -590,6 +643,9 @@ mod tests {
     fn document_replacement_and_removal_keep_browse_indexes_synchronized() {
         let source = fixture_source();
         let mut inner = MemoryStoreInner::default();
+        inner
+            .project_workspaces
+            .insert(source.project_id, fixture_workspace_id());
         inner.sources.insert(source.id, source.clone());
         let zeta_document = fixture_document(source.id, 1, "zeta/guide.md");
         let beta_document = fixture_document(source.id, 2, "beta/guide.md");
@@ -598,7 +654,8 @@ mod tests {
         inner.replace_document_with_chunks(zeta_document.clone(), vec![old_chunk.clone()]);
         inner.replace_document_with_chunks(beta_document.clone(), vec![beta_chunk.clone()]);
 
-        let (before, _) = search_evidence_snapshot(&inner, &browse_request(10, 10));
+        let (before, _) =
+            search_evidence_snapshot(&inner, fixture_workspace_id(), &browse_request(10, 10));
         assert_eq!(
             before
                 .documents
@@ -615,7 +672,8 @@ mod tests {
         let replacement_chunk = fixture_chunk(source.id, alpha_document.id, 300, 3);
         inner.replace_document_with_chunks(alpha_document.clone(), vec![replacement_chunk.clone()]);
 
-        let (replaced, _) = search_evidence_snapshot(&inner, &browse_request(10, 10));
+        let (replaced, _) =
+            search_evidence_snapshot(&inner, fixture_workspace_id(), &browse_request(10, 10));
         assert_eq!(replaced.documents[0].id, alpha_document.id);
         assert_eq!(replaced.chunks[0].id, replacement_chunk.id);
         assert!(!inner.chunks_by_id.contains_key(&old_chunk.id));
@@ -623,7 +681,8 @@ mod tests {
         assert_eq!(inner.evidence_browse_indexes.chunk_len(), 2);
 
         let removed = inner.remove_document_with_chunks(alpha_document.id);
-        let (after_removal, _) = search_evidence_snapshot(&inner, &browse_request(10, 10));
+        let (after_removal, _) =
+            search_evidence_snapshot(&inner, fixture_workspace_id(), &browse_request(10, 10));
         assert_eq!(removed.map(|document| document.id), Some(alpha_document.id));
         assert_eq!(
             after_removal
@@ -647,6 +706,9 @@ mod tests {
     fn demo_merge_rebuilds_document_and_chunk_ordering() {
         let source = fixture_source();
         let mut inner = MemoryStoreInner::default();
+        inner
+            .project_workspaces
+            .insert(source.project_id, fixture_workspace_id());
         inner.sources.insert(source.id, source.clone());
         let initial_document = fixture_document(source.id, 1, "zeta/demo.md");
         let initial_chunk = fixture_chunk(source.id, initial_document.id, 100, 0);
@@ -663,7 +725,8 @@ mod tests {
             vec![updated_chunk.clone(), added_chunk.clone()],
         );
 
-        let (result, _) = search_evidence_snapshot(&inner, &browse_request(10, 10));
+        let (result, _) =
+            search_evidence_snapshot(&inner, fixture_workspace_id(), &browse_request(10, 10));
         assert_eq!(result.documents[0].path, updated_document.path);
         assert_eq!(
             result
@@ -680,6 +743,9 @@ mod tests {
     fn large_evidence_snapshot() -> MemoryStoreInner {
         let source = fixture_source();
         let mut inner = MemoryStoreInner::default();
+        inner
+            .project_workspaces
+            .insert(source.project_id, fixture_workspace_id());
         inner.sources.insert(source.id, source.clone());
 
         for document_index in 0..10_000 {
@@ -724,6 +790,10 @@ mod tests {
             sync_policy: SourceSyncPolicy::Manual,
             chunking: ChunkingConfig::default(),
         }
+    }
+
+    fn fixture_workspace_id() -> WorkspaceId {
+        WorkspaceId(Uuid::from_u128(3))
     }
 
     fn fixture_document(source_id: SourceId, index: usize, path: &str) -> Document {

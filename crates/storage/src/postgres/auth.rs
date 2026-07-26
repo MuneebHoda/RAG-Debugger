@@ -15,6 +15,8 @@ impl PostgresStore {
         password_hash: String,
     ) -> Result<AuthenticatedUser, StorageError> {
         if let Some(existing) = self.find_user_by_email(&user.email).await? {
+            self.claim_unowned_legacy_data(existing.auth.workspace.id)
+                .await?;
             return Ok(existing.auth);
         }
         self.create_user_workspace(organization, workspace, user, role, password_hash)
@@ -87,14 +89,7 @@ impl PostgresStore {
         .execute(&mut *transaction)
         .await?;
 
-        sqlx::query(
-            "UPDATE projects
-             SET workspace_id = $1
-             WHERE workspace_id IS NULL",
-        )
-        .bind(workspace.id.0)
-        .execute(&mut *transaction)
-        .await?;
+        claim_unowned_legacy_data_in_transaction(&mut transaction, workspace.id).await?;
 
         transaction.commit().await?;
 
@@ -104,6 +99,16 @@ impl PostgresStore {
             workspace,
             role,
         })
+    }
+
+    async fn claim_unowned_legacy_data(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<(), StorageError> {
+        let mut transaction = self.pool.begin().await?;
+        claim_unowned_legacy_data_in_transaction(&mut transaction, workspace_id).await?;
+        transaction.commit().await?;
+        Ok(())
     }
 
     pub(super) async fn find_user_by_email(
@@ -280,6 +285,45 @@ impl PostgresStore {
         }
         Ok(())
     }
+}
+
+async fn claim_unowned_legacy_data_in_transaction(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: WorkspaceId,
+) -> Result<(), StorageError> {
+    let is_only_workspace = sqlx::query_scalar::<_, bool>(
+        "SELECT COUNT(*) = 1
+                AND EXISTS (SELECT 1 FROM workspaces WHERE id = $1)
+         FROM workspaces",
+    )
+    .bind(workspace_id.0)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if !is_only_workspace {
+        return Ok(());
+    }
+
+    sqlx::query("UPDATE projects SET workspace_id = $1 WHERE workspace_id IS NULL")
+        .bind(workspace_id.0)
+        .execute(&mut **transaction)
+        .await?;
+    sqlx::query(
+        "UPDATE retrieval_eval_datasets
+         SET workspace_id = $1
+         WHERE workspace_id IS NULL",
+    )
+    .bind(workspace_id.0)
+    .execute(&mut **transaction)
+    .await?;
+    sqlx::query(
+        "UPDATE retrieval_eval_runs
+         SET workspace_id = $1
+         WHERE workspace_id IS NULL",
+    )
+    .bind(workspace_id.0)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
 }
 
 fn user_with_password_from_row(

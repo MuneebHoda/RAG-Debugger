@@ -1,38 +1,19 @@
-use std::sync::Arc;
+mod support;
 
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use rag_debugger_api::{
-    app,
-    config::{ApiConfig, RuntimeEnvironment, StorageBackend},
-    state::AppState,
-};
-use rag_debugger_core::ProductConfig;
-use rag_debugger_storage::memory::MemoryStore;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-fn test_app() -> axum::Router {
-    app(AppState::new(
-        ApiConfig {
-            environment: RuntimeEnvironment::Test,
-            bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
-            storage_backend: StorageBackend::Memory,
-            database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
-                .to_owned(),
-            web_origin: "http://127.0.0.1:5173".to_owned(),
-            auth: Default::default(),
-            product: ProductConfig::default(),
-        },
-        Arc::new(MemoryStore::default()),
-    ))
+async fn test_app() -> axum::Router {
+    support::authenticated_test_app().await.router
 }
 
 #[tokio::test]
 async fn retrieval_query_searches_all_indexed_documents() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "resume.md",
@@ -67,7 +48,7 @@ async fn retrieval_query_searches_all_indexed_documents() {
 
 #[tokio::test]
 async fn retrieval_keeps_path_candidates_but_abstains_without_body_support() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "compensation-range.md",
@@ -104,7 +85,7 @@ async fn retrieval_keeps_path_candidates_but_abstains_without_body_support() {
 
 #[tokio::test]
 async fn retrieval_query_respects_document_filter_and_top_k() {
-    let app = test_app();
+    let app = test_app().await;
     let upload_body = upload_text_file(
         &app,
         "resume.md",
@@ -141,7 +122,7 @@ async fn retrieval_query_respects_document_filter_and_top_k() {
 
 #[tokio::test]
 async fn retrieval_query_returns_insufficient_evidence_when_no_chunks_match() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(&app, "resume.md", "Projects\n- Built frontend dashboards.").await;
     index_embeddings(&app).await;
 
@@ -167,7 +148,7 @@ async fn retrieval_query_returns_insufficient_evidence_when_no_chunks_match() {
 
 #[tokio::test]
 async fn retrieval_query_reports_missing_embeddings_for_default_hybrid_mode() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "resume.md",
@@ -196,7 +177,7 @@ async fn retrieval_query_reports_missing_embeddings_for_default_hybrid_mode() {
 
 #[tokio::test]
 async fn retrieval_query_supports_explicit_lexical_mode_without_embeddings() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "resume.md",
@@ -222,7 +203,7 @@ async fn retrieval_query_supports_explicit_lexical_mode_without_embeddings() {
 
 #[tokio::test]
 async fn embedding_status_and_indexing_are_exposed() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "resume.md",
@@ -252,7 +233,7 @@ async fn embedding_status_and_indexing_are_exposed() {
 
 #[tokio::test]
 async fn retrieval_eval_cases_can_be_created_and_run() {
-    let app = test_app();
+    let app = test_app().await;
     let upload_body = upload_text_file(
         &app,
         "resume.md",
@@ -314,7 +295,7 @@ async fn retrieval_eval_cases_can_be_created_and_run() {
 
 #[tokio::test]
 async fn retrieval_query_rejects_empty_query() {
-    let app = test_app();
+    let app = test_app().await;
     let response = app
         .oneshot(json_request(json!({
             "query": " ",

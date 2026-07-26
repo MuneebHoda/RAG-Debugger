@@ -1,10 +1,10 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Extension, Path, State},
     Json,
 };
 use rag_debugger_core::{
-    CreateTraceFromRetrievalRunRequest, RerunTraceRequest, RetrievalQueryRequest, Trace,
-    TraceRerunResponse, TraceSummary,
+    AuthenticatedUser, CreateTraceFromRetrievalRunRequest, RerunTraceRequest,
+    RetrievalQueryRequest, Trace, TraceRerunResponse, TraceSummary,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
@@ -45,6 +45,7 @@ pub async fn get_trace(
 
 pub async fn create_trace_from_retrieval_run(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<CreateTraceFromRetrievalRunRequest>,
 ) -> Result<Json<Trace>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
@@ -73,7 +74,12 @@ pub async fn create_trace_from_retrieval_run(
         });
     let project_id = match project_id {
         Some(project_id) => project_id,
-        None => repository.ensure_default_project().await?.id,
+        None => {
+            repository
+                .ensure_default_project(user.workspace.id)
+                .await?
+                .id
+        }
     };
 
     let trace = build_trace_from_retrieval(
@@ -87,6 +93,7 @@ pub async fn create_trace_from_retrieval_run(
 
 pub async fn rerun_trace(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(trace_id): Path<Uuid>,
     Json(request): Json<RerunTraceRequest>,
 ) -> Result<Json<TraceRerunResponse>, ApiError> {
@@ -114,7 +121,9 @@ pub async fn rerun_trace(
         document_ids: request.document_ids,
     };
 
-    let candidates = repository.list_searchable_chunks(&query_request).await?;
+    let candidates = repository
+        .list_searchable_chunks(user.workspace.id, &query_request)
+        .await?;
     let retriever = LocalHybridRetriever::new(
         LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone()),
         state.config().product.retrieval.clone(),

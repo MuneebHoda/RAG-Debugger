@@ -1,18 +1,19 @@
 use std::{collections::HashSet, hash::Hash};
 
 use axum::{
-    extract::{Path, Query, State},
+    extract::{Extension, Path, Query, State},
     Json,
 };
 use rag_debugger_core::{
-    ChunkId, CompareRetrievalEvalExperimentRequest, CreateRetrievalEvalDatasetRequest,
-    CreateRetrievalEvalLabCaseRequest, DocumentId, EvalLabEvidenceSearchQuery,
-    EvalLabEvidenceSearchRequest, QueryEvalLabEvidenceRequest, QueryEvalLabEvidenceResponse,
-    RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDataset,
-    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
-    RetrievalEvalExperimentId, RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison,
-    RetrievalEvalRun, RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode,
-    RetrievalQueryRequest, RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest,
+    AuthenticatedUser, ChunkId, CompareRetrievalEvalExperimentRequest,
+    CreateRetrievalEvalDatasetRequest, CreateRetrievalEvalLabCaseRequest, DocumentId,
+    EvalLabEvidenceSearchQuery, EvalLabEvidenceSearchRequest, QueryEvalLabEvidenceRequest,
+    QueryEvalLabEvidenceResponse, RetrievalEvalCase, RetrievalEvalCaseId,
+    RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
+    RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
+    RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
+    RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
+    RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest, WorkspaceId,
     EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
     EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS,
     EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS, EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
@@ -27,7 +28,7 @@ use rag_debugger_rag::{
     retrieval::LocalHybridRetriever,
     RagError,
 };
-use rag_debugger_storage::repository::EvidenceRepository;
+use rag_debugger_storage::repository::{EvidenceRepository, SubmittedExpectedEvidence};
 use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -36,13 +37,19 @@ use crate::{error::ApiError, state::AppState};
 
 pub async fn list_datasets(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
 ) -> Result<Json<Vec<RetrievalEvalDatasetSummary>>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    Ok(Json(repository.list_retrieval_eval_datasets().await?))
+    Ok(Json(
+        repository
+            .list_retrieval_eval_datasets(user.workspace.id)
+            .await?,
+    ))
 }
 
 pub async fn create_dataset(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<CreateRetrievalEvalDatasetRequest>,
 ) -> Result<Json<RetrievalEvalDataset>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
@@ -65,18 +72,21 @@ pub async fn create_dataset(
     };
 
     Ok(Json(
-        repository.create_retrieval_eval_dataset(dataset).await?,
+        repository
+            .create_retrieval_eval_dataset(user.workspace.id, dataset)
+            .await?,
     ))
 }
 
 pub async fn get_dataset(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(dataset_id): Path<Uuid>,
 ) -> Result<Json<RetrievalEvalDataset>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     Ok(Json(
         repository
-            .get_retrieval_eval_dataset(RetrievalEvalDatasetId(dataset_id))
+            .get_retrieval_eval_dataset(user.workspace.id, RetrievalEvalDatasetId(dataset_id))
             .await
             .map_err(not_found_to_api("eval dataset"))?,
     ))
@@ -84,32 +94,33 @@ pub async fn get_dataset(
 
 pub async fn query_evidence(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<QueryEvalLabEvidenceRequest>,
 ) -> Result<Json<QueryEvalLabEvidenceResponse>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     Ok(Json(
-        build_evidence_response(repository.as_ref(), &request).await?,
+        build_evidence_response(repository.as_ref(), user.workspace.id, &request).await?,
     ))
 }
 
 pub async fn create_case(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(dataset_id): Path<Uuid>,
     Json(mut request): Json<CreateRetrievalEvalLabCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let workspace_id = user.workspace.id;
+    repository
+        .get_retrieval_eval_dataset(workspace_id, RetrievalEvalDatasetId(dataset_id))
+        .await
+        .map_err(not_found_to_api("eval dataset"))?;
     validate_evidence_request_counts(
         Some(&request.expected_document_ids),
         Some(&request.expected_chunk_ids),
     )?;
     request.expected_chunk_ids = dedupe_chunk_ids(request.expected_chunk_ids);
     request.expected_document_ids = dedupe_document_ids(request.expected_document_ids);
-    validate_expected_evidence(
-        repository.as_ref(),
-        &request.expected_chunk_ids,
-        &request.expected_document_ids,
-    )
-    .await?;
     let eval_case = eval_case_from_request(
         request,
         state.config().product.retrieval.default_top_k,
@@ -117,14 +128,19 @@ pub async fn create_case(
     )?;
     Ok(Json(
         repository
-            .create_retrieval_eval_case_in_dataset(RetrievalEvalDatasetId(dataset_id), eval_case)
+            .create_retrieval_eval_case_in_dataset(
+                workspace_id,
+                RetrievalEvalDatasetId(dataset_id),
+                eval_case,
+            )
             .await
-            .map_err(not_found_to_api("eval dataset"))?,
+            .map_err(eval_case_write_error)?,
     ))
 }
 
 pub async fn update_case(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(case_id): Path<Uuid>,
     Json(mut request): Json<UpdateRetrievalEvalCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
@@ -134,21 +150,21 @@ pub async fn update_case(
         request.expected_chunk_ids.as_deref(),
     )?;
     if let Some(chunk_ids) = request.expected_chunk_ids.take() {
-        let chunk_ids = dedupe_chunk_ids(chunk_ids);
-        validate_expected_evidence(repository.as_ref(), &chunk_ids, &[]).await?;
-        request.expected_chunk_ids = Some(chunk_ids);
+        request.expected_chunk_ids = Some(dedupe_chunk_ids(chunk_ids));
     }
     if let Some(document_ids) = request.expected_document_ids.take() {
-        let document_ids = dedupe_document_ids(document_ids);
-        validate_expected_evidence(repository.as_ref(), &[], &document_ids).await?;
-        request.expected_document_ids = Some(document_ids);
+        request.expected_document_ids = Some(dedupe_document_ids(document_ids));
     }
+    let workspace_id = user.workspace.id;
+    let case_id = RetrievalEvalCaseId(case_id);
     let current = repository
-        .list_retrieval_eval_cases()
-        .await?
-        .into_iter()
-        .find(|eval_case| eval_case.id == RetrievalEvalCaseId(case_id))
-        .ok_or_else(|| ApiError::NotFound("eval case not found".to_owned()))?;
+        .get_retrieval_eval_case(workspace_id, case_id)
+        .await
+        .map_err(not_found_to_api("eval case"))?;
+    let submitted_evidence = SubmittedExpectedEvidence {
+        document_ids: request.expected_document_ids.clone(),
+        chunk_ids: request.expected_chunk_ids.clone(),
+    };
     let updated = merge_case_update(
         current,
         request,
@@ -158,19 +174,20 @@ pub async fn update_case(
 
     Ok(Json(
         repository
-            .update_retrieval_eval_case(updated)
+            .update_retrieval_eval_case(workspace_id, updated, submitted_evidence)
             .await
-            .map_err(not_found_to_api("eval case"))?,
+            .map_err(eval_case_write_error)?,
     ))
 }
 
 pub async fn delete_case(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(case_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     repository
-        .delete_retrieval_eval_case(RetrievalEvalCaseId(case_id))
+        .delete_retrieval_eval_case(user.workspace.id, RetrievalEvalCaseId(case_id))
         .await
         .map_err(not_found_to_api("eval case"))?;
     Ok(Json(serde_json::json!({ "deleted": true })))
@@ -178,11 +195,13 @@ pub async fn delete_case(
 
 pub async fn run_experiment(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<RunRetrievalEvalExperimentRequest>,
 ) -> Result<Json<RetrievalEvalExperiment>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let workspace_id = user.workspace.id;
     let dataset = repository
-        .get_retrieval_eval_dataset(request.dataset_id)
+        .get_retrieval_eval_dataset(workspace_id, request.dataset_id)
         .await
         .map_err(not_found_to_api("eval dataset"))?;
     if dataset.cases.is_empty() {
@@ -218,7 +237,9 @@ pub async fn run_experiment(
                 source_ids: Vec::new(),
                 document_ids: Vec::new(),
             };
-            let candidates = repository.list_searchable_chunks(&query_request).await?;
+            let candidates = repository
+                .list_searchable_chunks(workspace_id, &query_request)
+                .await?;
             let expected_chunk_document_ids =
                 expected_chunk_parent_document_ids(&case, &candidates);
             let response = retriever
@@ -265,7 +286,7 @@ pub async fn run_experiment(
     };
 
     let saved = repository
-        .save_retrieval_eval_experiment(experiment)
+        .save_retrieval_eval_experiment(workspace_id, experiment)
         .await?;
     if let Some(best_result) = saved.mode_results.iter().max_by(|left, right| {
         left.average_recall_at_k
@@ -273,32 +294,35 @@ pub async fn run_experiment(
             .unwrap_or(std::cmp::Ordering::Equal)
     }) {
         repository
-            .save_retrieval_eval_run(&RetrievalEvalRun {
-                id: RetrievalEvalRunId(Uuid::now_v7()),
-                retrieval_mode: best_result.retrieval_mode,
-                case_count: best_result.case_count,
-                passed_count: best_result.passed_count,
-                average_recall_at_k: best_result.average_recall_at_k,
-                average_precision_at_k: best_result.average_precision_at_k,
-                created_at: saved.created_at,
-                results: best_result
-                    .case_results
-                    .iter()
-                    .map(|result| rag_debugger_core::RetrievalEvalResult {
-                        case_id: result.case_id,
-                        query: result.query.clone(),
-                        top_k: result.top_k,
-                        recall_at_k: result.recall_at_k,
-                        precision_at_k: result.precision_at_k,
-                        top_hit_rank: result.top_hit_rank,
-                        passed: result.passed,
-                        expected_chunk_ids: result.expected_chunk_ids.clone(),
-                        expected_document_ids: result.expected_document_ids.clone(),
-                        retrieved_chunk_ids: result.retrieved_chunk_ids.clone(),
-                        latency_ms: result.latency_ms,
-                    })
-                    .collect(),
-            })
+            .save_retrieval_eval_run(
+                workspace_id,
+                &RetrievalEvalRun {
+                    id: RetrievalEvalRunId(Uuid::now_v7()),
+                    retrieval_mode: best_result.retrieval_mode,
+                    case_count: best_result.case_count,
+                    passed_count: best_result.passed_count,
+                    average_recall_at_k: best_result.average_recall_at_k,
+                    average_precision_at_k: best_result.average_precision_at_k,
+                    created_at: saved.created_at,
+                    results: best_result
+                        .case_results
+                        .iter()
+                        .map(|result| rag_debugger_core::RetrievalEvalResult {
+                            case_id: result.case_id,
+                            query: result.query.clone(),
+                            top_k: result.top_k,
+                            recall_at_k: result.recall_at_k,
+                            precision_at_k: result.precision_at_k,
+                            top_hit_rank: result.top_hit_rank,
+                            passed: result.passed,
+                            expected_chunk_ids: result.expected_chunk_ids.clone(),
+                            expected_document_ids: result.expected_document_ids.clone(),
+                            retrieved_chunk_ids: result.retrieved_chunk_ids.clone(),
+                            latency_ms: result.latency_ms,
+                        })
+                        .collect(),
+                },
+            )
             .await?;
     }
 
@@ -307,19 +331,25 @@ pub async fn run_experiment(
 
 pub async fn list_experiments(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
 ) -> Result<Json<Vec<RetrievalEvalExperiment>>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    Ok(Json(repository.list_retrieval_eval_experiments().await?))
+    Ok(Json(
+        repository
+            .list_retrieval_eval_experiments(user.workspace.id)
+            .await?,
+    ))
 }
 
 pub async fn list_dataset_experiments(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(dataset_id): Path<Uuid>,
 ) -> Result<Json<Vec<RetrievalEvalExperimentSummary>>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let dataset_id = RetrievalEvalDatasetId(dataset_id);
     let experiments = repository
-        .list_retrieval_eval_experiments_for_dataset(dataset_id)
+        .list_retrieval_eval_experiments_for_dataset(user.workspace.id, dataset_id)
         .await?;
     Ok(Json(
         experiments
@@ -331,13 +361,14 @@ pub async fn list_dataset_experiments(
 
 pub async fn dataset_trends(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(dataset_id): Path<Uuid>,
     Query(query): Query<TrendQuery>,
 ) -> Result<Json<RetrievalEvalTrendSummary>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let dataset_id = RetrievalEvalDatasetId(dataset_id);
     let experiments = repository
-        .list_retrieval_eval_experiments_for_dataset(dataset_id)
+        .list_retrieval_eval_experiments_for_dataset(user.workspace.id, dataset_id)
         .await?;
     Ok(Json(build_trend_summary(
         dataset_id,
@@ -348,12 +379,16 @@ pub async fn dataset_trends(
 
 pub async fn get_experiment(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(experiment_id): Path<Uuid>,
 ) -> Result<Json<RetrievalEvalExperiment>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     Ok(Json(
         repository
-            .get_retrieval_eval_experiment(RetrievalEvalExperimentId(experiment_id))
+            .get_retrieval_eval_experiment(
+                user.workspace.id,
+                RetrievalEvalExperimentId(experiment_id),
+            )
             .await
             .map_err(not_found_to_api("eval experiment"))?,
     ))
@@ -361,17 +396,19 @@ pub async fn get_experiment(
 
 pub async fn experiment_regression(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(experiment_id): Path<Uuid>,
     Query(query): Query<RegressionQuery>,
 ) -> Result<Json<RetrievalEvalRegressionComparison>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let workspace_id = user.workspace.id;
     let current = repository
-        .get_retrieval_eval_experiment(RetrievalEvalExperimentId(experiment_id))
+        .get_retrieval_eval_experiment(workspace_id, RetrievalEvalExperimentId(experiment_id))
         .await
         .map_err(not_found_to_api("eval experiment"))?;
     let baseline = if let Some(baseline_id) = query.baseline_id {
         let baseline = repository
-            .get_retrieval_eval_experiment(RetrievalEvalExperimentId(baseline_id))
+            .get_retrieval_eval_experiment(workspace_id, RetrievalEvalExperimentId(baseline_id))
             .await
             .map_err(not_found_to_api("baseline eval experiment"))?;
         if baseline.dataset_id != current.dataset_id {
@@ -384,7 +421,7 @@ pub async fn experiment_regression(
         None
     };
     let dataset_experiments = repository
-        .list_retrieval_eval_experiments_for_dataset(current.dataset_id)
+        .list_retrieval_eval_experiments_for_dataset(workspace_id, current.dataset_id)
         .await?;
     let experiment_refs = dataset_experiments.iter().collect::<Vec<_>>();
     let baseline_ref = baseline
@@ -396,12 +433,13 @@ pub async fn experiment_regression(
 
 pub async fn compare_experiment(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Path(experiment_id): Path<Uuid>,
     Json(request): Json<CompareRetrievalEvalExperimentRequest>,
 ) -> Result<Json<rag_debugger_core::RetrievalEvalComparison>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let experiment = repository
-        .get_retrieval_eval_experiment(RetrievalEvalExperimentId(experiment_id))
+        .get_retrieval_eval_experiment(user.workspace.id, RetrievalEvalExperimentId(experiment_id))
         .await
         .map_err(not_found_to_api("eval experiment"))?;
     let results = if request.modes.is_empty() {
@@ -418,14 +456,19 @@ pub async fn compare_experiment(
 
 async fn build_evidence_response(
     repository: &(impl EvidenceRepository + ?Sized),
+    workspace_id: WorkspaceId,
     request: &QueryEvalLabEvidenceRequest,
 ) -> Result<QueryEvalLabEvidenceResponse, ApiError> {
     validate_evidence_request_counts(Some(&request.document_ids), Some(&request.chunk_ids))?;
     let query = evidence_search_query(request.query.as_deref())?;
     let document_ids = dedupe_document_ids(request.document_ids.clone());
     let chunk_ids = dedupe_chunk_ids(request.chunk_ids.clone());
-    let mut documents = repository.resolve_evidence_documents(&document_ids).await?;
-    let mut chunks = repository.resolve_evidence_chunks(&chunk_ids).await?;
+    let mut documents = repository
+        .resolve_evidence_documents(workspace_id, &document_ids)
+        .await?;
+    let mut chunks = repository
+        .resolve_evidence_chunks(workspace_id, &chunk_ids)
+        .await?;
     let found_document_ids = documents
         .iter()
         .map(|document| document.id)
@@ -450,13 +493,16 @@ async fn build_evidence_response(
     };
     if document_limit > 0 || chunk_limit > 0 {
         let candidates = repository
-            .search_evidence(&EvalLabEvidenceSearchRequest {
-                query,
-                excluded_document_ids: document_ids,
-                excluded_chunk_ids: chunk_ids,
-                document_limit,
-                chunk_limit,
-            })
+            .search_evidence(
+                workspace_id,
+                &EvalLabEvidenceSearchRequest {
+                    query,
+                    excluded_document_ids: document_ids,
+                    excluded_chunk_ids: chunk_ids,
+                    document_limit,
+                    chunk_limit,
+                },
+            )
             .await?;
         let mut seen_document_ids = found_document_ids;
         for candidate in candidates.documents {
@@ -478,28 +524,6 @@ async fn build_evidence_response(
         unresolved_document_ids,
         unresolved_chunk_ids,
     })
-}
-
-async fn validate_expected_evidence(
-    repository: &(impl EvidenceRepository + ?Sized),
-    chunk_ids: &[ChunkId],
-    document_ids: &[DocumentId],
-) -> Result<(), ApiError> {
-    if chunk_ids.is_empty() && document_ids.is_empty() {
-        return Ok(());
-    }
-
-    let resolved_documents = repository.resolve_evidence_documents(document_ids).await?;
-    let resolved_chunks = repository.resolve_evidence_chunks(chunk_ids).await?;
-
-    if resolved_documents.len() == document_ids.len() && resolved_chunks.len() == chunk_ids.len() {
-        Ok(())
-    } else {
-        Err(ApiError::BadRequest(
-            "Some selected evidence is unavailable. Remove or replace stale evidence before saving."
-                .to_owned(),
-        ))
-    }
 }
 
 fn evidence_search_query(query: Option<&str>) -> Result<EvalLabEvidenceSearchQuery, ApiError> {
@@ -700,6 +724,19 @@ fn not_found_to_api(
     }
 }
 
+fn eval_case_write_error(error: rag_debugger_storage::StorageError) -> ApiError {
+    match error {
+        rag_debugger_storage::StorageError::UnavailableEvidence => ApiError::BadRequest(
+            "Some selected evidence is unavailable. Remove or replace stale evidence before saving."
+                .to_owned(),
+        ),
+        rag_debugger_storage::StorageError::NotFound => {
+            ApiError::NotFound("eval case not found".to_owned())
+        }
+        other => ApiError::Storage(other),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::{
@@ -727,6 +764,7 @@ mod tests {
     impl EvidenceRepository for CountingEvidenceRepository {
         async fn resolve_evidence_documents(
             &self,
+            _workspace_id: WorkspaceId,
             _document_ids: &[DocumentId],
         ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError> {
             self.document_resolutions.fetch_add(1, Ordering::Relaxed);
@@ -735,6 +773,7 @@ mod tests {
 
         async fn resolve_evidence_chunks(
             &self,
+            _workspace_id: WorkspaceId,
             _chunk_ids: &[ChunkId],
         ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError> {
             self.chunk_resolutions.fetch_add(1, Ordering::Relaxed);
@@ -743,6 +782,7 @@ mod tests {
 
         async fn search_evidence(
             &self,
+            _workspace_id: WorkspaceId,
             request: &EvalLabEvidenceSearchRequest,
         ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
             self.searches.fetch_add(1, Ordering::Relaxed);
@@ -762,6 +802,7 @@ mod tests {
 
         let response = build_evidence_response(
             &repository,
+            test_workspace_id(),
             &QueryEvalLabEvidenceRequest {
                 query: Some("account recovery".to_owned()),
                 document_ids: vec![document_id],
@@ -783,24 +824,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn case_validation_never_runs_candidate_search() {
-        let repository = CountingEvidenceRepository::default();
-
-        let error = validate_expected_evidence(
-            &repository,
-            &[ChunkId(Uuid::now_v7())],
-            &[DocumentId(Uuid::now_v7())],
-        )
-        .await
-        .expect_err("unresolved evidence is rejected");
-
-        assert!(matches!(error, ApiError::BadRequest(_)));
-        assert_eq!(repository.document_resolutions.load(Ordering::Relaxed), 1);
-        assert_eq!(repository.chunk_resolutions.load(Ordering::Relaxed), 1);
-        assert_eq!(repository.searches.load(Ordering::Relaxed), 0);
-    }
-
-    #[tokio::test]
     async fn evidence_response_rejects_oversized_work_before_repository_access() {
         let repository = CountingEvidenceRepository::default();
         let repeated_document = DocumentId(Uuid::now_v7());
@@ -814,7 +837,7 @@ mod tests {
             include_chunks: true,
         };
 
-        let error = build_evidence_response(&repository, &request)
+        let error = build_evidence_response(&repository, test_workspace_id(), &request)
             .await
             .expect_err("duplicates count toward request work");
 
@@ -836,6 +859,7 @@ mod tests {
 
         let response = build_evidence_response(
             &repository,
+            test_workspace_id(),
             &QueryEvalLabEvidenceRequest {
                 query: None,
                 document_ids: document_ids.clone(),
@@ -861,6 +885,7 @@ mod tests {
         let repository = CountingEvidenceRepository::default();
         let error = build_evidence_response(
             &repository,
+            test_workspace_id(),
             &QueryEvalLabEvidenceRequest {
                 query: Some("éa".to_owned()),
                 document_ids: Vec::new(),
@@ -887,6 +912,7 @@ mod tests {
 
         build_evidence_response(
             &repository,
+            test_workspace_id(),
             &QueryEvalLabEvidenceRequest {
                 query: Some(id.to_string()),
                 document_ids: Vec::new(),
@@ -906,6 +932,10 @@ mod tests {
             .expect("search requests lock");
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].query, EvalLabEvidenceSearchQuery::ExactId(id));
+    }
+
+    fn test_workspace_id() -> WorkspaceId {
+        WorkspaceId(Uuid::from_u128(1))
     }
 
     #[test]

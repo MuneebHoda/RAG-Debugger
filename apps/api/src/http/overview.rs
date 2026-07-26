@@ -1,11 +1,15 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Extension, State},
+    Json,
+};
 use rag_debugger_core::{
-    DocumentProfile, DocumentSummary, EmbeddingIndexRequest, EmbeddingStatus, EvidenceStrength,
-    FailureLabel, OverviewAction, OverviewActionPriority, OverviewActivity, OverviewActivityKind,
-    OverviewDocumentProfile, OverviewEvalExperimentSummary, OverviewEvalRunSummary, OverviewHealth,
-    OverviewHealthStatus, OverviewIssue, OverviewMetric, OverviewPipelineStep, OverviewResponse,
-    OverviewSeverity, OverviewStepStatus, OverviewTone, RetrievalEvalExperiment,
-    RetrievalEvalGateStatus, RetrievalEvalRun, SourceSummary, TraceSummary,
+    AuthenticatedUser, DocumentProfile, DocumentSummary, EmbeddingIndexRequest, EmbeddingStatus,
+    EvidenceStrength, FailureLabel, OverviewAction, OverviewActionPriority, OverviewActivity,
+    OverviewActivityKind, OverviewDocumentProfile, OverviewEvalExperimentSummary,
+    OverviewEvalRunSummary, OverviewHealth, OverviewHealthStatus, OverviewIssue, OverviewMetric,
+    OverviewPipelineStep, OverviewResponse, OverviewSeverity, OverviewStepStatus, OverviewTone,
+    RetrievalEvalExperiment, RetrievalEvalGateStatus, RetrievalEvalRun, SourceSummary,
+    TraceSummary,
 };
 use rag_debugger_rag::embedding::{EmbeddingProvider, LocalHashEmbeddingProvider};
 use time::OffsetDateTime;
@@ -14,19 +18,25 @@ use crate::{error::ApiError, state::AppState};
 
 pub async fn get_overview(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
 ) -> Result<Json<OverviewResponse>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
 
-    let sources = repository.list_sources().await?;
+    let workspace_id = user.workspace.id;
+    let sources = repository.list_sources(workspace_id).await?;
     let embedding_status = repository
         .embedding_status(&EmbeddingIndexRequest::default(), &provider.model())
         .await?;
     let traces = repository.list_traces().await?;
-    let eval_cases = repository.list_retrieval_eval_cases().await?;
-    let latest_eval_run = repository.latest_retrieval_eval_run().await?;
-    let eval_datasets = repository.list_retrieval_eval_datasets().await?;
-    let latest_eval_experiment = repository.latest_retrieval_eval_experiment().await?;
+    let eval_cases = repository.list_retrieval_eval_cases(workspace_id).await?;
+    let latest_eval_run = repository.latest_retrieval_eval_run(workspace_id).await?;
+    let eval_datasets = repository
+        .list_retrieval_eval_datasets(workspace_id)
+        .await?;
+    let latest_eval_experiment = repository
+        .latest_retrieval_eval_experiment(workspace_id)
+        .await?;
 
     Ok(Json(build_overview(
         sources,

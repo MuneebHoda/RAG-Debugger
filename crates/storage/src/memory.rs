@@ -23,7 +23,7 @@ use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
         EvalRepository, HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
-        SourceRepository, TraceRepository,
+        SourceRepository, SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
@@ -51,8 +51,11 @@ struct MemoryStoreInner {
     retrieval_eval_cases: HashMap<RetrievalEvalCaseId, RetrievalEvalCase>,
     retrieval_eval_case_datasets: HashMap<RetrievalEvalCaseId, RetrievalEvalDatasetId>,
     retrieval_eval_datasets: HashMap<RetrievalEvalDatasetId, RetrievalEvalDataset>,
+    retrieval_eval_dataset_workspaces: HashMap<RetrievalEvalDatasetId, WorkspaceId>,
+    default_eval_datasets: HashMap<WorkspaceId, RetrievalEvalDatasetId>,
     retrieval_eval_experiments: HashMap<RetrievalEvalExperimentId, RetrievalEvalExperiment>,
     retrieval_eval_runs: HashMap<rag_debugger_core::RetrievalEvalRunId, RetrievalEvalRun>,
+    retrieval_eval_run_workspaces: HashMap<rag_debugger_core::RetrievalEvalRunId, WorkspaceId>,
     traces: HashMap<TraceId, Trace>,
     organizations: HashMap<rag_debugger_core::OrganizationId, Organization>,
     workspaces: HashMap<WorkspaceId, Workspace>,
@@ -74,9 +77,19 @@ impl HealthRepository for MemoryStore {
 
 #[async_trait]
 impl ProjectRepository for MemoryStore {
-    async fn ensure_default_project(&self) -> Result<Project, StorageError> {
+    async fn ensure_default_project(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Project, StorageError> {
         let mut inner = self.lock()?;
-        if let Some(project) = inner.projects.values().next() {
+        if !inner.workspaces.contains_key(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
+        if let Some(project) = inner
+            .projects
+            .values()
+            .find(|project| inner.project_workspaces.get(&project.id) == Some(&workspace_id))
+        {
             return Ok(project.clone());
         }
 
@@ -89,31 +102,55 @@ impl ProjectRepository for MemoryStore {
             updated_at: now,
         };
         inner.projects.insert(project.id, project.clone());
+        inner.project_workspaces.insert(project.id, workspace_id);
         Ok(project)
     }
 }
 
 #[async_trait]
 impl SourceRepository for MemoryStore {
-    async fn create_source(&self, source: Source) -> Result<Source, StorageError> {
+    async fn create_source(
+        &self,
+        workspace_id: WorkspaceId,
+        source: Source,
+    ) -> Result<Source, StorageError> {
         let mut inner = self.lock()?;
+        if inner.project_workspaces.get(&source.project_id) != Some(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
         inner.sources.insert(source.id, source.clone());
         Ok(source)
     }
 
-    async fn create_ingestion_run(&self, run: IngestionRun) -> Result<IngestionRun, StorageError> {
+    async fn create_ingestion_run(
+        &self,
+        workspace_id: WorkspaceId,
+        run: IngestionRun,
+    ) -> Result<IngestionRun, StorageError> {
         let mut inner = self.lock()?;
+        if !workspace_owns_source(&inner, workspace_id, run.source_id) {
+            return Err(StorageError::NotFound);
+        }
         inner.runs.insert(run.id, run.clone());
         Ok(run)
     }
 
     async fn complete_ingestion_run(
         &self,
+        workspace_id: WorkspaceId,
         id: IngestionRunId,
         status: IngestionRunStatus,
         totals: IngestionTotals,
     ) -> Result<IngestionRun, StorageError> {
         let mut inner = self.lock()?;
+        let source_id = inner
+            .runs
+            .get(&id)
+            .map(|run| run.source_id)
+            .ok_or(StorageError::NotFound)?;
+        if !workspace_owns_source(&inner, workspace_id, source_id) {
+            return Err(StorageError::NotFound);
+        }
         let run = inner.runs.get_mut(&id).ok_or(StorageError::NotFound)?;
         run.status = status;
         run.totals = totals;
@@ -121,11 +158,18 @@ impl SourceRepository for MemoryStore {
         Ok(run.clone())
     }
 
-    async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError> {
+    async fn list_sources(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<SourceSummary>, StorageError> {
         let inner = self.lock()?;
         let mut summaries = Vec::new();
 
-        for source in inner.sources.values() {
+        for source in inner
+            .sources
+            .values()
+            .filter(|source| workspace_owns_source(&inner, workspace_id, source.id))
+        {
             let documents = inner
                 .documents
                 .values()
@@ -158,19 +202,27 @@ impl SourceRepository for MemoryStore {
 impl DocumentRepository for MemoryStore {
     async fn insert_document_with_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document: Document,
         chunks: Vec<Chunk>,
     ) -> Result<Document, StorageError> {
         let mut inner = self.lock()?;
+        if !workspace_owns_source(&inner, workspace_id, document.source_id) {
+            return Err(StorageError::NotFound);
+        }
         inner.replace_document_with_chunks(document.clone(), chunks);
         Ok(document)
     }
 
     async fn list_document_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError> {
         let inner = self.lock()?;
+        if !workspace_owns_document(&inner, workspace_id, document_id) {
+            return Err(StorageError::NotFound);
+        }
         let mut chunks = inner.chunks.get(&document_id).cloned().unwrap_or_default();
         chunks.sort_by_key(|chunk| chunk.ordinal);
         Ok(chunks)
@@ -181,6 +233,7 @@ impl DocumentRepository for MemoryStore {
 impl RetrievalRepository for MemoryStore {
     async fn list_searchable_chunks(
         &self,
+        workspace_id: WorkspaceId,
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError> {
         let inner = self.lock()?;
@@ -188,6 +241,9 @@ impl RetrievalRepository for MemoryStore {
 
         for chunks in inner.chunks.values() {
             for chunk in chunks {
+                if !workspace_owns_source(&inner, workspace_id, chunk.source_id) {
+                    continue;
+                }
                 if !request.source_ids.is_empty() && !request.source_ids.contains(&chunk.source_id)
                 {
                     continue;
@@ -360,10 +416,17 @@ impl EmbeddingRepository for MemoryStore {
 impl EvalRepository for MemoryStore {
     async fn create_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError> {
         let mut inner = self.lock()?;
-        let dataset_id = ensure_default_eval_dataset(&mut inner).id;
+        validate_expected_evidence_owned(
+            &inner,
+            workspace_id,
+            &eval_case.expected_document_ids,
+            &eval_case.expected_chunk_ids,
+        )?;
+        let dataset_id = ensure_default_eval_dataset(&mut inner, workspace_id)?.id;
         inner
             .retrieval_eval_case_datasets
             .insert(eval_case.id, dataset_id);
@@ -373,11 +436,15 @@ impl EvalRepository for MemoryStore {
         Ok(eval_case)
     }
 
-    async fn list_retrieval_eval_cases(&self) -> Result<Vec<RetrievalEvalCase>, StorageError> {
+    async fn list_retrieval_eval_cases(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
         let inner = self.lock()?;
         let mut cases = inner
             .retrieval_eval_cases
             .values()
+            .filter(|eval_case| eval_case_owned_by(&inner, workspace_id, eval_case.id))
             .cloned()
             .collect::<Vec<_>>();
         cases.sort_by_key(|eval_case| Reverse(eval_case.created_at));
@@ -386,56 +453,95 @@ impl EvalRepository for MemoryStore {
 
     async fn list_retrieval_eval_cases_by_id(
         &self,
+        workspace_id: WorkspaceId,
         case_ids: &[RetrievalEvalCaseId],
     ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
         let inner = self.lock()?;
         let mut cases = case_ids
             .iter()
+            .filter(|case_id| eval_case_owned_by(&inner, workspace_id, **case_id))
             .filter_map(|case_id| inner.retrieval_eval_cases.get(case_id).cloned())
             .collect::<Vec<_>>();
         cases.sort_by_key(|eval_case| Reverse(eval_case.created_at));
         Ok(cases)
     }
 
+    async fn get_retrieval_eval_case(
+        &self,
+        workspace_id: WorkspaceId,
+        case_id: RetrievalEvalCaseId,
+    ) -> Result<RetrievalEvalCase, StorageError> {
+        let inner = self.lock()?;
+        if !eval_case_owned_by(&inner, workspace_id, case_id) {
+            return Err(StorageError::NotFound);
+        }
+        inner
+            .retrieval_eval_cases
+            .get(&case_id)
+            .cloned()
+            .ok_or(StorageError::NotFound)
+    }
+
     async fn save_retrieval_eval_run(
         &self,
+        workspace_id: WorkspaceId,
         eval_run: &RetrievalEvalRun,
     ) -> Result<(), StorageError> {
         let mut inner = self.lock()?;
+        if eval_run
+            .results
+            .iter()
+            .any(|result| !eval_case_owned_by(&inner, workspace_id, result.case_id))
+        {
+            return Err(StorageError::NotFound);
+        }
         inner
             .retrieval_eval_runs
             .insert(eval_run.id, eval_run.clone());
+        inner
+            .retrieval_eval_run_workspaces
+            .insert(eval_run.id, workspace_id);
         Ok(())
     }
 
-    async fn latest_retrieval_eval_run(&self) -> Result<Option<RetrievalEvalRun>, StorageError> {
+    async fn latest_retrieval_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Option<RetrievalEvalRun>, StorageError> {
         let inner = self.lock()?;
         Ok(inner
             .retrieval_eval_runs
             .values()
+            .filter(|run| inner.retrieval_eval_run_workspaces.get(&run.id) == Some(&workspace_id))
             .max_by_key(|run| run.created_at)
             .cloned())
     }
 
     async fn create_retrieval_eval_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset: RetrievalEvalDataset,
     ) -> Result<RetrievalEvalDataset, StorageError> {
         let mut inner = self.lock()?;
         inner
             .retrieval_eval_datasets
             .insert(dataset.id, dataset.clone());
+        inner
+            .retrieval_eval_dataset_workspaces
+            .insert(dataset.id, workspace_id);
         Ok(dataset)
     }
 
     async fn list_retrieval_eval_datasets(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalDatasetSummary>, StorageError> {
         let mut inner = self.lock()?;
-        ensure_default_eval_dataset(&mut inner);
+        ensure_default_eval_dataset(&mut inner, workspace_id)?;
         let mut summaries = inner
             .retrieval_eval_datasets
             .values()
+            .filter(|dataset| dataset_owned_by(&inner, workspace_id, dataset.id))
             .map(|dataset| eval_dataset_summary(&inner, dataset))
             .collect::<Vec<_>>();
         summaries.sort_by_key(|summary| Reverse(summary.updated_at));
@@ -444,10 +550,14 @@ impl EvalRepository for MemoryStore {
 
     async fn get_retrieval_eval_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
     ) -> Result<RetrievalEvalDataset, StorageError> {
         let mut inner = self.lock()?;
-        ensure_default_eval_dataset(&mut inner);
+        ensure_default_eval_dataset(&mut inner, workspace_id)?;
+        if !dataset_owned_by(&inner, workspace_id, dataset_id) {
+            return Err(StorageError::NotFound);
+        }
         let mut dataset = inner
             .retrieval_eval_datasets
             .get(&dataset_id)
@@ -459,13 +569,20 @@ impl EvalRepository for MemoryStore {
 
     async fn create_retrieval_eval_case_in_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError> {
         let mut inner = self.lock()?;
-        if !inner.retrieval_eval_datasets.contains_key(&dataset_id) {
+        if !dataset_owned_by(&inner, workspace_id, dataset_id) {
             return Err(StorageError::NotFound);
         }
+        validate_expected_evidence_owned(
+            &inner,
+            workspace_id,
+            &eval_case.expected_document_ids,
+            &eval_case.expected_chunk_ids,
+        )?;
         inner
             .retrieval_eval_case_datasets
             .insert(eval_case.id, dataset_id);
@@ -478,12 +595,23 @@ impl EvalRepository for MemoryStore {
 
     async fn update_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
+        submitted_evidence: SubmittedExpectedEvidence,
     ) -> Result<RetrievalEvalCase, StorageError> {
         let mut inner = self.lock()?;
-        if !inner.retrieval_eval_cases.contains_key(&eval_case.id) {
+        if !eval_case_owned_by(&inner, workspace_id, eval_case.id) {
             return Err(StorageError::NotFound);
         }
+        validate_expected_evidence_owned(
+            &inner,
+            workspace_id,
+            submitted_evidence
+                .document_ids
+                .as_deref()
+                .unwrap_or_default(),
+            submitted_evidence.chunk_ids.as_deref().unwrap_or_default(),
+        )?;
         inner
             .retrieval_eval_cases
             .insert(eval_case.id, eval_case.clone());
@@ -499,9 +627,13 @@ impl EvalRepository for MemoryStore {
 
     async fn delete_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         case_id: RetrievalEvalCaseId,
     ) -> Result<(), StorageError> {
         let mut inner = self.lock()?;
+        if !eval_case_owned_by(&inner, workspace_id, case_id) {
+            return Err(StorageError::NotFound);
+        }
         if inner.retrieval_eval_cases.remove(&case_id).is_none() {
             return Err(StorageError::NotFound);
         }
@@ -513,13 +645,11 @@ impl EvalRepository for MemoryStore {
 
     async fn save_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
         experiment: RetrievalEvalExperiment,
     ) -> Result<RetrievalEvalExperiment, StorageError> {
         let mut inner = self.lock()?;
-        if !inner
-            .retrieval_eval_datasets
-            .contains_key(&experiment.dataset_id)
-        {
+        if !dataset_owned_by(&inner, workspace_id, experiment.dataset_id) {
             return Err(StorageError::NotFound);
         }
         inner
@@ -531,11 +661,13 @@ impl EvalRepository for MemoryStore {
 
     async fn list_retrieval_eval_experiments(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
         let inner = self.lock()?;
         let mut experiments = inner
             .retrieval_eval_experiments
             .values()
+            .filter(|experiment| dataset_owned_by(&inner, workspace_id, experiment.dataset_id))
             .cloned()
             .collect::<Vec<_>>();
         experiments.sort_by_key(|experiment| Reverse(experiment.created_at));
@@ -544,9 +676,13 @@ impl EvalRepository for MemoryStore {
 
     async fn list_retrieval_eval_experiments_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
         let inner = self.lock()?;
+        if !dataset_owned_by(&inner, workspace_id, dataset_id) {
+            return Err(StorageError::NotFound);
+        }
         let mut experiments = inner
             .retrieval_eval_experiments
             .values()
@@ -559,23 +695,30 @@ impl EvalRepository for MemoryStore {
 
     async fn get_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
         experiment_id: RetrievalEvalExperimentId,
     ) -> Result<RetrievalEvalExperiment, StorageError> {
         let inner = self.lock()?;
-        inner
+        let experiment = inner
             .retrieval_eval_experiments
             .get(&experiment_id)
             .cloned()
-            .ok_or(StorageError::NotFound)
+            .ok_or(StorageError::NotFound)?;
+        if !dataset_owned_by(&inner, workspace_id, experiment.dataset_id) {
+            return Err(StorageError::NotFound);
+        }
+        Ok(experiment)
     }
 
     async fn latest_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Option<RetrievalEvalExperiment>, StorageError> {
         let inner = self.lock()?;
         Ok(inner
             .retrieval_eval_experiments
             .values()
+            .filter(|experiment| dataset_owned_by(&inner, workspace_id, experiment.dataset_id))
             .max_by_key(|experiment| experiment.created_at)
             .cloned())
     }
@@ -603,6 +746,7 @@ impl AuthRepository for MemoryStore {
         inner.users.insert(user.id, user.clone());
         inner.user_password_hashes.insert(user.id, password_hash);
         inner.memberships.insert((user.id, workspace.id), role);
+        claim_unowned_legacy_data(&mut inner, workspace.id);
 
         Ok(AuthenticatedUser {
             user,
@@ -634,6 +778,7 @@ impl AuthRepository for MemoryStore {
         inner.users.insert(user.id, user.clone());
         inner.user_password_hashes.insert(user.id, password_hash);
         inner.memberships.insert((user.id, workspace.id), role);
+        claim_unowned_legacy_data(&mut inner, workspace.id);
 
         Ok(AuthenticatedUser {
             user,
@@ -737,28 +882,45 @@ impl AuthRepository for MemoryStore {
 impl CiEvalRepository for MemoryStore {
     async fn save_ci_eval_run(&self, run: CiEvalRun) -> Result<CiEvalRun, StorageError> {
         let mut inner = self.lock()?;
+        if !dataset_owned_by(&inner, run.workspace_id, run.dataset_id) {
+            return Err(StorageError::NotFound);
+        }
         inner.ci_eval_runs.insert(run.id, run.clone());
         Ok(run)
     }
 
-    async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError> {
+    async fn list_ci_eval_runs(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<CiEvalRun>, StorageError> {
         let inner = self.lock()?;
-        let mut runs = inner.ci_eval_runs.values().cloned().collect::<Vec<_>>();
+        let mut runs = inner
+            .ci_eval_runs
+            .values()
+            .filter(|run| run.workspace_id == workspace_id)
+            .cloned()
+            .collect::<Vec<_>>();
         runs.sort_by_key(|run| Reverse(run.created_at));
         Ok(runs)
     }
 
-    async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError> {
+    async fn get_ci_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+        id: CiEvalRunId,
+    ) -> Result<CiEvalRun, StorageError> {
         let inner = self.lock()?;
         inner
             .ci_eval_runs
             .get(&id)
+            .filter(|run| run.workspace_id == workspace_id)
             .cloned()
             .ok_or(StorageError::NotFound)
     }
 
     async fn latest_ci_eval_run_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
     ) -> Result<Option<CiEvalRun>, StorageError> {
@@ -766,7 +928,11 @@ impl CiEvalRepository for MemoryStore {
         Ok(inner
             .ci_eval_runs
             .values()
-            .filter(|run| run.dataset_id == dataset_id && run.config_label == config_label)
+            .filter(|run| {
+                run.workspace_id == workspace_id
+                    && run.dataset_id == dataset_id
+                    && run.config_label == config_label
+            })
             .max_by_key(|run| run.created_at)
             .cloned())
     }
@@ -1028,21 +1194,33 @@ fn source_summary(inner: &MemoryStoreInner, source: &Source) -> SourceSummary {
     }
 }
 
-fn default_eval_dataset_id() -> RetrievalEvalDatasetId {
+fn legacy_default_eval_dataset_id() -> RetrievalEvalDatasetId {
     RetrievalEvalDatasetId(Uuid::from_u128(0x018f_7a2a_6e2e_7000_a000_0000_0000_e001))
 }
 
-fn ensure_default_eval_dataset(inner: &mut MemoryStoreInner) -> RetrievalEvalDataset {
-    if let Some(dataset) = inner
-        .retrieval_eval_datasets
-        .get(&default_eval_dataset_id())
-    {
-        return dataset.clone();
+fn ensure_default_eval_dataset(
+    inner: &mut MemoryStoreInner,
+    workspace_id: WorkspaceId,
+) -> Result<RetrievalEvalDataset, StorageError> {
+    if !inner.workspaces.contains_key(&workspace_id) {
+        return Err(StorageError::NotFound);
+    }
+    if let Some(dataset_id) = inner.default_eval_datasets.get(&workspace_id) {
+        if let Some(dataset) = inner.retrieval_eval_datasets.get(dataset_id) {
+            return Ok(dataset.clone());
+        }
     }
 
     let now = OffsetDateTime::now_utc();
     let dataset = RetrievalEvalDataset {
-        id: default_eval_dataset_id(),
+        id: if !inner
+            .retrieval_eval_datasets
+            .contains_key(&legacy_default_eval_dataset_id())
+        {
+            legacy_default_eval_dataset_id()
+        } else {
+            RetrievalEvalDatasetId(Uuid::now_v7())
+        },
         name: "Default retrieval dataset".to_owned(),
         description: Some("Backfilled and manually saved retrieval eval cases.".to_owned()),
         cases: Vec::new(),
@@ -1052,9 +1230,14 @@ fn ensure_default_eval_dataset(inner: &mut MemoryStoreInner) -> RetrievalEvalDat
     inner
         .retrieval_eval_datasets
         .insert(dataset.id, dataset.clone());
+    inner
+        .retrieval_eval_dataset_workspaces
+        .insert(dataset.id, workspace_id);
+    inner.default_eval_datasets.insert(workspace_id, dataset.id);
     for case_id in inner
         .retrieval_eval_cases
         .keys()
+        .filter(|case_id| !inner.retrieval_eval_case_datasets.contains_key(case_id))
         .copied()
         .collect::<Vec<_>>()
     {
@@ -1063,7 +1246,7 @@ fn ensure_default_eval_dataset(inner: &mut MemoryStoreInner) -> RetrievalEvalDat
             .entry(case_id)
             .or_insert(dataset.id);
     }
-    dataset
+    Ok(dataset)
 }
 
 fn touch_dataset(inner: &mut MemoryStoreInner, dataset_id: RetrievalEvalDatasetId) {
@@ -1084,13 +1267,125 @@ fn cases_for_dataset(
                 .retrieval_eval_case_datasets
                 .get(&eval_case.id)
                 .copied()
-                .unwrap_or_else(default_eval_dataset_id)
+                .unwrap_or(legacy_default_eval_dataset_id())
                 == dataset_id
         })
         .cloned()
         .collect::<Vec<_>>();
     cases.sort_by_key(|eval_case| Reverse(eval_case.created_at));
     cases
+}
+
+fn workspace_owns_source(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    source_id: rag_debugger_core::SourceId,
+) -> bool {
+    inner
+        .sources
+        .get(&source_id)
+        .and_then(|source| inner.project_workspaces.get(&source.project_id))
+        == Some(&workspace_id)
+}
+
+fn workspace_owns_document(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    document_id: DocumentId,
+) -> bool {
+    inner
+        .documents
+        .get(&document_id)
+        .is_some_and(|document| workspace_owns_source(inner, workspace_id, document.source_id))
+}
+
+fn workspace_owns_chunk(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    chunk_id: ChunkId,
+) -> bool {
+    inner
+        .chunks_by_id
+        .get(&chunk_id)
+        .is_some_and(|chunk| workspace_owns_source(inner, workspace_id, chunk.source_id))
+}
+
+fn dataset_owned_by(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    dataset_id: RetrievalEvalDatasetId,
+) -> bool {
+    inner.retrieval_eval_dataset_workspaces.get(&dataset_id) == Some(&workspace_id)
+}
+
+fn eval_case_owned_by(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    case_id: RetrievalEvalCaseId,
+) -> bool {
+    inner
+        .retrieval_eval_case_datasets
+        .get(&case_id)
+        .is_some_and(|dataset_id| dataset_owned_by(inner, workspace_id, *dataset_id))
+}
+
+fn validate_expected_evidence_owned(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    document_ids: &[DocumentId],
+    chunk_ids: &[ChunkId],
+) -> Result<(), StorageError> {
+    if document_ids
+        .iter()
+        .all(|id| workspace_owns_document(inner, workspace_id, *id))
+        && chunk_ids
+            .iter()
+            .all(|id| workspace_owns_chunk(inner, workspace_id, *id))
+    {
+        Ok(())
+    } else {
+        Err(StorageError::UnavailableEvidence)
+    }
+}
+
+fn claim_unowned_legacy_data(inner: &mut MemoryStoreInner, workspace_id: WorkspaceId) {
+    if inner.workspaces.len() != 1 {
+        return;
+    }
+    for project_id in inner.projects.keys().copied().collect::<Vec<_>>() {
+        inner
+            .project_workspaces
+            .entry(project_id)
+            .or_insert(workspace_id);
+    }
+    for dataset_id in inner
+        .retrieval_eval_datasets
+        .keys()
+        .copied()
+        .collect::<Vec<_>>()
+    {
+        inner
+            .retrieval_eval_dataset_workspaces
+            .entry(dataset_id)
+            .or_insert(workspace_id);
+        if dataset_id == legacy_default_eval_dataset_id() {
+            inner
+                .default_eval_datasets
+                .entry(workspace_id)
+                .or_insert(dataset_id);
+        }
+    }
+    for run_id in inner
+        .retrieval_eval_runs
+        .keys()
+        .copied()
+        .collect::<Vec<_>>()
+    {
+        inner
+            .retrieval_eval_run_workspaces
+            .entry(run_id)
+            .or_insert(workspace_id);
+    }
 }
 
 fn eval_dataset_summary(

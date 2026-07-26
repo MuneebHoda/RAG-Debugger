@@ -8,6 +8,8 @@ use thiserror::Error;
 pub enum StorageError {
     #[error("record not found")]
     NotFound,
+    #[error("selected evidence is unavailable")]
+    UnavailableEvidence,
     #[error("record already exists: {0}")]
     Conflict(String),
     #[error("invalid stored data: {0}")]

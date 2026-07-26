@@ -14,6 +14,12 @@ use rag_debugger_core::{
 
 use crate::StorageError;
 
+#[derive(Debug, Clone, Default, Eq, PartialEq)]
+pub struct SubmittedExpectedEvidence {
+    pub document_ids: Option<Vec<DocumentId>>,
+    pub chunk_ids: Option<Vec<ChunkId>>,
+}
+
 #[async_trait]
 pub trait HealthRepository: Send + Sync {
     async fn ping(&self) -> Result<(), StorageError>;
@@ -21,31 +27,48 @@ pub trait HealthRepository: Send + Sync {
 
 #[async_trait]
 pub trait ProjectRepository: Send + Sync {
-    async fn ensure_default_project(&self) -> Result<Project, StorageError>;
+    async fn ensure_default_project(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Project, StorageError>;
 }
 
 #[async_trait]
 pub trait SourceRepository: Send + Sync {
-    async fn create_source(&self, source: Source) -> Result<Source, StorageError>;
-    async fn create_ingestion_run(&self, run: IngestionRun) -> Result<IngestionRun, StorageError>;
+    async fn create_source(
+        &self,
+        workspace_id: WorkspaceId,
+        source: Source,
+    ) -> Result<Source, StorageError>;
+    async fn create_ingestion_run(
+        &self,
+        workspace_id: WorkspaceId,
+        run: IngestionRun,
+    ) -> Result<IngestionRun, StorageError>;
     async fn complete_ingestion_run(
         &self,
+        workspace_id: WorkspaceId,
         id: IngestionRunId,
         status: IngestionRunStatus,
         totals: IngestionTotals,
     ) -> Result<IngestionRun, StorageError>;
-    async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError>;
+    async fn list_sources(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<SourceSummary>, StorageError>;
 }
 
 #[async_trait]
 pub trait DocumentRepository: Send + Sync {
     async fn insert_document_with_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document: Document,
         chunks: Vec<Chunk>,
     ) -> Result<Document, StorageError>;
     async fn list_document_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError>;
 }
@@ -54,14 +77,17 @@ pub trait DocumentRepository: Send + Sync {
 pub trait EvidenceRepository: Send + Sync {
     async fn resolve_evidence_documents(
         &self,
+        workspace_id: WorkspaceId,
         document_ids: &[DocumentId],
     ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError>;
     async fn resolve_evidence_chunks(
         &self,
+        workspace_id: WorkspaceId,
         chunk_ids: &[ChunkId],
     ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError>;
     async fn search_evidence(
         &self,
+        workspace_id: WorkspaceId,
         request: &EvalLabEvidenceSearchRequest,
     ) -> Result<EvalLabEvidenceSearchResult, StorageError>;
 }
@@ -87,6 +113,7 @@ pub trait EmbeddingRepository: Send + Sync {
 pub trait RetrievalRepository: Send + Sync {
     async fn list_searchable_chunks(
         &self,
+        workspace_id: WorkspaceId,
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError>;
     async fn save_retrieval_query(
@@ -111,59 +138,85 @@ pub trait TraceRepository: Send + Sync {
 pub trait EvalRepository: Send + Sync {
     async fn create_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError>;
-    async fn list_retrieval_eval_cases(&self) -> Result<Vec<RetrievalEvalCase>, StorageError>;
+    async fn list_retrieval_eval_cases(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<RetrievalEvalCase>, StorageError>;
     async fn list_retrieval_eval_cases_by_id(
         &self,
+        workspace_id: WorkspaceId,
         case_ids: &[RetrievalEvalCaseId],
     ) -> Result<Vec<RetrievalEvalCase>, StorageError>;
+    async fn get_retrieval_eval_case(
+        &self,
+        workspace_id: WorkspaceId,
+        case_id: RetrievalEvalCaseId,
+    ) -> Result<RetrievalEvalCase, StorageError>;
     async fn save_retrieval_eval_run(
         &self,
+        workspace_id: WorkspaceId,
         eval_run: &RetrievalEvalRun,
     ) -> Result<(), StorageError>;
-    async fn latest_retrieval_eval_run(&self) -> Result<Option<RetrievalEvalRun>, StorageError>;
+    async fn latest_retrieval_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Option<RetrievalEvalRun>, StorageError>;
     async fn create_retrieval_eval_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset: RetrievalEvalDataset,
     ) -> Result<RetrievalEvalDataset, StorageError>;
     async fn list_retrieval_eval_datasets(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalDatasetSummary>, StorageError>;
     async fn get_retrieval_eval_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
     ) -> Result<RetrievalEvalDataset, StorageError>;
     async fn create_retrieval_eval_case_in_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError>;
     async fn update_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
+        submitted_evidence: SubmittedExpectedEvidence,
     ) -> Result<RetrievalEvalCase, StorageError>;
     async fn delete_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         case_id: RetrievalEvalCaseId,
     ) -> Result<(), StorageError>;
     async fn save_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
         experiment: RetrievalEvalExperiment,
     ) -> Result<RetrievalEvalExperiment, StorageError>;
     async fn list_retrieval_eval_experiments(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError>;
     async fn list_retrieval_eval_experiments_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError>;
     async fn get_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
         experiment_id: RetrievalEvalExperimentId,
     ) -> Result<RetrievalEvalExperiment, StorageError>;
     async fn latest_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Option<RetrievalEvalExperiment>, StorageError>;
 }
 
@@ -213,10 +266,18 @@ pub trait AuthRepository: Send + Sync {
 #[async_trait]
 pub trait CiEvalRepository: Send + Sync {
     async fn save_ci_eval_run(&self, run: CiEvalRun) -> Result<CiEvalRun, StorageError>;
-    async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError>;
-    async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError>;
+    async fn list_ci_eval_runs(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<CiEvalRun>, StorageError>;
+    async fn get_ci_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+        id: CiEvalRunId,
+    ) -> Result<CiEvalRun, StorageError>;
     async fn latest_ci_eval_run_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
     ) -> Result<Option<CiEvalRun>, StorageError>;

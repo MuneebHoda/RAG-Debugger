@@ -11,6 +11,7 @@ use crate::StorageError;
 impl PostgresStore {
     pub(super) async fn resolve_evidence_documents(
         &self,
+        workspace_id: rag_debugger_core::WorkspaceId,
         document_ids: &[rag_debugger_core::DocumentId],
     ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError> {
         if document_ids.is_empty() {
@@ -20,7 +21,7 @@ impl PostgresStore {
         let rows = sqlx::query(
             "WITH requested AS (
                 SELECT id, MIN(position) AS position
-                FROM unnest($1::uuid[]) WITH ORDINALITY AS input(id, position)
+                FROM unnest($2::uuid[]) WITH ORDINALITY AS input(id, position)
                 GROUP BY id
              )
              SELECT d.id, d.source_id, s.name AS source_name, d.path,
@@ -29,8 +30,11 @@ impl PostgresStore {
              FROM requested r
              INNER JOIN documents d ON d.id = r.id
              INNER JOIN sources s ON s.id = d.source_id
+             INNER JOIN projects p ON p.id = s.project_id
+             WHERE p.workspace_id = $1
              ORDER BY r.position",
         )
+        .bind(workspace_id.0)
         .bind(ids)
         .fetch_all(&self.pool)
         .await?;
@@ -40,6 +44,7 @@ impl PostgresStore {
 
     pub(super) async fn resolve_evidence_chunks(
         &self,
+        workspace_id: rag_debugger_core::WorkspaceId,
         chunk_ids: &[rag_debugger_core::ChunkId],
     ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError> {
         if chunk_ids.is_empty() {
@@ -49,21 +54,24 @@ impl PostgresStore {
         let rows = sqlx::query(
             "WITH requested AS (
                 SELECT id, MIN(position) AS position
-                FROM unnest($1::uuid[]) WITH ORDINALITY AS input(id, position)
+                FROM unnest($2::uuid[]) WITH ORDINALITY AS input(id, position)
                 GROUP BY id
              )
              SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
                     d.path AS document_path, c.ordinal,
-                    LEFT(c.text, $2) AS text_preview,
-                    char_length(c.text) > $2 AS preview_truncated,
+                    LEFT(c.text, $3) AS text_preview,
+                    char_length(c.text) > $3 AS preview_truncated,
                     c.token_count, c.checksum, c.section_title, c.quality_flags,
                     c.is_duplicate, c.text_density, c.evidence_score_hint
              FROM requested r
              INNER JOIN chunks c ON c.id = r.id
              INNER JOIN documents d ON d.id = c.document_id
              INNER JOIN sources s ON s.id = c.source_id
+             INNER JOIN projects p ON p.id = s.project_id
+             WHERE p.workspace_id = $1
              ORDER BY r.position",
         )
+        .bind(workspace_id.0)
         .bind(ids)
         .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
         .fetch_all(&self.pool)
@@ -74,6 +82,7 @@ impl PostgresStore {
 
     pub(super) async fn search_evidence(
         &self,
+        workspace_id: rag_debugger_core::WorkspaceId,
         request: &EvalLabEvidenceSearchRequest,
     ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
         if request.document_limit == 0 && request.chunk_limit == 0 {
@@ -95,6 +104,7 @@ impl PostgresStore {
             let rows = match &request.query {
                 EvalLabEvidenceSearchQuery::Browse => {
                     sqlx::query(BROWSE_DOCUMENTS_SQL)
+                        .bind(workspace_id.0)
                         .bind(&excluded_document_ids)
                         .bind(request.document_limit as i64)
                         .fetch_all(&self.pool)
@@ -102,6 +112,7 @@ impl PostgresStore {
                 }
                 EvalLabEvidenceSearchQuery::ExactId(id) => {
                     sqlx::query(EXACT_DOCUMENT_SQL)
+                        .bind(workspace_id.0)
                         .bind(id)
                         .bind(&excluded_document_ids)
                         .bind(request.document_limit as i64)
@@ -110,6 +121,7 @@ impl PostgresStore {
                 }
                 EvalLabEvidenceSearchQuery::Text(query) => {
                     sqlx::query(TEXT_DOCUMENTS_SQL)
+                        .bind(workspace_id.0)
                         .bind(query)
                         .bind(&excluded_document_ids)
                         .bind(request.document_limit as i64)
@@ -128,6 +140,7 @@ impl PostgresStore {
             let rows = match &request.query {
                 EvalLabEvidenceSearchQuery::Browse => {
                     sqlx::query(BROWSE_CHUNKS_SQL)
+                        .bind(workspace_id.0)
                         .bind(&excluded_chunk_ids)
                         .bind(request.chunk_limit as i64)
                         .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
@@ -136,6 +149,7 @@ impl PostgresStore {
                 }
                 EvalLabEvidenceSearchQuery::ExactId(id) => {
                     sqlx::query(EXACT_CHUNKS_SQL)
+                        .bind(workspace_id.0)
                         .bind(id)
                         .bind(&excluded_chunk_ids)
                         .bind(request.chunk_limit as i64)
@@ -145,6 +159,7 @@ impl PostgresStore {
                 }
                 EvalLabEvidenceSearchQuery::Text(query) => {
                     sqlx::query(TEXT_CHUNKS_SQL)
+                        .bind(workspace_id.0)
                         .bind(query)
                         .bind(&excluded_chunk_ids)
                         .bind(request.chunk_limit as i64)
@@ -167,33 +182,43 @@ const BROWSE_DOCUMENTS_SQL: &str = "SELECT d.id, d.source_id, s.name AS source_n
         (SELECT COUNT(*) FROM chunks count_chunks WHERE count_chunks.document_id = d.id) AS chunk_count
     FROM documents d
     INNER JOIN sources s ON s.id = d.source_id
-    WHERE NOT (d.id = ANY($1::uuid[]))
+    INNER JOIN projects p ON p.id = s.project_id
+    WHERE p.workspace_id = $1
+      AND NOT (d.id = ANY($2::uuid[]))
     ORDER BY lower(d.path) COLLATE \"C\", d.id
-    LIMIT $2";
+    LIMIT $3";
 
 const EXACT_DOCUMENT_SQL: &str = "SELECT d.id, d.source_id, s.name AS source_name, d.path,
         d.document_profile, d.extraction_quality, d.warnings,
         (SELECT COUNT(*) FROM chunks count_chunks WHERE count_chunks.document_id = d.id) AS chunk_count
     FROM documents d
     INNER JOIN sources s ON s.id = d.source_id
-    WHERE d.id = $1 AND NOT (d.id = ANY($2::uuid[]))
-    LIMIT $3";
+    INNER JOIN projects p ON p.id = s.project_id
+    WHERE p.workspace_id = $1
+      AND d.id = $2
+      AND NOT (d.id = ANY($3::uuid[]))
+    LIMIT $4";
 
 const TEXT_DOCUMENTS_SQL: &str = "WITH path_matches AS (
         SELECT d.id, 1::smallint AS priority
         FROM documents d
-        WHERE NOT (d.id = ANY($2::uuid[]))
-          AND lower(d.path) LIKE '%' || $1 || '%'
+        INNER JOIN sources s ON s.id = d.source_id
+        INNER JOIN projects p ON p.id = s.project_id
+        WHERE p.workspace_id = $1
+          AND NOT (d.id = ANY($3::uuid[]))
+          AND lower(d.path) LIKE '%' || $2 || '%'
         ORDER BY lower(d.path) COLLATE \"C\", d.id
-        LIMIT $3
+        LIMIT $4
     ), source_matches AS (
         SELECT d.id, 2::smallint AS priority
         FROM sources s
+        INNER JOIN projects p ON p.id = s.project_id
         INNER JOIN documents d ON d.source_id = s.id
-        WHERE NOT (d.id = ANY($2::uuid[]))
-          AND lower(s.name) LIKE '%' || $1 || '%'
+        WHERE p.workspace_id = $1
+          AND NOT (d.id = ANY($3::uuid[]))
+          AND lower(s.name) LIKE '%' || $2 || '%'
         ORDER BY lower(s.name) COLLATE \"C\", lower(d.path) COLLATE \"C\", d.id
-        LIMIT $3
+        LIMIT $4
     ), ranked AS (
         SELECT id, MIN(priority) AS priority
         FROM (
@@ -210,43 +235,53 @@ const TEXT_DOCUMENTS_SQL: &str = "WITH path_matches AS (
     INNER JOIN documents d ON d.id = r.id
     INNER JOIN sources s ON s.id = d.source_id
     ORDER BY r.priority, lower(d.path) COLLATE \"C\", lower(s.name) COLLATE \"C\", d.id
-    LIMIT $3";
+    LIMIT $4";
 
 const BROWSE_CHUNKS_SQL: &str = "SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
         d.path AS document_path, c.ordinal,
-        LEFT(c.text, $3) AS text_preview,
-        char_length(c.text) > $3 AS preview_truncated,
+        LEFT(c.text, $4) AS text_preview,
+        char_length(c.text) > $4 AS preview_truncated,
         c.token_count, c.checksum, c.section_title, c.quality_flags,
         c.is_duplicate, c.text_density, c.evidence_score_hint
     FROM documents d
     INNER JOIN sources s ON s.id = d.source_id
+    INNER JOIN projects p ON p.id = s.project_id
     CROSS JOIN LATERAL (
         SELECT candidate.id, candidate.ordinal
         FROM chunks candidate
         WHERE candidate.document_id = d.id
-          AND NOT (candidate.id = ANY($1::uuid[]))
+          AND NOT (candidate.id = ANY($2::uuid[]))
         ORDER BY candidate.ordinal, candidate.id
-        LIMIT $2
+        LIMIT $3
     ) ranked_chunk
     INNER JOIN chunks c ON c.id = ranked_chunk.id
+    WHERE p.workspace_id = $1
     ORDER BY lower(d.path) COLLATE \"C\", d.id, ranked_chunk.ordinal, c.id
-    LIMIT $2";
+    LIMIT $3";
 
 const EXACT_CHUNKS_SQL: &str = "WITH matches AS (
         SELECT c.id, 0::smallint AS priority
         FROM chunks c
-        WHERE c.id = $1 AND NOT (c.id = ANY($2::uuid[]))
+        INNER JOIN sources s ON s.id = c.source_id
+        INNER JOIN projects p ON p.id = s.project_id
+        WHERE p.workspace_id = $1
+          AND c.id = $2
+          AND NOT (c.id = ANY($3::uuid[]))
         UNION ALL
         SELECT c.id, 1::smallint AS priority
         FROM chunks c
-        WHERE c.document_id = $1 AND NOT (c.id = ANY($2::uuid[]))
+        INNER JOIN sources s ON s.id = c.source_id
+        INNER JOIN projects p ON p.id = s.project_id
+        WHERE p.workspace_id = $1
+          AND c.document_id = $2
+          AND NOT (c.id = ANY($3::uuid[]))
     ), ranked AS (
         SELECT id, MIN(priority) AS priority FROM matches GROUP BY id
     )
     SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
         d.path AS document_path, c.ordinal,
-        LEFT(c.text, $4) AS text_preview,
-        char_length(c.text) > $4 AS preview_truncated,
+        LEFT(c.text, $5) AS text_preview,
+        char_length(c.text) > $5 AS preview_truncated,
         c.token_count, c.checksum, c.section_title, c.quality_flags,
         c.is_duplicate, c.text_density, c.evidence_score_hint
     FROM ranked r
@@ -254,41 +289,52 @@ const EXACT_CHUNKS_SQL: &str = "WITH matches AS (
     INNER JOIN documents d ON d.id = c.document_id
     INNER JOIN sources s ON s.id = c.source_id
     ORDER BY r.priority, lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
-    LIMIT $3";
+    LIMIT $4";
 
 const TEXT_CHUNKS_SQL: &str = "WITH path_matches AS (
         SELECT c.id, 2::smallint AS priority
         FROM documents d
+        INNER JOIN sources s ON s.id = d.source_id
+        INNER JOIN projects p ON p.id = s.project_id
         INNER JOIN chunks c ON c.document_id = d.id
-        WHERE NOT (c.id = ANY($2::uuid[]))
-          AND lower(d.path) LIKE '%' || $1 || '%'
+        WHERE p.workspace_id = $1
+          AND NOT (c.id = ANY($3::uuid[]))
+          AND lower(d.path) LIKE '%' || $2 || '%'
         ORDER BY lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
-        LIMIT $3
+        LIMIT $4
     ), section_matches AS (
         SELECT c.id, 3::smallint AS priority
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
-        WHERE NOT (c.id = ANY($2::uuid[]))
-          AND lower(COALESCE(c.section_title, '')) LIKE '%' || $1 || '%'
+        INNER JOIN sources s ON s.id = c.source_id
+        INNER JOIN projects p ON p.id = s.project_id
+        WHERE p.workspace_id = $1
+          AND NOT (c.id = ANY($3::uuid[]))
+          AND lower(COALESCE(c.section_title, '')) LIKE '%' || $2 || '%'
         ORDER BY lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
-        LIMIT $3
+        LIMIT $4
     ), source_matches AS (
         SELECT c.id, 4::smallint AS priority
         FROM sources s
+        INNER JOIN projects p ON p.id = s.project_id
         INNER JOIN documents d ON d.source_id = s.id
         INNER JOIN chunks c ON c.document_id = d.id
-        WHERE NOT (c.id = ANY($2::uuid[]))
-          AND lower(s.name) LIKE '%' || $1 || '%'
+        WHERE p.workspace_id = $1
+          AND NOT (c.id = ANY($3::uuid[]))
+          AND lower(s.name) LIKE '%' || $2 || '%'
         ORDER BY lower(d.path) COLLATE \"C\", lower(s.name) COLLATE \"C\", d.id, c.ordinal, c.id
-        LIMIT $3
+        LIMIT $4
     ), body_matches AS (
         SELECT c.id, 5::smallint AS priority
         FROM chunks c
         INNER JOIN documents d ON d.id = c.document_id
-        WHERE NOT (c.id = ANY($2::uuid[]))
-          AND lower(c.text) LIKE '%' || $1 || '%'
+        INNER JOIN sources s ON s.id = c.source_id
+        INNER JOIN projects p ON p.id = s.project_id
+        WHERE p.workspace_id = $1
+          AND NOT (c.id = ANY($3::uuid[]))
+          AND lower(c.text) LIKE '%' || $2 || '%'
         ORDER BY lower(d.path) COLLATE \"C\", d.id, c.ordinal, c.id
-        LIMIT $3
+        LIMIT $4
     ), ranked AS (
         SELECT id, MIN(priority) AS priority
         FROM (
@@ -301,8 +347,8 @@ const TEXT_CHUNKS_SQL: &str = "WITH path_matches AS (
     )
     SELECT c.id, c.document_id, c.source_id, s.name AS source_name,
         d.path AS document_path, c.ordinal,
-        LEFT(c.text, $4) AS text_preview,
-        char_length(c.text) > $4 AS preview_truncated,
+        LEFT(c.text, $5) AS text_preview,
+        char_length(c.text) > $5 AS preview_truncated,
         c.token_count, c.checksum, c.section_title, c.quality_flags,
         c.is_duplicate, c.text_density, c.evidence_score_hint
     FROM ranked r
@@ -310,7 +356,7 @@ const TEXT_CHUNKS_SQL: &str = "WITH path_matches AS (
     INNER JOIN documents d ON d.id = c.document_id
     INNER JOIN sources s ON s.id = c.source_id
     ORDER BY r.priority, lower(d.path) COLLATE \"C\", lower(s.name) COLLATE \"C\", d.id, c.ordinal, c.id
-    LIMIT $3";
+    LIMIT $4";
 
 fn evidence_document_from_row(
     row: &sqlx::postgres::PgRow,
@@ -381,10 +427,20 @@ mod tests {
             .expect("connect Postgres store");
         let pool = store.pool();
         let marker = Uuid::now_v7().simple().to_string();
+        let organization_id = Uuid::now_v7();
+        let workspace_id = Uuid::now_v7();
         let project_id = Uuid::now_v7();
         let source_id = Uuid::now_v7();
 
-        seed_query_plan_corpus(pool, project_id, source_id, &marker).await;
+        seed_query_plan_corpus(
+            pool,
+            organization_id,
+            workspace_id,
+            project_id,
+            source_id,
+            &marker,
+        )
+        .await;
 
         let exact_document_id: Uuid = sqlx::query_scalar(
             "SELECT id FROM documents WHERE source_id = $1 ORDER BY path LIMIT 1",
@@ -401,19 +457,24 @@ mod tests {
         .await
         .expect("exact chunk fixture");
 
-        let browse_documents = explain_browse_documents(pool).await;
-        let browse_chunks = explain_browse_chunks(pool).await;
-        let exact_document = explain_exact_document(pool, exact_document_id).await;
-        let exact_chunks = explain_exact_chunks(pool, exact_chunk_id).await;
-        let path_search = explain_text_documents(pool, "zqx").await;
-        let section_search = explain_text_chunks(pool, "vwx").await;
-        let body_search = explain_text_chunks(pool, "jkp").await;
+        let browse_documents = explain_browse_documents(pool, workspace_id).await;
+        let browse_chunks = explain_browse_chunks(pool, workspace_id).await;
+        let exact_document = explain_exact_document(pool, workspace_id, exact_document_id).await;
+        let exact_chunks = explain_exact_chunks(pool, workspace_id, exact_chunk_id).await;
+        let path_search = explain_text_documents(pool, workspace_id, "zqx").await;
+        let section_search = explain_text_chunks(pool, workspace_id, "vwx").await;
+        let body_search = explain_text_chunks(pool, workspace_id, "jkp").await;
 
         sqlx::query("DELETE FROM projects WHERE id = $1")
             .bind(project_id)
             .execute(pool)
             .await
             .expect("clean query plan corpus");
+        sqlx::query("DELETE FROM organizations WHERE id = $1")
+            .bind(organization_id)
+            .execute(pool)
+            .await
+            .expect("clean query plan organization");
 
         assert_uses_index(&browse_documents, "idx_documents_evidence_browse");
         assert_uses_index(&browse_chunks, "idx_documents_evidence_browse");
@@ -434,15 +495,39 @@ mod tests {
 
     async fn seed_query_plan_corpus(
         pool: &PgPool,
+        organization_id: Uuid,
+        workspace_id: Uuid,
         project_id: Uuid,
         source_id: Uuid,
         marker: &str,
     ) {
         sqlx::query(
-            "INSERT INTO projects (id, name, privacy_mode, created_at, updated_at)
-             VALUES ($1, $2, 'local_only', NOW(), NOW())",
+            "INSERT INTO organizations (id, name, created_at)
+             VALUES ($1, $2, NOW())",
+        )
+        .bind(organization_id)
+        .bind(format!("Evidence plan organization {marker}"))
+        .execute(pool)
+        .await
+        .expect("insert plan organization");
+        sqlx::query(
+            "INSERT INTO workspaces (id, organization_id, name, created_at)
+             VALUES ($1, $2, $3, NOW())",
+        )
+        .bind(workspace_id)
+        .bind(organization_id)
+        .bind(format!("Evidence plan workspace {marker}"))
+        .execute(pool)
+        .await
+        .expect("insert plan workspace");
+        sqlx::query(
+            "INSERT INTO projects (
+                id, workspace_id, name, privacy_mode, created_at, updated_at
+             )
+             VALUES ($1, $2, $3, 'local_only', NOW(), NOW())",
         )
         .bind(project_id)
+        .bind(workspace_id)
         .bind(format!("Evidence plan project {marker}"))
         .execute(pool)
         .await
@@ -515,9 +600,10 @@ mod tests {
             .expect("analyze plan corpus");
     }
 
-    async fn explain_browse_documents(pool: &PgPool) -> Value {
+    async fn explain_browse_documents(pool: &PgPool, workspace_id: Uuid) -> Value {
         let sql = format!("EXPLAIN (FORMAT JSON) {BROWSE_DOCUMENTS_SQL}");
         sqlx::query_scalar(&sql)
+            .bind(workspace_id)
             .bind(Vec::<Uuid>::new())
             .bind(1_i64)
             .fetch_one(pool)
@@ -525,9 +611,10 @@ mod tests {
             .expect("explain document browse")
     }
 
-    async fn explain_browse_chunks(pool: &PgPool) -> Value {
+    async fn explain_browse_chunks(pool: &PgPool, workspace_id: Uuid) -> Value {
         let sql = format!("EXPLAIN (FORMAT JSON) {BROWSE_CHUNKS_SQL}");
         sqlx::query_scalar(&sql)
+            .bind(workspace_id)
             .bind(Vec::<Uuid>::new())
             .bind(1_i64)
             .bind(EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT as i32)
@@ -536,9 +623,10 @@ mod tests {
             .expect("explain chunk browse")
     }
 
-    async fn explain_exact_document(pool: &PgPool, id: Uuid) -> Value {
+    async fn explain_exact_document(pool: &PgPool, workspace_id: Uuid, id: Uuid) -> Value {
         let sql = format!("EXPLAIN (FORMAT JSON) {EXACT_DOCUMENT_SQL}");
         sqlx::query_scalar(&sql)
+            .bind(workspace_id)
             .bind(id)
             .bind(Vec::<Uuid>::new())
             .bind(1_i64)
@@ -547,9 +635,10 @@ mod tests {
             .expect("explain exact document")
     }
 
-    async fn explain_exact_chunks(pool: &PgPool, id: Uuid) -> Value {
+    async fn explain_exact_chunks(pool: &PgPool, workspace_id: Uuid, id: Uuid) -> Value {
         let sql = format!("EXPLAIN (FORMAT JSON) {EXACT_CHUNKS_SQL}");
         sqlx::query_scalar(&sql)
+            .bind(workspace_id)
             .bind(id)
             .bind(Vec::<Uuid>::new())
             .bind(1_i64)
@@ -559,9 +648,10 @@ mod tests {
             .expect("explain exact chunks")
     }
 
-    async fn explain_text_documents(pool: &PgPool, query: &str) -> Value {
+    async fn explain_text_documents(pool: &PgPool, workspace_id: Uuid, query: &str) -> Value {
         let sql = format!("EXPLAIN (FORMAT JSON) {TEXT_DOCUMENTS_SQL}");
         sqlx::query_scalar(&sql)
+            .bind(workspace_id)
             .bind(query)
             .bind(Vec::<Uuid>::new())
             .bind(1_i64)
@@ -570,9 +660,10 @@ mod tests {
             .expect("explain text documents")
     }
 
-    async fn explain_text_chunks(pool: &PgPool, query: &str) -> Value {
+    async fn explain_text_chunks(pool: &PgPool, workspace_id: Uuid, query: &str) -> Value {
         let sql = format!("EXPLAIN (FORMAT JSON) {TEXT_CHUNKS_SQL}");
         sqlx::query_scalar(&sql)
+            .bind(workspace_id)
             .bind(query)
             .bind(Vec::<Uuid>::new())
             .bind(1_i64)

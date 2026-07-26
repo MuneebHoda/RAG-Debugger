@@ -7,9 +7,7 @@ use rag_debugger_api::{
     telemetry,
 };
 use rag_debugger_storage::{
-    memory::MemoryStore,
-    postgres::PostgresStore,
-    repository::{AppRepository, ProjectRepository},
+    memory::MemoryStore, postgres::PostgresStore, repository::AppRepository,
 };
 use tracing::info;
 
@@ -24,16 +22,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let migrations_path =
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../migrations");
             store.run_migrations(&migrations_path).await?;
-            store.ensure_default_project().await?;
             Arc::new(store)
         }
         StorageBackend::Memory => {
             let store = MemoryStore::default();
-            store.ensure_default_project().await?;
             Arc::new(store)
         }
     };
-    auth::bootstrap_identity(repository.as_ref(), &config.auth).await?;
+    let authenticated = auth::bootstrap_identity(repository.as_ref(), &config.auth).await?;
+    repository
+        .ensure_default_project(authenticated.workspace.id)
+        .await?;
 
     let listener = tokio::net::TcpListener::bind(config.bind_addr).await?;
     let state = AppState::new(config.clone(), repository);

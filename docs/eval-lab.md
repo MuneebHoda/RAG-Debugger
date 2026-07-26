@@ -55,7 +55,9 @@ MemoryStore substring search intentionally remains linear for local development.
 
 The picker keeps input text separate from the submitted query. Typing does not request data; Search or Enter submits. One- and two-character text is rejected locally without replacing the last valid results. Selected IDs remain in the query key so their metadata refreshes immediately, and React Query continues forwarding `AbortSignal` so obsolete requests cannot replace a newer search. If direct metadata lookup fails, selected IDs stay visible as removable `Metadata unavailable` entries.
 
-Evidence lookup retains the current local workspace behavior. Broader workspace-isolation hardening is tracked separately and is not claimed by this change.
+Evidence and Eval Lab access are workspace isolated in storage, not only in HTTP handlers. Direct document/chunk resolution, browse/text search, retrieval candidates, datasets, cases, experiments, legacy eval runs, CI reads, and report inputs all require the authenticated workspace. Postgres enforces ownership through project/dataset joins; MemoryStore enforces the same rule through explicit ownership indexes. A cross-workspace ID is returned as unresolved exactly like a nonexistent ID, and cross-workspace dataset/case/experiment access uses the same resource-specific `404` response as a missing resource.
+
+Case creation validates every expected evidence ID inside the storage transaction. PATCH validates only evidence arrays explicitly submitted by the client; omitted arrays continue preserving repairable legacy IDs. Validation and scalar persistence are atomic, and the non-enumerating error never reveals whether an unavailable ID exists in another workspace.
 
 ## Metrics
 

@@ -33,8 +33,9 @@ pub async fn run_ci_eval(
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let api_key =
         auth::authenticate_api_key(repository.as_ref(), &headers, ApiKeyScope::CiEvalRuns).await?;
+    let workspace_id = api_key.workspace_id;
     let dataset = repository
-        .get_retrieval_eval_dataset(request.dataset_id)
+        .get_retrieval_eval_dataset(workspace_id, request.dataset_id)
         .await
         .map_err(not_found_to_api("eval dataset"))?;
     if dataset.cases.is_empty() {
@@ -56,14 +57,21 @@ pub async fn run_ci_eval(
         .filter(|label| !label.trim().is_empty())
         .unwrap_or_else(|| "default".to_owned());
     let baseline = repository
-        .latest_ci_eval_run_for_dataset(dataset.id, &config_label)
+        .latest_ci_eval_run_for_dataset(workspace_id, dataset.id, &config_label)
         .await?;
-    let experiment =
-        run_experiment_for_dataset(&state, dataset.clone(), modes, top_k, request.name).await?;
+    let experiment = run_experiment_for_dataset(
+        &state,
+        workspace_id,
+        dataset.clone(),
+        modes,
+        top_k,
+        request.name,
+    )
+    .await?;
     let saved_experiment = repository
-        .save_retrieval_eval_experiment(experiment)
+        .save_retrieval_eval_experiment(workspace_id, experiment)
         .await?;
-    save_legacy_best_run(repository.as_ref(), &saved_experiment).await?;
+    save_legacy_best_run(repository.as_ref(), workspace_id, &saved_experiment).await?;
 
     let report = build_report(&saved_experiment);
     let regression = baseline
@@ -76,7 +84,7 @@ pub async fn run_ci_eval(
     };
     let run = CiEvalRun {
         id: CiEvalRunId(Uuid::now_v7()),
-        workspace_id: api_key.workspace_id,
+        workspace_id,
         dataset_id: dataset.id,
         dataset_name: dataset.name,
         experiment_id: saved_experiment.id,
@@ -104,9 +112,11 @@ pub async fn list_ci_eval_runs(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<CiEvalRun>>, ApiError> {
-    authorize_ci_read(&state, &headers).await?;
+    let principal = authorize_ci_read(&state, &headers).await?;
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    Ok(Json(repository.list_ci_eval_runs().await?))
+    Ok(Json(
+        repository.list_ci_eval_runs(principal.workspace_id).await?,
+    ))
 }
 
 pub async fn get_ci_eval_run(
@@ -114,11 +124,11 @@ pub async fn get_ci_eval_run(
     headers: HeaderMap,
     Path(run_id): Path<Uuid>,
 ) -> Result<Json<CiEvalRun>, ApiError> {
-    authorize_ci_read(&state, &headers).await?;
+    let principal = authorize_ci_read(&state, &headers).await?;
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     Ok(Json(
         repository
-            .get_ci_eval_run(CiEvalRunId(run_id))
+            .get_ci_eval_run(principal.workspace_id, CiEvalRunId(run_id))
             .await
             .map_err(not_found_to_api("CI eval run"))?,
     ))
@@ -129,10 +139,10 @@ pub async fn get_ci_eval_report(
     headers: HeaderMap,
     Path(run_id): Path<Uuid>,
 ) -> Result<Json<CiEvalRunReportResponse>, ApiError> {
-    authorize_ci_read(&state, &headers).await?;
+    let principal = authorize_ci_read(&state, &headers).await?;
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let run = repository
-        .get_ci_eval_run(CiEvalRunId(run_id))
+        .get_ci_eval_run(principal.workspace_id, CiEvalRunId(run_id))
         .await
         .map_err(not_found_to_api("CI eval run"))?;
     Ok(Json(CiEvalRunReportResponse {
@@ -164,6 +174,7 @@ async fn authorize_ci_read(
 
 async fn run_experiment_for_dataset(
     state: &AppState,
+    workspace_id: rag_debugger_core::WorkspaceId,
     dataset: rag_debugger_core::RetrievalEvalDataset,
     modes: Vec<RetrievalMode>,
     top_k: u32,
@@ -189,7 +200,9 @@ async fn run_experiment_for_dataset(
                 source_ids: Vec::new(),
                 document_ids: Vec::new(),
             };
-            let candidates = repository.list_searchable_chunks(&query_request).await?;
+            let candidates = repository
+                .list_searchable_chunks(workspace_id, &query_request)
+                .await?;
             let expected_chunk_document_ids =
                 expected_chunk_parent_document_ids(&case, &candidates);
             let response = retriever
@@ -237,36 +250,40 @@ async fn run_experiment_for_dataset(
 
 async fn save_legacy_best_run(
     repository: &dyn rag_debugger_storage::repository::AppRepository,
+    workspace_id: rag_debugger_core::WorkspaceId,
     experiment: &RetrievalEvalExperiment,
 ) -> Result<(), ApiError> {
     if let Some(best_result) = best_mode_result(experiment) {
         repository
-            .save_retrieval_eval_run(&RetrievalEvalRun {
-                id: RetrievalEvalRunId(Uuid::now_v7()),
-                retrieval_mode: best_result.retrieval_mode,
-                case_count: best_result.case_count,
-                passed_count: best_result.passed_count,
-                average_recall_at_k: best_result.average_recall_at_k,
-                average_precision_at_k: best_result.average_precision_at_k,
-                created_at: experiment.created_at,
-                results: best_result
-                    .case_results
-                    .iter()
-                    .map(|result| rag_debugger_core::RetrievalEvalResult {
-                        case_id: result.case_id,
-                        query: result.query.clone(),
-                        top_k: result.top_k,
-                        recall_at_k: result.recall_at_k,
-                        precision_at_k: result.precision_at_k,
-                        top_hit_rank: result.top_hit_rank,
-                        passed: result.passed,
-                        expected_chunk_ids: result.expected_chunk_ids.clone(),
-                        expected_document_ids: result.expected_document_ids.clone(),
-                        retrieved_chunk_ids: result.retrieved_chunk_ids.clone(),
-                        latency_ms: result.latency_ms,
-                    })
-                    .collect(),
-            })
+            .save_retrieval_eval_run(
+                workspace_id,
+                &RetrievalEvalRun {
+                    id: RetrievalEvalRunId(Uuid::now_v7()),
+                    retrieval_mode: best_result.retrieval_mode,
+                    case_count: best_result.case_count,
+                    passed_count: best_result.passed_count,
+                    average_recall_at_k: best_result.average_recall_at_k,
+                    average_precision_at_k: best_result.average_precision_at_k,
+                    created_at: experiment.created_at,
+                    results: best_result
+                        .case_results
+                        .iter()
+                        .map(|result| rag_debugger_core::RetrievalEvalResult {
+                            case_id: result.case_id,
+                            query: result.query.clone(),
+                            top_k: result.top_k,
+                            recall_at_k: result.recall_at_k,
+                            precision_at_k: result.precision_at_k,
+                            top_hit_rank: result.top_hit_rank,
+                            passed: result.passed,
+                            expected_chunk_ids: result.expected_chunk_ids.clone(),
+                            expected_document_ids: result.expected_document_ids.clone(),
+                            retrieved_chunk_ids: result.retrieved_chunk_ids.clone(),
+                            latency_ms: result.latency_ms,
+                        })
+                        .collect(),
+                },
+            )
             .await?;
     }
     Ok(())

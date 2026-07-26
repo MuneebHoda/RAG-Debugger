@@ -8,7 +8,7 @@ use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
         EvalRepository, EvidenceRepository, HealthRepository, ProjectRepository, ReportRepository,
-        RetrievalRepository, SourceRepository, TraceRepository,
+        RetrievalRepository, SourceRepository, SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
@@ -64,32 +64,47 @@ impl HealthRepository for PostgresStore {
 
 #[async_trait]
 impl ProjectRepository for PostgresStore {
-    async fn ensure_default_project(&self) -> Result<Project, StorageError> {
-        PostgresStore::ensure_default_project(self).await
+    async fn ensure_default_project(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Project, StorageError> {
+        PostgresStore::ensure_default_project(self, workspace_id).await
     }
 }
 
 #[async_trait]
 impl SourceRepository for PostgresStore {
-    async fn create_source(&self, source: Source) -> Result<Source, StorageError> {
-        PostgresStore::create_source(self, source).await
+    async fn create_source(
+        &self,
+        workspace_id: WorkspaceId,
+        source: Source,
+    ) -> Result<Source, StorageError> {
+        PostgresStore::create_source(self, workspace_id, source).await
     }
 
-    async fn create_ingestion_run(&self, run: IngestionRun) -> Result<IngestionRun, StorageError> {
-        PostgresStore::create_ingestion_run(self, run).await
+    async fn create_ingestion_run(
+        &self,
+        workspace_id: WorkspaceId,
+        run: IngestionRun,
+    ) -> Result<IngestionRun, StorageError> {
+        PostgresStore::create_ingestion_run(self, workspace_id, run).await
     }
 
     async fn complete_ingestion_run(
         &self,
+        workspace_id: WorkspaceId,
         id: IngestionRunId,
         status: IngestionRunStatus,
         totals: IngestionTotals,
     ) -> Result<IngestionRun, StorageError> {
-        PostgresStore::complete_ingestion_run(self, id, status, totals).await
+        PostgresStore::complete_ingestion_run(self, workspace_id, id, status, totals).await
     }
 
-    async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError> {
-        PostgresStore::list_sources(self).await
+    async fn list_sources(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<SourceSummary>, StorageError> {
+        PostgresStore::list_sources(self, workspace_id).await
     }
 }
 
@@ -97,17 +112,19 @@ impl SourceRepository for PostgresStore {
 impl DocumentRepository for PostgresStore {
     async fn insert_document_with_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document: Document,
         chunks: Vec<Chunk>,
     ) -> Result<Document, StorageError> {
-        PostgresStore::insert_document_with_chunks(self, document, chunks).await
+        PostgresStore::insert_document_with_chunks(self, workspace_id, document, chunks).await
     }
 
     async fn list_document_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError> {
-        PostgresStore::list_document_chunks(self, document_id).await
+        PostgresStore::list_document_chunks(self, workspace_id, document_id).await
     }
 }
 
@@ -115,23 +132,26 @@ impl DocumentRepository for PostgresStore {
 impl EvidenceRepository for PostgresStore {
     async fn resolve_evidence_documents(
         &self,
+        workspace_id: WorkspaceId,
         document_ids: &[DocumentId],
     ) -> Result<Vec<EvalLabEvidenceDocument>, StorageError> {
-        PostgresStore::resolve_evidence_documents(self, document_ids).await
+        PostgresStore::resolve_evidence_documents(self, workspace_id, document_ids).await
     }
 
     async fn resolve_evidence_chunks(
         &self,
+        workspace_id: WorkspaceId,
         chunk_ids: &[ChunkId],
     ) -> Result<Vec<EvalLabEvidenceChunk>, StorageError> {
-        PostgresStore::resolve_evidence_chunks(self, chunk_ids).await
+        PostgresStore::resolve_evidence_chunks(self, workspace_id, chunk_ids).await
     }
 
     async fn search_evidence(
         &self,
+        workspace_id: WorkspaceId,
         request: &EvalLabEvidenceSearchRequest,
     ) -> Result<EvalLabEvidenceSearchResult, StorageError> {
-        PostgresStore::search_evidence(self, request).await
+        PostgresStore::search_evidence(self, workspace_id, request).await
     }
 }
 
@@ -184,9 +204,10 @@ impl DemoRepository for PostgresStore {
 impl RetrievalRepository for PostgresStore {
     async fn list_searchable_chunks(
         &self,
+        workspace_id: WorkspaceId,
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError> {
-        PostgresStore::list_searchable_chunks(self, request).await
+        PostgresStore::list_searchable_chunks(self, workspace_id, request).await
     }
 
     async fn save_retrieval_query(
@@ -252,106 +273,143 @@ impl EmbeddingRepository for PostgresStore {
 impl EvalRepository for PostgresStore {
     async fn create_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError> {
-        PostgresStore::create_retrieval_eval_case(self, eval_case).await
+        PostgresStore::create_retrieval_eval_case(self, workspace_id, eval_case).await
     }
 
-    async fn list_retrieval_eval_cases(&self) -> Result<Vec<RetrievalEvalCase>, StorageError> {
-        PostgresStore::list_retrieval_eval_cases(self).await
+    async fn list_retrieval_eval_cases(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
+        PostgresStore::list_retrieval_eval_cases(self, workspace_id).await
     }
 
     async fn list_retrieval_eval_cases_by_id(
         &self,
+        workspace_id: WorkspaceId,
         case_ids: &[RetrievalEvalCaseId],
     ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
-        PostgresStore::list_retrieval_eval_cases_by_id(self, case_ids).await
+        PostgresStore::list_retrieval_eval_cases_by_id(self, workspace_id, case_ids).await
+    }
+
+    async fn get_retrieval_eval_case(
+        &self,
+        workspace_id: WorkspaceId,
+        case_id: RetrievalEvalCaseId,
+    ) -> Result<RetrievalEvalCase, StorageError> {
+        PostgresStore::get_retrieval_eval_case(self, workspace_id, case_id).await
     }
 
     async fn save_retrieval_eval_run(
         &self,
+        workspace_id: WorkspaceId,
         eval_run: &RetrievalEvalRun,
     ) -> Result<(), StorageError> {
-        PostgresStore::save_retrieval_eval_run(self, eval_run).await
+        PostgresStore::save_retrieval_eval_run(self, workspace_id, eval_run).await
     }
 
-    async fn latest_retrieval_eval_run(&self) -> Result<Option<RetrievalEvalRun>, StorageError> {
-        PostgresStore::latest_retrieval_eval_run(self).await
+    async fn latest_retrieval_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Option<RetrievalEvalRun>, StorageError> {
+        PostgresStore::latest_retrieval_eval_run(self, workspace_id).await
     }
 
     async fn create_retrieval_eval_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset: RetrievalEvalDataset,
     ) -> Result<RetrievalEvalDataset, StorageError> {
-        PostgresStore::create_retrieval_eval_dataset(self, dataset).await
+        PostgresStore::create_retrieval_eval_dataset(self, workspace_id, dataset).await
     }
 
     async fn list_retrieval_eval_datasets(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalDatasetSummary>, StorageError> {
-        PostgresStore::list_retrieval_eval_datasets(self).await
+        PostgresStore::list_retrieval_eval_datasets(self, workspace_id).await
     }
 
     async fn get_retrieval_eval_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
     ) -> Result<RetrievalEvalDataset, StorageError> {
-        PostgresStore::get_retrieval_eval_dataset(self, dataset_id).await
+        PostgresStore::get_retrieval_eval_dataset(self, workspace_id, dataset_id).await
     }
 
     async fn create_retrieval_eval_case_in_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError> {
-        PostgresStore::create_retrieval_eval_case_in_dataset(self, dataset_id, eval_case).await
+        PostgresStore::create_retrieval_eval_case_in_dataset(
+            self,
+            workspace_id,
+            dataset_id,
+            eval_case,
+        )
+        .await
     }
 
     async fn update_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
+        submitted_evidence: SubmittedExpectedEvidence,
     ) -> Result<RetrievalEvalCase, StorageError> {
-        PostgresStore::update_retrieval_eval_case(self, eval_case).await
+        PostgresStore::update_retrieval_eval_case(self, workspace_id, eval_case, submitted_evidence)
+            .await
     }
 
     async fn delete_retrieval_eval_case(
         &self,
+        workspace_id: WorkspaceId,
         case_id: RetrievalEvalCaseId,
     ) -> Result<(), StorageError> {
-        PostgresStore::delete_retrieval_eval_case(self, case_id).await
+        PostgresStore::delete_retrieval_eval_case(self, workspace_id, case_id).await
     }
 
     async fn save_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
         experiment: RetrievalEvalExperiment,
     ) -> Result<RetrievalEvalExperiment, StorageError> {
-        PostgresStore::save_retrieval_eval_experiment(self, experiment).await
+        PostgresStore::save_retrieval_eval_experiment(self, workspace_id, experiment).await
     }
 
     async fn list_retrieval_eval_experiments(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
-        PostgresStore::list_retrieval_eval_experiments(self).await
+        PostgresStore::list_retrieval_eval_experiments(self, workspace_id).await
     }
 
     async fn list_retrieval_eval_experiments_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
     ) -> Result<Vec<RetrievalEvalExperiment>, StorageError> {
-        PostgresStore::list_retrieval_eval_experiments_for_dataset(self, dataset_id).await
+        PostgresStore::list_retrieval_eval_experiments_for_dataset(self, workspace_id, dataset_id)
+            .await
     }
 
     async fn get_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
         experiment_id: RetrievalEvalExperimentId,
     ) -> Result<RetrievalEvalExperiment, StorageError> {
-        PostgresStore::get_retrieval_eval_experiment(self, experiment_id).await
+        PostgresStore::get_retrieval_eval_experiment(self, workspace_id, experiment_id).await
     }
 
     async fn latest_retrieval_eval_experiment(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<Option<RetrievalEvalExperiment>, StorageError> {
-        PostgresStore::latest_retrieval_eval_experiment(self).await
+        PostgresStore::latest_retrieval_eval_experiment(self, workspace_id).await
     }
 }
 
@@ -448,20 +506,29 @@ impl CiEvalRepository for PostgresStore {
         PostgresStore::save_ci_eval_run(self, run).await
     }
 
-    async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError> {
-        PostgresStore::list_ci_eval_runs(self).await
+    async fn list_ci_eval_runs(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<CiEvalRun>, StorageError> {
+        PostgresStore::list_ci_eval_runs(self, workspace_id).await
     }
 
-    async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError> {
-        PostgresStore::get_ci_eval_run(self, id).await
+    async fn get_ci_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+        id: CiEvalRunId,
+    ) -> Result<CiEvalRun, StorageError> {
+        PostgresStore::get_ci_eval_run(self, workspace_id, id).await
     }
 
     async fn latest_ci_eval_run_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
     ) -> Result<Option<CiEvalRun>, StorageError> {
-        PostgresStore::latest_ci_eval_run_for_dataset(self, dataset_id, config_label).await
+        PostgresStore::latest_ci_eval_run_for_dataset(self, workspace_id, dataset_id, config_label)
+            .await
     }
 }
 

@@ -1,13 +1,14 @@
 use rag_debugger_core::{
     ByteRange, Chunk, ChunkEmbedding, ChunkId, ChunkQualityFlag, ChunkSplitReason, ChunkingConfig,
     ChunkingStrategy, Document, DocumentId, DocumentProfile, EmbeddingIndexRequest,
-    EmbeddingModelInfo, ExtractionQuality, Source, SourceId, SourceKind, SourceSyncPolicy,
+    EmbeddingModelInfo, ExtractionQuality, Organization, OrganizationId, Source, SourceId,
+    SourceKind, SourceSyncPolicy, User, UserId, Workspace, WorkspaceId, WorkspaceRole,
 };
 use rag_debugger_storage::{
     memory::MemoryStore,
     repository::{
-        DocumentRepository, EmbeddingRepository, HealthRepository, ProjectRepository,
-        SourceRepository,
+        AuthRepository, DocumentRepository, EmbeddingRepository, HealthRepository,
+        ProjectRepository, SourceRepository,
     },
 };
 use time::OffsetDateTime;
@@ -16,21 +17,22 @@ use uuid::Uuid;
 #[tokio::test]
 async fn memory_store_honors_ingestion_and_embedding_contracts() {
     let store = MemoryStore::default();
+    let workspace_id = create_workspace(&store).await;
     store.ping().await.expect("memory health check");
 
     let project = store
-        .ensure_default_project()
+        .ensure_default_project(workspace_id)
         .await
         .expect("create default project");
     let same_project = store
-        .ensure_default_project()
+        .ensure_default_project(workspace_id)
         .await
         .expect("reuse default project");
     assert_eq!(project.id, same_project.id);
 
     let source = source(project.id);
     store
-        .create_source(source.clone())
+        .create_source(workspace_id, source.clone())
         .await
         .expect("create source");
 
@@ -40,18 +42,21 @@ async fn memory_store_honors_ingestion_and_embedding_contracts() {
         chunk(source.id, document.id, 0, "first chunk"),
     ];
     store
-        .insert_document_with_chunks(document.clone(), chunks)
+        .insert_document_with_chunks(workspace_id, document.clone(), chunks)
         .await
         .expect("insert document and chunks");
 
-    let summaries = store.list_sources().await.expect("list sources");
+    let summaries = store
+        .list_sources(workspace_id)
+        .await
+        .expect("list sources");
     assert_eq!(summaries.len(), 1);
     assert_eq!(summaries[0].source, source);
     assert_eq!(summaries[0].documents[0].document, document);
     assert_eq!(summaries[0].chunk_count, 2);
 
     let stored_chunks = store
-        .list_document_chunks(document.id)
+        .list_document_chunks(workspace_id, document.id)
         .await
         .expect("list document chunks");
     assert_eq!(
@@ -101,6 +106,38 @@ async fn memory_store_honors_ingestion_and_embedding_contracts() {
     assert_eq!(indexed_status.indexed_chunks, 2);
     assert_eq!(indexed_status.missing_chunks, 0);
     assert_eq!(indexed_status.stale_chunks, 0);
+}
+
+async fn create_workspace(store: &MemoryStore) -> WorkspaceId {
+    let now = OffsetDateTime::now_utc();
+    let organization = Organization {
+        id: OrganizationId(Uuid::now_v7()),
+        name: "Memory contract organization".to_owned(),
+        created_at: now,
+    };
+    let workspace = Workspace {
+        id: WorkspaceId(Uuid::now_v7()),
+        organization_id: organization.id,
+        name: "Memory contract workspace".to_owned(),
+        created_at: now,
+    };
+    let user = User {
+        id: UserId(Uuid::now_v7()),
+        email: format!("memory-contract-{}@example.test", Uuid::now_v7()),
+        name: "Memory Contract User".to_owned(),
+        created_at: now,
+    };
+    store
+        .create_user_workspace(
+            organization,
+            workspace.clone(),
+            user,
+            WorkspaceRole::Owner,
+            "unused-test-password-hash".to_owned(),
+        )
+        .await
+        .expect("create memory contract workspace");
+    workspace.id
 }
 
 fn source(project_id: rag_debugger_core::ProjectId) -> Source {

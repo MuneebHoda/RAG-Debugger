@@ -9,6 +9,7 @@ use crate::StorageError;
 impl PostgresStore {
     pub(super) async fn list_searchable_chunks(
         &self,
+        workspace_id: WorkspaceId,
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError> {
         let source_ids = request
@@ -46,11 +47,14 @@ impl PostgresStore {
              FROM chunks c
              INNER JOIN documents d ON d.id = c.document_id
              INNER JOIN sources s ON s.id = c.source_id
+             INNER JOIN projects p ON p.id = s.project_id
              LEFT JOIN chunk_embeddings e ON e.chunk_id = c.id
-             WHERE ($1 OR c.source_id = ANY($2))
-               AND ($3 OR c.document_id = ANY($4))
+             WHERE p.workspace_id = $1
+               AND ($2 OR c.source_id = ANY($3))
+               AND ($4 OR c.document_id = ANY($5))
              ORDER BY d.path ASC, c.ordinal ASC",
         )
+        .bind(workspace_id.0)
         .bind(source_ids.is_empty())
         .bind(source_ids)
         .bind(document_ids.is_empty())

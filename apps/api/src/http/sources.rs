@@ -1,14 +1,14 @@
 use std::{path::Path, sync::Arc};
 
 use axum::{
-    extract::{Multipart, Path as AxumPath, State},
+    extract::{Extension, Multipart, Path as AxumPath, State},
     http::StatusCode,
     Json,
 };
 use rag_debugger_core::{
-    ChunkPreview, ChunkingConfig, ChunkingStrategy, Document, DocumentId, IngestionRun,
-    IngestionRunId, IngestionRunStatus, IngestionTotals, ProductConfig, Source, SourceId,
-    SourceKind, SourceSummary, SourceSyncPolicy,
+    AuthenticatedUser, ChunkPreview, ChunkingConfig, ChunkingStrategy, Document, DocumentId,
+    IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals, ProductConfig, Source,
+    SourceId, SourceKind, SourceSummary, SourceSyncPolicy, WorkspaceId,
 };
 use rag_debugger_storage::repository::IngestionRepository;
 use serde::{Deserialize, Serialize};
@@ -63,15 +63,18 @@ struct FileFailure {
 
 pub async fn ingest_files(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     multipart: Multipart,
 ) -> Result<(StatusCode, Json<IngestFilesResponse>), ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let product_config = &state.config().product;
     let (uploaded_files, mut results, files_received, chunking) =
         read_multipart(multipart, product_config).await?;
-    let project = repository.ensure_default_project().await?;
+    let workspace_id = user.workspace.id;
+    let project = repository.ensure_default_project(workspace_id).await?;
     let source = create_upload_source(
         repository.clone(),
+        workspace_id,
         project.id,
         chunking,
         product_config.product.workspace_name.as_str(),
@@ -79,17 +82,20 @@ pub async fn ingest_files(
     .await?;
     let started_at = OffsetDateTime::now_utc();
     let run = repository
-        .create_ingestion_run(IngestionRun {
-            id: IngestionRunId(Uuid::now_v7()),
-            source_id: source.id,
-            status: IngestionRunStatus::Running,
-            totals: IngestionTotals {
-                files_received,
-                ..IngestionTotals::default()
+        .create_ingestion_run(
+            workspace_id,
+            IngestionRun {
+                id: IngestionRunId(Uuid::now_v7()),
+                source_id: source.id,
+                status: IngestionRunStatus::Running,
+                totals: IngestionTotals {
+                    files_received,
+                    ..IngestionTotals::default()
+                },
+                started_at,
+                completed_at: None,
             },
-            started_at,
-            completed_at: None,
-        })
+        )
         .await?;
 
     let mut totals = IngestionTotals {
@@ -101,6 +107,7 @@ pub async fn ingest_files(
     for uploaded_file in uploaded_files {
         match process_file(
             repository.clone(),
+            workspace_id,
             source.id,
             chunking,
             product_config.ingestion.preview_chunk_limit as usize,
@@ -126,7 +133,7 @@ pub async fn ingest_files(
         _ => IngestionRunStatus::Partial,
     };
     let ingestion_run = repository
-        .complete_ingestion_run(run.id, status, totals)
+        .complete_ingestion_run(workspace_id, run.id, status, totals)
         .await?;
 
     let response = IngestFilesResponse {
@@ -146,18 +153,20 @@ pub async fn ingest_files(
 
 pub async fn list_sources(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
 ) -> Result<Json<Vec<SourceSummary>>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    Ok(Json(repository.list_sources().await?))
+    Ok(Json(repository.list_sources(user.workspace.id).await?))
 }
 
 pub async fn list_document_chunks(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     AxumPath(document_id): AxumPath<Uuid>,
 ) -> Result<Json<Vec<ChunkPreview>>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let chunks = repository
-        .list_document_chunks(DocumentId(document_id))
+        .list_document_chunks(user.workspace.id, DocumentId(document_id))
         .await?
         .into_iter()
         .map(ChunkPreview::from)
@@ -325,6 +334,7 @@ fn parse_chunking_strategy(strategy: &str) -> Result<ChunkingStrategy, ApiError>
 
 async fn create_upload_source(
     repository: Arc<dyn IngestionRepository>,
+    workspace_id: WorkspaceId,
     project_id: rag_debugger_core::ProjectId,
     chunking: ChunkingConfig,
     workspace_name: &str,
@@ -340,11 +350,12 @@ async fn create_upload_source(
         chunking,
     };
 
-    Ok(repository.create_source(source).await?)
+    Ok(repository.create_source(workspace_id, source).await?)
 }
 
 async fn process_file(
     repository: Arc<dyn IngestionRepository>,
+    workspace_id: WorkspaceId,
     source_id: SourceId,
     chunking: ChunkingConfig,
     preview_chunk_limit: usize,
@@ -372,7 +383,7 @@ async fn process_file(
         .collect::<Vec<_>>();
     let chunk_count = chunks.len() as u32;
     let document = repository
-        .insert_document_with_chunks(document, chunks)
+        .insert_document_with_chunks(workspace_id, document, chunks)
         .await
         .map_err(|error| FileFailure {
             file_name: uploaded_file.file_name.clone(),
