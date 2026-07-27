@@ -259,7 +259,7 @@ Eval Lab v2 adds regression read models over saved experiments. Dataset history 
 
 Expected-evidence lookup has a dedicated bounded storage contract. Explicit document and chunk IDs resolve directly in deduplicated request order and do not consume candidate limits. Raw requests are capped at 100 document IDs, 250 chunk IDs, and 250 IDs combined before repository access; duplicates count toward those work limits and accepted IDs are never truncated. Additional documents and chunks use independent candidate limits and deterministic ordering. Empty search browses, exact UUIDs use equality paths, and text search requires three Unicode characters.
 
-Every evidence and Eval repository operation also carries a `WorkspaceId`. Postgres proves corpus ownership through project joins and Eval ownership through the dataset; MemoryStore mirrors those checks through explicit ownership maps. Case creation and explicitly submitted evidence updates validate ownership atomically inside storage. Cross-workspace IDs are intentionally indistinguishable from nonexistent IDs. The ownership migration backfills only uniquely attributable or single-workspace legacy records and quarantines ambiguous multi-workspace rows as unowned.
+Every evidence, embedding, retrieval-run, trace, and Eval repository operation carries a `WorkspaceId`. Postgres proves corpus and embedding ownership through project joins, persists retrieval-run and trace owners directly, and derives Eval ownership through the dataset; MemoryStore mirrors those checks through explicit ownership maps. Trace writes validate the owning project and optional source run. Embedding and expected-evidence writes validate the complete submitted set before mutation. Cross-workspace IDs are intentionally indistinguishable from nonexistent IDs. Ownership migrations backfill only uniquely attributable or single-workspace legacy records and quarantine ambiguous multi-workspace rows as unowned.
 
 Postgres uses primary keys, normalized browse B-trees, and separately bounded trigram categories over source names, document paths, section titles, and chunk text. MemoryStore uses direct ID maps and synchronized ordered browse indexes: empty browse costs `O(log D + log C + limits + skipped entries)` and examines only enough ordered entries to satisfy the limits after exclusions, while exact UUID lookup bypasses corpus scanning. The persistent browse index costs `O(D + C)` memory and temporary browse results remain bounded by the requested limits.
 
@@ -302,6 +302,7 @@ Default behavior is local and privacy-first.
 - Uploaded binaries are not stored.
 - Extracted chunk text is stored in Postgres.
 - Embeddings are stored in Postgres.
+- Retrieval runs and traces persist workspace ownership; embedding ownership is derived from chunk ancestry.
 - No hosted LLM or hosted embedding API is called in the current retrieval path.
 - `/api/v1/config` exposes safe config only; database URLs and deployment secrets stay server-side.
 

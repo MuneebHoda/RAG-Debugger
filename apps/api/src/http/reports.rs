@@ -53,7 +53,7 @@ pub async fn create_report_from_trace(
 ) -> Result<(StatusCode, Json<DebugReport>), ApiError> {
     let (repository, user) = authenticated_repository(&state, &headers).await?;
     let trace = repository
-        .get_trace_detail(request.trace_id)
+        .get_trace_detail(user.workspace.id, request.trace_id)
         .await
         .map_err(source_storage_error("trace"))?;
     let trace = rag_debugger_rag::tracing::ensure_trace_diagnosis(

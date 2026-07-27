@@ -96,15 +96,18 @@ pub trait EvidenceRepository: Send + Sync {
 pub trait EmbeddingRepository: Send + Sync {
     async fn embedding_status(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
         model: &EmbeddingModelInfo,
     ) -> Result<EmbeddingStatus, StorageError>;
     async fn list_embedding_candidates(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
     ) -> Result<Vec<EmbeddingIndexCandidate>, StorageError>;
     async fn upsert_chunk_embeddings(
         &self,
+        workspace_id: WorkspaceId,
         embeddings: Vec<ChunkEmbedding>,
     ) -> Result<(), StorageError>;
 }
@@ -118,20 +121,36 @@ pub trait RetrievalRepository: Send + Sync {
     ) -> Result<Vec<SearchableChunk>, StorageError>;
     async fn save_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         response: &RetrievalQueryResponse,
     ) -> Result<(), StorageError>;
     async fn get_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         id: RetrievalQueryRunId,
     ) -> Result<RetrievalQueryResponse, StorageError>;
-    async fn latest_retrieval_query(&self) -> Result<RetrievalQueryResponse, StorageError>;
+    async fn latest_retrieval_query(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<RetrievalQueryResponse, StorageError>;
 }
 
 #[async_trait]
 pub trait TraceRepository: Send + Sync {
-    async fn save_trace(&self, trace: Trace) -> Result<Trace, StorageError>;
-    async fn list_traces(&self) -> Result<Vec<TraceSummary>, StorageError>;
-    async fn get_trace_detail(&self, id: TraceId) -> Result<Trace, StorageError>;
+    async fn save_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<Trace, StorageError>;
+    async fn list_traces(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<TraceSummary>, StorageError>;
+    async fn get_trace_detail(
+        &self,
+        workspace_id: WorkspaceId,
+        id: TraceId,
+    ) -> Result<Trace, StorageError>;
 }
 
 #[async_trait]
@@ -317,10 +336,12 @@ pub trait DemoRepository: Send + Sync {
     ) -> Result<Option<SourceSummary>, StorageError>;
     async fn latest_retrieval_query_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: rag_debugger_core::SourceId,
     ) -> Result<Option<RetrievalQueryResponse>, StorageError>;
     async fn latest_trace_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: rag_debugger_core::SourceId,
     ) -> Result<Option<Trace>, StorageError>;
 }

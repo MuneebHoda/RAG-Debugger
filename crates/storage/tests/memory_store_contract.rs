@@ -70,14 +70,14 @@ async fn memory_store_honors_ingestion_and_embedding_contracts() {
     let index_request = EmbeddingIndexRequest::default();
     let model = EmbeddingModelInfo::default();
     let missing_status = store
-        .embedding_status(&index_request, &model)
+        .embedding_status(workspace_id, &index_request, &model)
         .await
         .expect("read missing embedding status");
     assert_eq!(missing_status.total_chunks, 2);
     assert_eq!(missing_status.missing_chunks, 2);
 
     let candidates = store
-        .list_embedding_candidates(&index_request)
+        .list_embedding_candidates(workspace_id, &index_request)
         .await
         .expect("list embedding candidates");
     assert_eq!(candidates.len(), 2);
@@ -85,6 +85,7 @@ async fn memory_store_honors_ingestion_and_embedding_contracts() {
     let indexed_at = OffsetDateTime::now_utc();
     store
         .upsert_chunk_embeddings(
+            workspace_id,
             candidates
                 .iter()
                 .map(|candidate| ChunkEmbedding {
@@ -100,7 +101,7 @@ async fn memory_store_honors_ingestion_and_embedding_contracts() {
         .expect("upsert embeddings");
 
     let indexed_status = store
-        .embedding_status(&index_request, &model)
+        .embedding_status(workspace_id, &index_request, &model)
         .await
         .expect("read indexed embedding status");
     assert_eq!(indexed_status.indexed_chunks, 2);

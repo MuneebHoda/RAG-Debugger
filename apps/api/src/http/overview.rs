@@ -26,9 +26,13 @@ pub async fn get_overview(
     let workspace_id = user.workspace.id;
     let sources = repository.list_sources(workspace_id).await?;
     let embedding_status = repository
-        .embedding_status(&EmbeddingIndexRequest::default(), &provider.model())
+        .embedding_status(
+            workspace_id,
+            &EmbeddingIndexRequest::default(),
+            &provider.model(),
+        )
         .await?;
-    let traces = repository.list_traces().await?;
+    let traces = repository.list_traces(workspace_id).await?;
     let eval_cases = repository.list_retrieval_eval_cases(workspace_id).await?;
     let latest_eval_run = repository.latest_retrieval_eval_run(workspace_id).await?;
     let eval_datasets = repository

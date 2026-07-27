@@ -48,6 +48,7 @@ struct MemoryStoreInner {
     evidence_browse_indexes: evidence_index::EvidenceBrowseIndexes,
     embeddings: HashMap<ChunkId, ChunkEmbedding>,
     retrieval_runs: HashMap<rag_debugger_core::RetrievalQueryRunId, RetrievalQueryResponse>,
+    retrieval_run_workspaces: HashMap<rag_debugger_core::RetrievalQueryRunId, WorkspaceId>,
     retrieval_eval_cases: HashMap<RetrievalEvalCaseId, RetrievalEvalCase>,
     retrieval_eval_case_datasets: HashMap<RetrievalEvalCaseId, RetrievalEvalDatasetId>,
     retrieval_eval_datasets: HashMap<RetrievalEvalDatasetId, RetrievalEvalDataset>,
@@ -57,6 +58,7 @@ struct MemoryStoreInner {
     retrieval_eval_runs: HashMap<rag_debugger_core::RetrievalEvalRunId, RetrievalEvalRun>,
     retrieval_eval_run_workspaces: HashMap<rag_debugger_core::RetrievalEvalRunId, WorkspaceId>,
     traces: HashMap<TraceId, Trace>,
+    trace_workspaces: HashMap<TraceId, WorkspaceId>,
     organizations: HashMap<rag_debugger_core::OrganizationId, Organization>,
     workspaces: HashMap<WorkspaceId, Workspace>,
     users: HashMap<UserId, User>,
@@ -282,20 +284,38 @@ impl RetrievalRepository for MemoryStore {
 
     async fn save_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         response: &RetrievalQueryResponse,
     ) -> Result<(), StorageError> {
         let mut inner = self.lock()?;
+        if response.hits.iter().any(|hit| {
+            !workspace_owns_chunk(&inner, workspace_id, hit.chunk.id)
+                || !workspace_owns_project(&inner, workspace_id, hit.source.project_id)
+        }) || inner
+            .retrieval_run_workspaces
+            .get(&response.run.id)
+            .is_some_and(|owner| *owner != workspace_id)
+        {
+            return Err(StorageError::NotFound);
+        }
         inner
             .retrieval_runs
             .insert(response.run.id, response.clone());
+        inner
+            .retrieval_run_workspaces
+            .insert(response.run.id, workspace_id);
         Ok(())
     }
 
     async fn get_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         id: RetrievalQueryRunId,
     ) -> Result<RetrievalQueryResponse, StorageError> {
         let inner = self.lock()?;
+        if inner.retrieval_run_workspaces.get(&id) != Some(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
         inner
             .retrieval_runs
             .get(&id)
@@ -303,11 +323,17 @@ impl RetrievalRepository for MemoryStore {
             .ok_or(StorageError::NotFound)
     }
 
-    async fn latest_retrieval_query(&self) -> Result<RetrievalQueryResponse, StorageError> {
+    async fn latest_retrieval_query(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<RetrievalQueryResponse, StorageError> {
         let inner = self.lock()?;
         inner
             .retrieval_runs
             .values()
+            .filter(|response| {
+                inner.retrieval_run_workspaces.get(&response.run.id) == Some(&workspace_id)
+            })
             .max_by_key(|response| response.run.created_at)
             .cloned()
             .ok_or(StorageError::NotFound)
@@ -316,25 +342,52 @@ impl RetrievalRepository for MemoryStore {
 
 #[async_trait]
 impl TraceRepository for MemoryStore {
-    async fn save_trace(&self, trace: Trace) -> Result<Trace, StorageError> {
+    async fn save_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<Trace, StorageError> {
         let mut inner = self.lock()?;
+        if !workspace_owns_project(&inner, workspace_id, trace.project_id)
+            || trace.source_run_id.is_some_and(|run_id| {
+                inner.retrieval_run_workspaces.get(&run_id) != Some(&workspace_id)
+            })
+            || inner
+                .trace_workspaces
+                .get(&trace.id)
+                .is_some_and(|owner| *owner != workspace_id)
+        {
+            return Err(StorageError::NotFound);
+        }
         inner.traces.insert(trace.id, trace.clone());
+        inner.trace_workspaces.insert(trace.id, workspace_id);
         Ok(trace)
     }
 
-    async fn list_traces(&self) -> Result<Vec<TraceSummary>, StorageError> {
+    async fn list_traces(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<TraceSummary>, StorageError> {
         let inner = self.lock()?;
         let mut traces = inner
             .traces
             .values()
+            .filter(|trace| inner.trace_workspaces.get(&trace.id) == Some(&workspace_id))
             .map(trace_summary_from_trace)
             .collect::<Vec<_>>();
         traces.sort_by_key(|trace| Reverse(trace.created_at));
         Ok(traces)
     }
 
-    async fn get_trace_detail(&self, id: TraceId) -> Result<Trace, StorageError> {
+    async fn get_trace_detail(
+        &self,
+        workspace_id: WorkspaceId,
+        id: TraceId,
+    ) -> Result<Trace, StorageError> {
         let inner = self.lock()?;
+        if inner.trace_workspaces.get(&id) != Some(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
         inner.traces.get(&id).cloned().ok_or(StorageError::NotFound)
     }
 }
@@ -343,11 +396,12 @@ impl TraceRepository for MemoryStore {
 impl EmbeddingRepository for MemoryStore {
     async fn embedding_status(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
         model: &EmbeddingModelInfo,
     ) -> Result<EmbeddingStatus, StorageError> {
         let inner = self.lock()?;
-        let chunks = filtered_chunks(&inner, request);
+        let chunks = filtered_chunks(&inner, workspace_id, request);
         let mut indexed_chunks = 0u32;
         let mut missing_chunks = 0u32;
         let mut stale_chunks = 0u32;
@@ -384,10 +438,11 @@ impl EmbeddingRepository for MemoryStore {
 
     async fn list_embedding_candidates(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
     ) -> Result<Vec<EmbeddingIndexCandidate>, StorageError> {
         let inner = self.lock()?;
-        Ok(filtered_chunks(&inner, request)
+        Ok(filtered_chunks(&inner, workspace_id, request)
             .into_iter()
             .map(|chunk| EmbeddingIndexCandidate {
                 chunk_id: chunk.id,
@@ -402,9 +457,16 @@ impl EmbeddingRepository for MemoryStore {
 
     async fn upsert_chunk_embeddings(
         &self,
+        workspace_id: WorkspaceId,
         embeddings: Vec<ChunkEmbedding>,
     ) -> Result<(), StorageError> {
         let mut inner = self.lock()?;
+        if embeddings
+            .iter()
+            .any(|embedding| !workspace_owns_chunk(&inner, workspace_id, embedding.chunk_id))
+        {
+            return Err(StorageError::NotFound);
+        }
         for embedding in embeddings {
             inner.embeddings.insert(embedding.chunk_id, embedding);
         }
@@ -1044,29 +1106,41 @@ impl DemoRepository for MemoryStore {
 
     async fn latest_retrieval_query_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: rag_debugger_core::SourceId,
     ) -> Result<Option<RetrievalQueryResponse>, StorageError> {
         let inner = self.lock()?;
+        if !workspace_owns_source(&inner, workspace_id, source_id) {
+            return Ok(None);
+        }
         Ok(inner
             .retrieval_runs
             .values()
-            .filter(|response| response.hits.iter().any(|hit| hit.source.id == source_id))
+            .filter(|response| {
+                inner.retrieval_run_workspaces.get(&response.run.id) == Some(&workspace_id)
+                    && response.hits.iter().any(|hit| hit.source.id == source_id)
+            })
             .max_by_key(|response| response.run.created_at)
             .cloned())
     }
 
     async fn latest_trace_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: rag_debugger_core::SourceId,
     ) -> Result<Option<Trace>, StorageError> {
         let inner = self.lock()?;
+        if !workspace_owns_source(&inner, workspace_id, source_id) {
+            return Ok(None);
+        }
         Ok(inner
             .traces
             .values()
             .filter(|trace| {
-                trace.retrieval.as_ref().is_some_and(|response| {
-                    response.hits.iter().any(|hit| hit.source.id == source_id)
-                })
+                inner.trace_workspaces.get(&trace.id) == Some(&workspace_id)
+                    && trace.retrieval.as_ref().is_some_and(|response| {
+                        response.hits.iter().any(|hit| hit.source.id == source_id)
+                    })
             })
             .max_by_key(|trace| trace.started_at)
             .cloned())
@@ -1145,11 +1219,18 @@ impl MemoryStoreInner {
     }
 }
 
-fn filtered_chunks(inner: &MemoryStoreInner, request: &EmbeddingIndexRequest) -> Vec<Chunk> {
+fn filtered_chunks(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    request: &EmbeddingIndexRequest,
+) -> Vec<Chunk> {
     let mut chunks = Vec::new();
 
     for document_chunks in inner.chunks.values() {
         for chunk in document_chunks {
+            if !workspace_owns_chunk(inner, workspace_id, chunk.id) {
+                continue;
+            }
             if !request.source_ids.is_empty() && !request.source_ids.contains(&chunk.source_id) {
                 continue;
             }
@@ -1286,6 +1367,14 @@ fn workspace_owns_source(
         .get(&source_id)
         .and_then(|source| inner.project_workspaces.get(&source.project_id))
         == Some(&workspace_id)
+}
+
+fn workspace_owns_project(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    project_id: ProjectId,
+) -> bool {
+    inner.project_workspaces.get(&project_id) == Some(&workspace_id)
 }
 
 fn workspace_owns_document(

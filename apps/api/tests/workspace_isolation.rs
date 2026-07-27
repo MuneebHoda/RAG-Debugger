@@ -303,6 +303,240 @@ async fn evidence_and_eval_resources_are_isolated_by_workspace() {
     assert_ne!(workspace_a.workspace_id, workspace_b.workspace_id);
 }
 
+#[tokio::test]
+async fn retrieval_trace_embedding_and_report_paths_are_isolated_by_workspace() {
+    let store = Arc::new(MemoryStore::default());
+    let config = support::test_config();
+    let workspace_a = create_workspace_session(store.as_ref(), &config, "Runtime Alpha").await;
+    let workspace_b = create_workspace_session(store.as_ref(), &config, "Runtime Beta").await;
+    let app = app(AppState::new(config, store));
+
+    let beta_upload = upload(
+        &app,
+        &workspace_b.cookie,
+        "beta-runtime-private.md",
+        "# Runtime isolation\nBeta runtime evidence remains private to workspace Beta.",
+    )
+    .await;
+    let beta_source_id = beta_upload["source"]["id"]
+        .as_str()
+        .expect("beta source id");
+    let beta_document_id = beta_upload["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("beta document id");
+    let beta_chunk_count = beta_upload["totals"]["chunks_created"]
+        .as_u64()
+        .expect("beta chunk count");
+
+    let alpha_upload = upload(
+        &app,
+        &workspace_a.cookie,
+        "alpha-runtime-public.md",
+        "# Runtime isolation\nAlpha runtime evidence remains in workspace Alpha.",
+    )
+    .await;
+    let alpha_chunk_count = alpha_upload["totals"]["chunks_created"]
+        .as_u64()
+        .expect("alpha chunk count");
+
+    let beta_retrieval = json_response(
+        &app,
+        &workspace_b.cookie,
+        Method::POST,
+        "/api/v1/retrieval/query",
+        json!({
+            "query": "Beta runtime evidence",
+            "retrieval_mode": "lexical",
+            "source_ids": [beta_source_id]
+        }),
+    )
+    .await;
+    assert_eq!(beta_retrieval.0, StatusCode::OK);
+    let beta_run_id = beta_retrieval.1["run"]["id"].as_str().expect("beta run id");
+    let beta_trace = json_response(
+        &app,
+        &workspace_b.cookie,
+        Method::POST,
+        "/api/v1/traces/from-retrieval-run",
+        json!({"run_id": beta_run_id}),
+    )
+    .await;
+    assert_eq!(beta_trace.0, StatusCode::OK);
+    let beta_trace_id = beta_trace.1["id"].as_str().expect("beta trace id");
+
+    let alpha_trace_list =
+        empty_response(&app, &workspace_a.cookie, Method::GET, "/api/v1/traces").await;
+    assert_eq!(alpha_trace_list.0, StatusCode::OK);
+    assert!(alpha_trace_list
+        .1
+        .as_array()
+        .expect("alpha trace list")
+        .is_empty());
+
+    let missing_trace_id = Uuid::now_v7();
+    assert_equivalent_not_found(
+        empty_response(
+            &app,
+            &workspace_a.cookie,
+            Method::GET,
+            &format!("/api/v1/traces/{beta_trace_id}"),
+        )
+        .await,
+        empty_response(
+            &app,
+            &workspace_a.cookie,
+            Method::GET,
+            &format!("/api/v1/traces/{missing_trace_id}"),
+        )
+        .await,
+    );
+
+    let missing_run_id = Uuid::now_v7();
+    assert_equivalent_not_found(
+        json_response(
+            &app,
+            &workspace_a.cookie,
+            Method::POST,
+            "/api/v1/traces/from-retrieval-run",
+            json!({"run_id": beta_run_id}),
+        )
+        .await,
+        json_response(
+            &app,
+            &workspace_a.cookie,
+            Method::POST,
+            "/api/v1/traces/from-retrieval-run",
+            json!({"run_id": missing_run_id}),
+        )
+        .await,
+    );
+
+    assert_equivalent_not_found(
+        json_response(
+            &app,
+            &workspace_a.cookie,
+            Method::POST,
+            &format!("/api/v1/traces/{beta_trace_id}/rerun"),
+            json!({"retrieval_mode": "lexical"}),
+        )
+        .await,
+        json_response(
+            &app,
+            &workspace_a.cookie,
+            Method::POST,
+            &format!("/api/v1/traces/{missing_trace_id}/rerun"),
+            json!({"retrieval_mode": "lexical"}),
+        )
+        .await,
+    );
+
+    assert_equivalent_not_found(
+        json_response(
+            &app,
+            &workspace_a.cookie,
+            Method::POST,
+            "/api/v1/reports/from-trace",
+            json!({"trace_id": beta_trace_id}),
+        )
+        .await,
+        json_response(
+            &app,
+            &workspace_a.cookie,
+            Method::POST,
+            "/api/v1/reports/from-trace",
+            json!({"trace_id": missing_trace_id}),
+        )
+        .await,
+    );
+
+    let alpha_overview =
+        empty_response(&app, &workspace_a.cookie, Method::GET, "/api/v1/overview").await;
+    assert_eq!(alpha_overview.0, StatusCode::OK);
+    assert_eq!(overview_metric(&alpha_overview.1, "traces"), Some("0"));
+    assert_eq!(
+        alpha_overview.1["embedding_status"]["total_chunks"],
+        alpha_chunk_count
+    );
+    assert_eq!(alpha_overview.1["embedding_status"]["indexed_chunks"], 0);
+
+    let cross_workspace_index = json_response(
+        &app,
+        &workspace_a.cookie,
+        Method::POST,
+        "/api/v1/embeddings/index",
+        json!({"document_ids": [beta_document_id]}),
+    )
+    .await;
+    assert_eq!(cross_workspace_index.0, StatusCode::OK);
+    assert_eq!(cross_workspace_index.1["indexed_chunks"], 0);
+    assert_eq!(cross_workspace_index.1["status"]["total_chunks"], 0);
+
+    let beta_status = empty_response(
+        &app,
+        &workspace_b.cookie,
+        Method::GET,
+        "/api/v1/embeddings/status",
+    )
+    .await;
+    assert_eq!(beta_status.0, StatusCode::OK);
+    assert_eq!(
+        beta_status.1["total_chunks"], beta_chunk_count,
+        "workspace A must not observe or index workspace B chunks"
+    );
+    assert_eq!(beta_status.1["indexed_chunks"], 0);
+    assert_eq!(beta_status.1["missing_chunks"], beta_chunk_count);
+
+    let alpha_index = json_response(
+        &app,
+        &workspace_a.cookie,
+        Method::POST,
+        "/api/v1/embeddings/index",
+        json!({}),
+    )
+    .await;
+    assert_eq!(alpha_index.0, StatusCode::OK);
+    assert_eq!(alpha_index.1["indexed_chunks"], alpha_chunk_count);
+    let beta_status_after_alpha_index = empty_response(
+        &app,
+        &workspace_b.cookie,
+        Method::GET,
+        "/api/v1/embeddings/status",
+    )
+    .await;
+    assert_eq!(beta_status_after_alpha_index.0, StatusCode::OK);
+    assert_eq!(beta_status_after_alpha_index.1["indexed_chunks"], 0);
+    assert_eq!(
+        beta_status_after_alpha_index.1["missing_chunks"],
+        beta_chunk_count
+    );
+}
+
+fn assert_equivalent_not_found(
+    inaccessible: (StatusCode, Value),
+    nonexistent: (StatusCode, Value),
+) {
+    assert_eq!(inaccessible.0, StatusCode::NOT_FOUND);
+    assert_eq!(inaccessible.0, nonexistent.0);
+    assert_eq!(inaccessible.1["error"]["code"], "not_found");
+    assert_eq!(
+        inaccessible.1["error"]["code"],
+        nonexistent.1["error"]["code"]
+    );
+    assert_eq!(
+        inaccessible.1["error"]["message"],
+        nonexistent.1["error"]["message"]
+    );
+}
+
+fn overview_metric<'a>(overview: &'a Value, id: &str) -> Option<&'a str> {
+    overview["metrics"]
+        .as_array()?
+        .iter()
+        .find(|metric| metric["id"] == id)?
+        .get("value")?
+        .as_str()
+}
+
 async fn create_workspace_session(
     store: &MemoryStore,
     config: &rag_debugger_api::config::ApiConfig,

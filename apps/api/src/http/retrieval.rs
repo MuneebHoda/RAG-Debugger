@@ -28,7 +28,9 @@ pub async fn query_retrieval(
     let response = retriever
         .retrieve(request, candidates)
         .map_err(rag_error_to_api_error)?;
-    repository.save_retrieval_query(&response).await?;
+    repository
+        .save_retrieval_query(user.workspace.id, &response)
+        .await?;
 
     Ok(Json(response))
 }

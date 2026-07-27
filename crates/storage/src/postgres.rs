@@ -187,16 +187,18 @@ impl DemoRepository for PostgresStore {
 
     async fn latest_retrieval_query_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: SourceId,
     ) -> Result<Option<RetrievalQueryResponse>, StorageError> {
-        PostgresStore::latest_retrieval_query_for_source(self, source_id).await
+        PostgresStore::latest_retrieval_query_for_source(self, workspace_id, source_id).await
     }
 
     async fn latest_trace_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: SourceId,
     ) -> Result<Option<Trace>, StorageError> {
-        PostgresStore::latest_trace_for_source(self, source_id).await
+        PostgresStore::latest_trace_for_source(self, workspace_id, source_id).await
     }
 }
 
@@ -212,35 +214,51 @@ impl RetrievalRepository for PostgresStore {
 
     async fn save_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         response: &RetrievalQueryResponse,
     ) -> Result<(), StorageError> {
-        PostgresStore::save_retrieval_query(self, response).await
+        PostgresStore::save_retrieval_query(self, workspace_id, response).await
     }
 
     async fn get_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         id: RetrievalQueryRunId,
     ) -> Result<RetrievalQueryResponse, StorageError> {
-        PostgresStore::get_retrieval_query(self, id).await
+        PostgresStore::get_retrieval_query(self, workspace_id, id).await
     }
 
-    async fn latest_retrieval_query(&self) -> Result<RetrievalQueryResponse, StorageError> {
-        PostgresStore::latest_retrieval_query(self).await
+    async fn latest_retrieval_query(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<RetrievalQueryResponse, StorageError> {
+        PostgresStore::latest_retrieval_query(self, workspace_id).await
     }
 }
 
 #[async_trait]
 impl TraceRepository for PostgresStore {
-    async fn save_trace(&self, trace: Trace) -> Result<Trace, StorageError> {
-        PostgresStore::save_trace(self, trace).await
+    async fn save_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<Trace, StorageError> {
+        PostgresStore::save_trace(self, workspace_id, trace).await
     }
 
-    async fn list_traces(&self) -> Result<Vec<TraceSummary>, StorageError> {
-        PostgresStore::list_traces(self).await
+    async fn list_traces(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<TraceSummary>, StorageError> {
+        PostgresStore::list_traces(self, workspace_id).await
     }
 
-    async fn get_trace_detail(&self, id: TraceId) -> Result<Trace, StorageError> {
-        PostgresStore::get_trace_detail(self, id).await
+    async fn get_trace_detail(
+        &self,
+        workspace_id: WorkspaceId,
+        id: TraceId,
+    ) -> Result<Trace, StorageError> {
+        PostgresStore::get_trace_detail(self, workspace_id, id).await
     }
 }
 
@@ -248,24 +266,27 @@ impl TraceRepository for PostgresStore {
 impl EmbeddingRepository for PostgresStore {
     async fn embedding_status(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
         model: &EmbeddingModelInfo,
     ) -> Result<EmbeddingStatus, StorageError> {
-        PostgresStore::embedding_status(self, request, model).await
+        PostgresStore::embedding_status(self, workspace_id, request, model).await
     }
 
     async fn list_embedding_candidates(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
     ) -> Result<Vec<EmbeddingIndexCandidate>, StorageError> {
-        PostgresStore::list_embedding_candidates(self, request).await
+        PostgresStore::list_embedding_candidates(self, workspace_id, request).await
     }
 
     async fn upsert_chunk_embeddings(
         &self,
+        workspace_id: WorkspaceId,
         embeddings: Vec<ChunkEmbedding>,
     ) -> Result<(), StorageError> {
-        PostgresStore::upsert_chunk_embeddings(self, embeddings).await
+        PostgresStore::upsert_chunk_embeddings(self, workspace_id, embeddings).await
     }
 }
 

@@ -24,7 +24,7 @@ The implementation is deterministic and local in this pass. It does not call a h
 
 `GET /api/v1/traces`
 
-Returns recent trace summaries. The response is optimized for the trace list and includes query, retrieval mode, latency, evidence strength, failure labels, span count, rerun count, and creation time.
+Returns recent trace summaries for the authenticated workspace. The response is optimized for the trace list and includes query, retrieval mode, latency, evidence strength, failure labels, span count, rerun count, and creation time.
 
 `GET /api/v1/traces/:trace_id`
 
@@ -40,7 +40,7 @@ Creates a saved trace from a retrieval playground run. Request body:
 }
 ```
 
-If `run_id` is omitted, the API saves the latest retrieval response that was persisted by `POST /api/v1/retrieval/query`.
+If `run_id` is omitted, the API saves the latest retrieval response in the authenticated workspace that was persisted by `POST /api/v1/retrieval/query`.
 
 `POST /api/v1/traces/:trace_id/rerun`
 
@@ -82,7 +82,9 @@ The trace migration adds:
 - `debug_traces`: one saved debugger trace per inspected run.
 - `trace_rerun_experiments`: persisted rerun comparison records attached to traces.
 
-`debug_traces` stores searchable/listable fields such as query, retrieval mode, status, evidence strength, failure labels, span count, rerun count, latency, and timestamps. The full timeline is also stored as JSON so the debugger can evolve without forcing every nested span field into relational columns immediately.
+The runtime-isolation migration adds workspace ownership and workspace/date indexes to retrieval runs and traces. New writes always carry the authenticated workspace. Trace writes verify that `project_id` and the optional source retrieval run belong to that workspace; ambiguous legacy records remain invisible until repaired.
+
+`debug_traces` stores searchable/listable fields such as query, retrieval mode, status, evidence strength, failure labels, span count, rerun count, latency, and timestamps. The full timeline is also stored as JSON so the debugger can evolve without forcing every nested span field into relational columns immediately. Foreign and nonexistent trace or source-run identifiers return the same non-enumerating not-found response.
 
 ## Trace Spans
 

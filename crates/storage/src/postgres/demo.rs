@@ -177,18 +177,25 @@ impl PostgresStore {
 
     pub(super) async fn latest_retrieval_query_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: SourceId,
     ) -> Result<Option<RetrievalQueryResponse>, StorageError> {
         let row = sqlx::query(
             "SELECT r.response_json
              FROM retrieval_playground_runs r
-             WHERE EXISTS (
+             WHERE r.workspace_id = $1
+               AND EXISTS (
                 SELECT 1 FROM retrieval_playground_hits h
                 INNER JOIN chunks c ON c.id = h.chunk_id
-                WHERE h.run_id = r.id AND c.source_id = $1
+                INNER JOIN sources s ON s.id = c.source_id
+                INNER JOIN projects p ON p.id = s.project_id
+                WHERE h.run_id = r.id
+                  AND c.source_id = $2
+                  AND p.workspace_id = $1
              )
              ORDER BY r.created_at DESC LIMIT 1",
         )
+        .bind(workspace_id.0)
         .bind(source_id.0)
         .fetch_optional(&self.pool)
         .await?;
@@ -197,18 +204,25 @@ impl PostgresStore {
 
     pub(super) async fn latest_trace_for_source(
         &self,
+        workspace_id: WorkspaceId,
         source_id: SourceId,
     ) -> Result<Option<Trace>, StorageError> {
         let row = sqlx::query(
             "SELECT t.trace_json
              FROM debug_traces t
-             WHERE EXISTS (
+             WHERE t.workspace_id = $1
+               AND EXISTS (
                 SELECT 1 FROM retrieval_playground_hits h
                 INNER JOIN chunks c ON c.id = h.chunk_id
-                WHERE h.run_id = t.source_run_id AND c.source_id = $1
+                INNER JOIN sources s ON s.id = c.source_id
+                INNER JOIN projects p ON p.id = s.project_id
+                WHERE h.run_id = t.source_run_id
+                  AND c.source_id = $2
+                  AND p.workspace_id = $1
              )
              ORDER BY t.created_at DESC LIMIT 1",
         )
+        .bind(workspace_id.0)
         .bind(source_id.0)
         .fetch_optional(&self.pool)
         .await?;

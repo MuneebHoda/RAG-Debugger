@@ -12,7 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
-- Workspace-isolation contracts for MemoryStore, migrated Postgres, authenticated two-workspace APIs, and legacy ownership backfill/quarantine behavior.
+- Workspace-isolation contracts for MemoryStore, migrated Postgres, authenticated two-workspace APIs, runtime retrieval/trace/embedding paths, and legacy ownership backfill/quarantine behavior.
 - Evidence-search browse indexes and migrated query-plan regression coverage over a 20,000-document/60,000-chunk fixture.
 - Deterministic MemoryStore/Postgres evidence repositories with capped direct-ID resolution, bounded browse/results, compact UTF-8 previews, and trigram-indexed Postgres corpus search.
 - Expected-evidence editor for Eval Lab with authenticated document/chunk lookup, readable multi-evidence selection, independent exact-chunk versus document-level expectations, stale evidence warnings, shared Retrieval/Trace save-to-Quality panels, and text-labeled evidence state visualization.
@@ -45,7 +45,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
-- Corpus evidence, retrieval candidates, Eval Lab datasets/cases/experiments/runs, CI reads, and report inputs now enforce authenticated workspace ownership inside storage; cross-workspace identifiers use the same unresolved, unavailable, or not-found behavior as nonexistent resources.
+- Corpus evidence, embedding status and writes, retrieval candidates and saved runs, traces and reruns, Eval Lab datasets/cases/experiments/runs, CI reads, overview metrics, demo progress, and report inputs now enforce authenticated workspace ownership inside storage; cross-workspace identifiers use the same unresolved, unavailable, or not-found behavior as nonexistent resources.
 - Retrieval and Trace save-to-Quality panels now key drafts and mutations to the active run or trace, preserve dataset intent across source changes, block stale submissions during retrieval transitions, expose keyboard-operable evidence toggles and announced async states, and verify submitted payloads against the current source.
 - Expected-evidence lookup now caps submitted ID work before storage access, routes browse/exact/text searches explicitly, uses synchronized ordered MemoryStore browse indexes and bounded text-search retention, follows index-compatible Postgres paths, rejects unsafe short text without clearing picker results, and preserves removable selections when metadata is unavailable.
 - Eval Lab evidence search now runs only on explicit Search or Enter submission, keeps selected evidence outside candidate limits, and avoids corpus-wide document-by-document chunk loading.

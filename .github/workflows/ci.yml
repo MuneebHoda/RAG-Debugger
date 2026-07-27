@@ -92,6 +92,12 @@ jobs:
           --test eval_workspace_contract
           postgres_eval_repository_enforces_workspace_ownership
           -- --ignored
+      - name: Verify Postgres runtime workspace isolation
+        run: >-
+          cargo test -p rag-debugger-storage
+          --test runtime_workspace_contract
+          postgres_runtime_repository_enforces_workspace_ownership
+          -- --ignored
       - name: Verify workspace ownership migration
         run: >-
           cargo test -p rag-debugger-storage

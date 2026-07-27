@@ -60,6 +60,7 @@ ci-check: rust-check web-check
     DATABASE_URL='{{ database_url }}' sqlx migrate run
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test evidence_repository_contract postgres_evidence_repository_is_deterministic_and_bounded -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test eval_workspace_contract postgres_eval_repository_enforces_workspace_ownership -- --ignored
+    DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test runtime_workspace_contract postgres_runtime_repository_enforces_workspace_ownership -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test workspace_migration workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage postgres_evidence_query_plans_are_index_compatible -- --ignored
 

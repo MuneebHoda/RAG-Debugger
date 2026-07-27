@@ -27,6 +27,17 @@ async fn run_single_workspace_backfill(database_url: &str) {
     .execute(&database.pool)
     .await
     .expect("insert singleton legacy project");
+    let run_id = Uuid::now_v7();
+    let trace_id = Uuid::now_v7();
+    insert_legacy_retrieval_run(&database.pool, run_id, "singleton legacy run").await;
+    insert_legacy_trace(
+        &database.pool,
+        trace_id,
+        project_id,
+        Some(run_id),
+        "singleton legacy trace",
+    )
+    .await;
 
     database.apply_workspace_migration().await;
 
@@ -44,6 +55,14 @@ async fn run_single_workspace_backfill(database_url: &str) {
             .expect("read singleton dataset owner");
     assert_eq!(project_owner, Some(workspace_id));
     assert_eq!(dataset_owner, Some(workspace_id));
+    assert_eq!(
+        retrieval_run_owner(&database.pool, run_id).await,
+        Some(workspace_id)
+    );
+    assert_eq!(
+        trace_owner(&database.pool, trace_id).await,
+        Some(workspace_id)
+    );
 
     database.drop().await;
 }
@@ -74,6 +93,37 @@ async fn run_ambiguous_workspace_quarantine(database_url: &str) {
     let document_b = Uuid::now_v7();
     insert_document(&database.pool, document_a, source_a, "alpha.md").await;
     insert_document(&database.pool, document_b, source_b, "beta.md").await;
+    let conflicting_run = Uuid::now_v7();
+    let alpha_trace = Uuid::now_v7();
+    let beta_trace = Uuid::now_v7();
+    insert_legacy_retrieval_run(&database.pool, conflicting_run, "conflicting run").await;
+    insert_legacy_trace(
+        &database.pool,
+        alpha_trace,
+        project_a,
+        Some(conflicting_run),
+        "alpha ownership signal",
+    )
+    .await;
+    insert_legacy_trace(
+        &database.pool,
+        beta_trace,
+        project_b,
+        Some(conflicting_run),
+        "beta ownership signal",
+    )
+    .await;
+    let quarantined_run = Uuid::now_v7();
+    let quarantined_trace = Uuid::now_v7();
+    insert_legacy_retrieval_run(&database.pool, quarantined_run, "unowned run").await;
+    insert_legacy_trace(
+        &database.pool,
+        quarantined_trace,
+        unowned_project,
+        Some(quarantined_run),
+        "unowned trace",
+    )
+    .await;
     sqlx::query(
         "INSERT INTO retrieval_eval_cases (
              id, dataset_id, name, query, top_k, expected_chunk_ids,
@@ -104,6 +154,23 @@ async fn run_ambiguous_workspace_quarantine(database_url: &str) {
             .expect("read ambiguous project owner");
     assert_eq!(dataset_owner, None);
     assert_eq!(project_owner, None);
+    assert_eq!(
+        retrieval_run_owner(&database.pool, conflicting_run).await,
+        None
+    );
+    assert_eq!(
+        retrieval_run_owner(&database.pool, quarantined_run).await,
+        None
+    );
+    assert_eq!(
+        trace_owner(&database.pool, alpha_trace).await,
+        Some(workspace_a)
+    );
+    assert_eq!(
+        trace_owner(&database.pool, beta_trace).await,
+        Some(workspace_b)
+    );
+    assert_eq!(trace_owner(&database.pool, quarantined_trace).await, None);
 
     database.drop().await;
 }
@@ -259,4 +326,62 @@ async fn insert_document(pool: &PgPool, document_id: Uuid, source_id: Uuid, path
     .execute(pool)
     .await
     .expect("insert migration-test document");
+}
+
+async fn insert_legacy_retrieval_run(pool: &PgPool, run_id: Uuid, query: &str) {
+    sqlx::query(
+        "INSERT INTO retrieval_playground_runs (
+             id, query, top_k, answer_status, answer_text, latency_ms,
+             created_at, retrieval_mode, response_json
+         )
+         VALUES ($1, $2, 5, 'insufficient_evidence', '', 1, NOW(), 'lexical', NULL)",
+    )
+    .bind(run_id)
+    .bind(query)
+    .execute(pool)
+    .await
+    .expect("insert legacy retrieval run");
+}
+
+async fn insert_legacy_trace(
+    pool: &PgPool,
+    trace_id: Uuid,
+    project_id: Uuid,
+    source_run_id: Option<Uuid>,
+    query: &str,
+) {
+    sqlx::query(
+        "INSERT INTO debug_traces (
+             id, project_id, source_run_id, query, retrieval_mode, summary, status,
+             evidence_strength, failure_labels, span_count, rerun_count, latency_ms,
+             trace_json, created_at, updated_at
+         )
+         VALUES (
+             $1, $2, $3, $4, 'lexical', 'legacy trace', 'completed',
+             'weak', '{}', 0, 0, 1, '{}'::jsonb, NOW(), NOW()
+         )",
+    )
+    .bind(trace_id)
+    .bind(project_id)
+    .bind(source_run_id)
+    .bind(query)
+    .execute(pool)
+    .await
+    .expect("insert legacy trace");
+}
+
+async fn retrieval_run_owner(pool: &PgPool, run_id: Uuid) -> Option<Uuid> {
+    sqlx::query_scalar("SELECT workspace_id FROM retrieval_playground_runs WHERE id = $1")
+        .bind(run_id)
+        .fetch_one(pool)
+        .await
+        .expect("read retrieval run owner")
+}
+
+async fn trace_owner(pool: &PgPool, trace_id: Uuid) -> Option<Uuid> {
+    sqlx::query_scalar("SELECT workspace_id FROM debug_traces WHERE id = $1")
+        .bind(trace_id)
+        .fetch_one(pool)
+        .await
+        .expect("read trace owner")
 }
