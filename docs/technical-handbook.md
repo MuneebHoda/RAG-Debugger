@@ -90,6 +90,7 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `GET /api/v1/eval-lab/datasets`: list Eval Lab datasets.
 - `POST /api/v1/eval-lab/datasets`: create an Eval Lab dataset.
 - `GET /api/v1/eval-lab/datasets/:dataset_id`: load a dataset with cases.
+- `POST /api/v1/eval-lab/evidence/query`: resolve selected evidence IDs and search bounded document/chunk candidates.
 - `POST /api/v1/eval-lab/datasets/:dataset_id/cases`: add a case to a dataset.
 - `PATCH /api/v1/eval-lab/cases/:case_id`: update a case.
 - `DELETE /api/v1/eval-lab/cases/:case_id`: delete a case.
@@ -107,6 +108,8 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 Migrations are in `migrations`.
 
 Core tables include `organizations`, `workspaces`, `users`, `workspace_memberships`, `auth_sessions`, `api_keys`, `projects`, `sources`, `ingestion_runs`, `documents`, `chunks`, `chunk_embeddings`, `retrieval_playground_runs`, `retrieval_playground_hits`, `debug_traces`, `trace_rerun_experiments`, `retrieval_eval_datasets`, `retrieval_eval_cases`, `retrieval_eval_runs`, `retrieval_eval_results`, `retrieval_eval_experiments`, and `ci_eval_runs`.
+
+The Eval Lab evidence-search migrations enable `pg_trgm`, add GIN indexes for normalized source names, document paths, chunk section titles, and chunk text, and add B-tree browse indexes for normalized document paths and document/ordinal chunk traversal. UUID primary keys continue serving direct requested-ID resolution. These migrations change indexes only and do not rewrite corpus records.
 
 Recent metadata additions:
 
@@ -254,6 +257,22 @@ The default gate passes when average recall@k is at least `0.80`, critical missi
 
 Eval Lab v2 adds regression read models over saved experiments. Dataset history and trend endpoints compare the latest run with the previous compatible baseline for the same dataset, `top_k`, and retrieval-mode set. Experiment detail surfaces gate movement, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels. Audit reports created from experiments include that regression context when available while preserving metadata-only privacy.
 
+Expected-evidence lookup has a dedicated bounded storage contract. Explicit document and chunk IDs resolve directly in deduplicated request order and do not consume candidate limits. Raw requests are capped at 100 document IDs, 250 chunk IDs, and 250 IDs combined before repository access; duplicates count toward those work limits and accepted IDs are never truncated. Additional documents and chunks use independent candidate limits and deterministic ordering. Empty search browses, exact UUIDs use equality paths, and text search requires three Unicode characters.
+
+Every evidence, embedding, retrieval-run, trace, and Eval repository operation carries a `WorkspaceId`. Postgres proves corpus and embedding ownership through project joins, persists retrieval-run and trace owners directly, and derives Eval ownership through the dataset; MemoryStore mirrors those checks through explicit ownership maps. Trace writes validate the owning project and optional source run. Embedding and expected-evidence writes validate the complete submitted set before mutation. Cross-workspace IDs are intentionally indistinguishable from nonexistent IDs. Ownership migrations backfill only uniquely attributable or single-workspace legacy records and quarantine ambiguous multi-workspace rows as unowned.
+
+Postgres uses primary keys, normalized browse B-trees, and separately bounded trigram categories over source names, document paths, section titles, and chunk text. MemoryStore uses direct ID maps and synchronized ordered browse indexes: empty browse costs `O(log D + log C + limits + skipped entries)` and examines only enough ordered entries to satisfy the limits after exclusions, while exact UUID lookup bypasses corpus scanning. The persistent browse index costs `O(D + C)` memory and temporary browse results remain bounded by the requested limits.
+
+MemoryStore substring search remains an intentionally linear local-development path. It scans the consistent snapshot under its lock with CPU `O(D log document_limit + C log chunk_limit)`, while top-k heaps cap temporary candidate retention at `O(document_limit + chunk_limit)`. Postgres is the production path for indexed text search. Chunk results contain a 280-character Unicode-safe preview and a truncation flag rather than unrestricted body text. The workbench submits searches only through Search or Enter, rejects unsafe short text locally, preserves previous results, and keeps selected IDs removable when metadata resolution fails.
+
+Legacy cases may retain expected-evidence IDs whose source data was deleted or is no longer accessible. Case updates preserve omitted evidence arrays without revalidation, while present arrays replace and validate the corresponding selection. The workbench tracks evidence changes as normalized ID sets, exposes explicit stale-item removal, sends empty arrays only for intentional clearing, and restores persisted drafts on cancellation. Validation completes before the merged case is stored, so failed repairs cannot partially persist unrelated edits.
+
+The same PATCH contract distinguishes case-note omission, replacement, and clearing: an omitted `notes` property preserves the stored value, a string replaces it, and `null` clears it. Successful edits synchronously replace the matching case in the dataset query cache before background invalidation, so an immediate reopen cannot restore pre-save scalar or evidence values from a stale prop.
+
+Retrieval and Trace Debugger share one source-aware save-to-Quality lifecycle. The source key is the retrieval run ID or trace ID. Source transitions preserve workflow intent (the selected dataset and open panel) but reset source-owned drafts, picker search, validation, duplicate feedback, and mutation status. Retrieval disables the mounted panel while a replacement run is pending. Every mutation receives an immutable source/dataset/query/`top_k`/notes/evidence snapshot, aborts on source changes, invalidates the dataset it actually wrote, and cannot surface stale feedback for another source.
+
+Expected-evidence interaction is explicitly accessible: exact chunks and document-level expectations are independent native toggle buttons with `aria-pressed` and visible state text; remove, clear-all, Search, and save work from the keyboard; async progress and success use polite status regions; errors use alerts. The result grid is container-responsive, and evidence styling composes existing Eval Lab and workbench primitives so status meaning remains text-first without increasing the CSS budget.
+
 The legacy `/api/v1/retrieval/evals` endpoints remain compatible for older flows. Trace Debugger saves cases into Eval Lab only after the user chooses a dataset and explicitly marks expected document/chunk evidence.
 
 ## Report Contracts
@@ -283,6 +302,7 @@ Default behavior is local and privacy-first.
 - Uploaded binaries are not stored.
 - Extracted chunk text is stored in Postgres.
 - Embeddings are stored in Postgres.
+- Retrieval runs and traces persist workspace ownership; embedding ownership is derived from chunk ancestry.
 - No hosted LLM or hosted embedding API is called in the current retrieval path.
 - `/api/v1/config` exposes safe config only; database URLs and deployment secrets stay server-side.
 

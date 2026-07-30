@@ -208,10 +208,6 @@ async fn reports_are_created_listed_opened_and_exported() {
 
 async fn setup() -> TestContext {
     let store = Arc::new(MemoryStore::default());
-    store
-        .ensure_default_project()
-        .await
-        .expect("default project");
     let config = ApiConfig {
         environment: RuntimeEnvironment::Local,
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
@@ -224,6 +220,10 @@ async fn setup() -> TestContext {
     let user = auth::bootstrap_identity(store.as_ref(), &config.auth)
         .await
         .expect("bootstrap user");
+    store
+        .ensure_default_project(user.workspace.id)
+        .await
+        .expect("default project");
     let app = app(AppState::new(config.clone(), store.clone()));
     let login = app
         .clone()

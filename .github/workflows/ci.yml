@@ -80,6 +80,35 @@ jobs:
         run: cargo install sqlx-cli --no-default-features --features rustls,postgres --locked
       - name: Run migrations
         run: sqlx migrate run
+      - name: Verify Postgres evidence repository contract
+        run: >-
+          cargo test -p rag-debugger-storage
+          --test evidence_repository_contract
+          postgres_evidence_repository_is_deterministic_and_bounded
+          -- --ignored
+      - name: Verify Postgres Eval workspace isolation
+        run: >-
+          cargo test -p rag-debugger-storage
+          --test eval_workspace_contract
+          postgres_eval_repository_enforces_workspace_ownership
+          -- --ignored
+      - name: Verify Postgres runtime workspace isolation
+        run: >-
+          cargo test -p rag-debugger-storage
+          --test runtime_workspace_contract
+          postgres_runtime_repository_enforces_workspace_ownership
+          -- --ignored
+      - name: Verify workspace ownership migration
+        run: >-
+          cargo test -p rag-debugger-storage
+          --test workspace_migration
+          workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity
+          -- --ignored
+      - name: Verify Postgres evidence query plans
+        run: >-
+          cargo test -p rag-debugger-storage
+          postgres_evidence_query_plans_are_index_compatible
+          -- --ignored
 
   docs:
     name: Documentation

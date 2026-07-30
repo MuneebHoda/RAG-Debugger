@@ -6,7 +6,11 @@ use super::{codec::*, PostgresStore};
 use crate::StorageError;
 
 impl PostgresStore {
-    pub(super) async fn create_source(&self, source: Source) -> Result<Source, StorageError> {
+    pub(super) async fn create_source(
+        &self,
+        workspace_id: WorkspaceId,
+        source: Source,
+    ) -> Result<Source, StorageError> {
         let (source_kind, root_hint, github_owner, github_repo) = source_kind_columns(&source.kind);
         let (sync_policy, sync_cron) = sync_policy_columns(&source.sync_policy);
 
@@ -16,7 +20,10 @@ impl PostgresStore {
                 sync_policy, sync_cron, target_tokens, overlap_tokens, chunking_strategy,
                 created_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+             SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+             WHERE EXISTS (
+                 SELECT 1 FROM projects WHERE id = $2 AND workspace_id = $14
+             )",
         )
         .bind(source.id.0)
         .bind(source.project_id.0)
@@ -31,14 +38,20 @@ impl PostgresStore {
         .bind(source.chunking.overlap_tokens as i32)
         .bind(chunking_strategy_to_str(source.chunking.strategy))
         .bind(OffsetDateTime::now_utc())
+        .bind(workspace_id.0)
         .execute(&self.pool)
-        .await?;
+        .await?
+        .rows_affected()
+        .eq(&1)
+        .then_some(())
+        .ok_or(StorageError::NotFound)?;
 
         Ok(source)
     }
 
     pub(super) async fn create_ingestion_run(
         &self,
+        workspace_id: WorkspaceId,
         run: IngestionRun,
     ) -> Result<IngestionRun, StorageError> {
         sqlx::query(
@@ -46,7 +59,13 @@ impl PostgresStore {
                 id, source_id, status, files_received, documents_created, chunks_created,
                 failed_files, started_at, completed_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+             SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9
+             WHERE EXISTS (
+                 SELECT 1
+                 FROM sources s
+                 INNER JOIN projects p ON p.id = s.project_id
+                 WHERE s.id = $2 AND p.workspace_id = $10
+             )",
         )
         .bind(run.id.0)
         .bind(run.source_id.0)
@@ -57,14 +76,20 @@ impl PostgresStore {
         .bind(run.totals.failed_files as i32)
         .bind(run.started_at)
         .bind(run.completed_at)
+        .bind(workspace_id.0)
         .execute(&self.pool)
-        .await?;
+        .await?
+        .rows_affected()
+        .eq(&1)
+        .then_some(())
+        .ok_or(StorageError::NotFound)?;
 
         Ok(run)
     }
 
     pub(super) async fn complete_ingestion_run(
         &self,
+        workspace_id: WorkspaceId,
         id: IngestionRunId,
         status: IngestionRunStatus,
         totals: IngestionTotals,
@@ -75,6 +100,12 @@ impl PostgresStore {
              SET status = $2, files_received = $3, documents_created = $4,
                  chunks_created = $5, failed_files = $6, completed_at = $7
              WHERE id = $1
+               AND EXISTS (
+                   SELECT 1
+                   FROM sources s
+                   INNER JOIN projects p ON p.id = s.project_id
+                   WHERE s.id = ingestion_runs.source_id AND p.workspace_id = $8
+               )
              RETURNING id, source_id, status, files_received, documents_created, chunks_created,
                        failed_files, started_at, completed_at",
         )
@@ -85,6 +116,7 @@ impl PostgresStore {
         .bind(totals.chunks_created as i32)
         .bind(totals.failed_files as i32)
         .bind(completed_at)
+        .bind(workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(StorageError::NotFound)?;
@@ -94,10 +126,26 @@ impl PostgresStore {
 
     pub(super) async fn insert_document_with_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document: Document,
         chunks: Vec<Chunk>,
     ) -> Result<Document, StorageError> {
         let mut transaction = self.pool.begin().await?;
+        let owns_source = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (
+                 SELECT 1
+                 FROM sources s
+                 INNER JOIN projects p ON p.id = s.project_id
+                 WHERE s.id = $1 AND p.workspace_id = $2
+             )",
+        )
+        .bind(document.source_id.0)
+        .bind(workspace_id.0)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !owns_source {
+            return Err(StorageError::NotFound);
+        }
 
         sqlx::query(
             "INSERT INTO documents (
@@ -153,13 +201,20 @@ impl PostgresStore {
         Ok(document)
     }
 
-    pub(super) async fn list_sources(&self) -> Result<Vec<SourceSummary>, StorageError> {
+    pub(super) async fn list_sources(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<SourceSummary>, StorageError> {
         let source_rows = sqlx::query(
-            "SELECT id, project_id, name, source_kind, root_hint, github_owner, github_repo,
-                    sync_policy, sync_cron, target_tokens, overlap_tokens, chunking_strategy
-             FROM sources
-             ORDER BY created_at DESC",
+            "SELECT s.id, s.project_id, s.name, s.source_kind, s.root_hint,
+                    s.github_owner, s.github_repo, s.sync_policy, s.sync_cron,
+                    s.target_tokens, s.overlap_tokens, s.chunking_strategy
+             FROM sources s
+             INNER JOIN projects p ON p.id = s.project_id
+             WHERE p.workspace_id = $1
+             ORDER BY s.created_at DESC",
         )
+        .bind(workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
 
@@ -182,19 +237,43 @@ impl PostgresStore {
 
     pub(super) async fn list_document_chunks(
         &self,
+        workspace_id: WorkspaceId,
         document_id: DocumentId,
     ) -> Result<Vec<Chunk>, StorageError> {
         let rows = sqlx::query(
-            "SELECT id, source_id, document_id, ordinal, text, token_count, byte_start, byte_end,
-                    checksum, strategy, section_title, split_reason,
-                    quality_flags, is_duplicate, text_density, evidence_score_hint
-             FROM chunks
-             WHERE document_id = $1
+            "SELECT c.id, c.source_id, c.document_id, c.ordinal, c.text, c.token_count,
+                    c.byte_start, c.byte_end, c.checksum, c.strategy, c.section_title,
+                    c.split_reason, c.quality_flags, c.is_duplicate, c.text_density,
+                    c.evidence_score_hint
+             FROM chunks c
+             INNER JOIN sources s ON s.id = c.source_id
+             INNER JOIN projects p ON p.id = s.project_id
+             WHERE c.document_id = $1 AND p.workspace_id = $2
              ORDER BY ordinal ASC",
         )
         .bind(document_id.0)
+        .bind(workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
+
+        if rows.is_empty() {
+            let owns_document = sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (
+                     SELECT 1
+                     FROM documents d
+                     INNER JOIN sources s ON s.id = d.source_id
+                     INNER JOIN projects p ON p.id = s.project_id
+                     WHERE d.id = $1 AND p.workspace_id = $2
+                 )",
+            )
+            .bind(document_id.0)
+            .bind(workspace_id.0)
+            .fetch_one(&self.pool)
+            .await?;
+            if !owns_document {
+                return Err(StorageError::NotFound);
+            }
+        }
 
         rows.iter().map(chunk_from_row).collect()
     }

@@ -1,6 +1,10 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Extension, State},
+    Json,
+};
 use rag_debugger_core::{
-    ChunkEmbedding, EmbeddingIndexRequest, EmbeddingIndexResponse, EmbeddingStatus,
+    AuthenticatedUser, ChunkEmbedding, EmbeddingIndexRequest, EmbeddingIndexResponse,
+    EmbeddingStatus,
 };
 use rag_debugger_rag::{
     embedding::{EmbeddingProvider, LocalHashEmbeddingProvider},
@@ -12,11 +16,16 @@ use crate::{error::ApiError, state::AppState};
 
 pub async fn embedding_status(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
 ) -> Result<Json<EmbeddingStatus>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
     let status = repository
-        .embedding_status(&EmbeddingIndexRequest::default(), &provider.model())
+        .embedding_status(
+            user.workspace.id,
+            &EmbeddingIndexRequest::default(),
+            &provider.model(),
+        )
         .await?;
 
     Ok(Json(status))
@@ -24,12 +33,15 @@ pub async fn embedding_status(
 
 pub async fn index_embeddings(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<EmbeddingIndexRequest>,
 ) -> Result<Json<EmbeddingIndexResponse>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
     let model = provider.model();
-    let candidates = repository.list_embedding_candidates(&request).await?;
+    let candidates = repository
+        .list_embedding_candidates(user.workspace.id, &request)
+        .await?;
     let texts = candidates
         .iter()
         .map(|candidate| candidate.text.as_str())
@@ -49,8 +61,12 @@ pub async fn index_embeddings(
         .collect::<Vec<_>>();
     let indexed_chunks = embeddings.len() as u32;
 
-    repository.upsert_chunk_embeddings(embeddings).await?;
-    let status = repository.embedding_status(&request, &model).await?;
+    repository
+        .upsert_chunk_embeddings(user.workspace.id, embeddings)
+        .await?;
+    let status = repository
+        .embedding_status(user.workspace.id, &request, &model)
+        .await?;
 
     Ok(Json(EmbeddingIndexResponse {
         status,

@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rag_debugger_core::*;
 use sqlx::types::Json;
 use time::OffsetDateTime;
@@ -9,6 +11,7 @@ use crate::StorageError;
 impl PostgresStore {
     pub(super) async fn list_searchable_chunks(
         &self,
+        workspace_id: WorkspaceId,
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError> {
         let source_ids = request
@@ -46,11 +49,14 @@ impl PostgresStore {
              FROM chunks c
              INNER JOIN documents d ON d.id = c.document_id
              INNER JOIN sources s ON s.id = c.source_id
+             INNER JOIN projects p ON p.id = s.project_id
              LEFT JOIN chunk_embeddings e ON e.chunk_id = c.id
-             WHERE ($1 OR c.source_id = ANY($2))
-               AND ($3 OR c.document_id = ANY($4))
+             WHERE p.workspace_id = $1
+               AND ($2 OR c.source_id = ANY($3))
+               AND ($4 OR c.document_id = ANY($5))
              ORDER BY d.path ASC, c.ordinal ASC",
         )
+        .bind(workspace_id.0)
         .bind(source_ids.is_empty())
         .bind(source_ids)
         .bind(document_ids.is_empty())
@@ -63,18 +69,44 @@ impl PostgresStore {
 
     pub(super) async fn save_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         response: &RetrievalQueryResponse,
     ) -> Result<(), StorageError> {
         let mut transaction = self.pool.begin().await?;
+        let chunk_ids = response
+            .hits
+            .iter()
+            .map(|hit| hit.chunk.id.0)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        if !chunk_ids.is_empty() {
+            let owned_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM chunks chunk
+                 INNER JOIN sources source ON source.id = chunk.source_id
+                 INNER JOIN projects project ON project.id = source.project_id
+                 WHERE project.workspace_id = $1
+                   AND chunk.id = ANY($2)",
+            )
+            .bind(workspace_id.0)
+            .bind(&chunk_ids)
+            .fetch_one(&mut *transaction)
+            .await?;
+            if owned_count != chunk_ids.len() as i64 {
+                return Err(StorageError::NotFound);
+            }
+        }
 
         sqlx::query(
             "INSERT INTO retrieval_playground_runs (
-                id, query, top_k, retrieval_mode, answer_status, answer_text, latency_ms, created_at,
-                response_json
+                id, workspace_id, query, top_k, retrieval_mode, answer_status, answer_text,
+                latency_ms, created_at, response_json
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         )
         .bind(response.run.id.0)
+        .bind(workspace_id.0)
         .bind(&response.run.query)
         .bind(response.run.top_k as i32)
         .bind(retrieval_mode_to_str(response.run.retrieval_mode))
@@ -120,13 +152,15 @@ impl PostgresStore {
 
     pub(super) async fn get_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
         id: RetrievalQueryRunId,
     ) -> Result<RetrievalQueryResponse, StorageError> {
         let row = sqlx::query(
             "SELECT response_json
              FROM retrieval_playground_runs
-             WHERE id = $1",
+             WHERE workspace_id = $1 AND id = $2",
         )
+        .bind(workspace_id.0)
         .bind(id.0)
         .fetch_optional(&self.pool)
         .await?
@@ -137,14 +171,17 @@ impl PostgresStore {
 
     pub(super) async fn latest_retrieval_query(
         &self,
+        workspace_id: WorkspaceId,
     ) -> Result<RetrievalQueryResponse, StorageError> {
         let row = sqlx::query(
             "SELECT response_json
              FROM retrieval_playground_runs
-             WHERE response_json IS NOT NULL
+             WHERE workspace_id = $1
+               AND response_json IS NOT NULL
              ORDER BY created_at DESC
              LIMIT 1",
         )
+        .bind(workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         .ok_or(StorageError::NotFound)?;

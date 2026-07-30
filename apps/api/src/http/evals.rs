@@ -1,7 +1,10 @@
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Extension, State},
+    Json,
+};
 use rag_debugger_core::{
-    CreateRetrievalEvalCaseRequest, RetrievalEvalCase, RetrievalEvalRun, RetrievalEvalRunId,
-    RetrievalQueryRequest, RunRetrievalEvalRequest,
+    AuthenticatedUser, CreateRetrievalEvalCaseRequest, RetrievalEvalCase, RetrievalEvalRun,
+    RetrievalEvalRunId, RetrievalQueryRequest, RunRetrievalEvalRequest,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider, evals::score_retrieval_eval_case,
@@ -14,13 +17,19 @@ use crate::{error::ApiError, state::AppState};
 
 pub async fn list_retrieval_eval_cases(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
 ) -> Result<Json<Vec<RetrievalEvalCase>>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    Ok(Json(repository.list_retrieval_eval_cases().await?))
+    Ok(Json(
+        repository
+            .list_retrieval_eval_cases(user.workspace.id)
+            .await?,
+    ))
 }
 
 pub async fn create_retrieval_eval_case(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<CreateRetrievalEvalCaseRequest>,
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
@@ -56,20 +65,25 @@ pub async fn create_retrieval_eval_case(
     };
 
     Ok(Json(
-        repository.create_retrieval_eval_case(eval_case).await?,
+        repository
+            .create_retrieval_eval_case(user.workspace.id, eval_case)
+            .await
+            .map_err(eval_case_write_error)?,
     ))
 }
 
 pub async fn run_retrieval_evals(
     State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
     Json(request): Json<RunRetrievalEvalRequest>,
 ) -> Result<Json<RetrievalEvalRun>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let workspace_id = user.workspace.id;
     let cases = if request.case_ids.is_empty() {
-        repository.list_retrieval_eval_cases().await?
+        repository.list_retrieval_eval_cases(workspace_id).await?
     } else {
         repository
-            .list_retrieval_eval_cases_by_id(&request.case_ids)
+            .list_retrieval_eval_cases_by_id(workspace_id, &request.case_ids)
             .await?
     };
 
@@ -96,7 +110,9 @@ pub async fn run_retrieval_evals(
             source_ids: Vec::new(),
             document_ids: Vec::new(),
         };
-        let candidates = repository.list_searchable_chunks(&query_request).await?;
+        let candidates = repository
+            .list_searchable_chunks(workspace_id, &query_request)
+            .await?;
         let response = retriever
             .retrieve(query_request, candidates)
             .map_err(rag_error_to_api_error)?;
@@ -118,8 +134,20 @@ pub async fn run_retrieval_evals(
         results,
     };
 
-    repository.save_retrieval_eval_run(&eval_run).await?;
+    repository
+        .save_retrieval_eval_run(workspace_id, &eval_run)
+        .await?;
     Ok(Json(eval_run))
+}
+
+fn eval_case_write_error(error: rag_debugger_storage::StorageError) -> ApiError {
+    match error {
+        rag_debugger_storage::StorageError::UnavailableEvidence => ApiError::BadRequest(
+            "Some selected evidence is unavailable. Remove or replace stale evidence before saving."
+                .to_owned(),
+        ),
+        other => ApiError::Storage(other),
+    }
 }
 
 fn normalized_top_k(top_k: u32, default_top_k: u32, max_top_k: u32) -> u32 {

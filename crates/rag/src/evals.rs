@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashSet};
 
 use rag_debugger_core::{
-    DebuggerConfig, EvidenceStrength, RetrievalEmbeddingReadiness, RetrievalEvalCase,
+    DebuggerConfig, DocumentId, EvidenceStrength, RetrievalEmbeddingReadiness, RetrievalEvalCase,
     RetrievalEvalCaseEvaluation, RetrievalEvalCaseId, RetrievalEvalCaseRegression,
     RetrievalEvalComparison, RetrievalEvalDatasetId, RetrievalEvalExperiment,
     RetrievalEvalExperimentSummary, RetrievalEvalFailure, RetrievalEvalFailureLabel,
@@ -9,7 +9,7 @@ use rag_debugger_core::{
     RetrievalEvalMetricDelta, RetrievalEvalModeResult, RetrievalEvalRegressionClassification,
     RetrievalEvalRegressionComparison, RetrievalEvalRegressionMetric, RetrievalEvalResult,
     RetrievalEvalTrendPoint, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQualityFlag,
-    RetrievalQueryResponse,
+    RetrievalQueryResponse, SearchableChunk,
 };
 
 use crate::diagnosis::{diagnose_retrieval, ExpectedEvidence};
@@ -54,6 +54,15 @@ pub fn evaluate_retrieval_eval_case_with_config(
     response: &RetrievalQueryResponse,
     debugger_config: &DebuggerConfig,
 ) -> RetrievalEvalCaseEvaluation {
+    evaluate_retrieval_eval_case_with_context(case, response, debugger_config, &[])
+}
+
+pub fn evaluate_retrieval_eval_case_with_context(
+    case: &RetrievalEvalCase,
+    response: &RetrievalQueryResponse,
+    debugger_config: &DebuggerConfig,
+    expected_chunk_document_ids: &[DocumentId],
+) -> RetrievalEvalCaseEvaluation {
     let retrieved_chunk_ids = response
         .hits
         .iter()
@@ -86,6 +95,17 @@ pub fn evaluate_retrieval_eval_case_with_config(
         .map(|hit| hit.document.id)
         .collect::<HashSet<_>>()
         .len();
+    let expected_chunk_document_ids = expected_chunk_document_ids
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    let matched_expected_chunk_parent_documents = response
+        .hits
+        .iter()
+        .filter(|hit| expected_chunk_document_ids.contains(&hit.document.id))
+        .map(|hit| hit.document.id)
+        .collect::<HashSet<_>>()
+        .len();
     let matched_expected_count = matched_expected_chunks + matched_expected_documents;
 
     let matching_hit_count = response
@@ -115,6 +135,11 @@ pub fn evaluate_retrieval_eval_case_with_config(
                 || expected_document_ids.contains(&hit.document.id)
         })
         .map(|hit| hit.rank);
+    let wrong_chunk_rank = response
+        .hits
+        .iter()
+        .find(|hit| expected_chunk_document_ids.contains(&hit.document.id))
+        .map(|hit| hit.rank);
     let mrr = top_hit_rank.map_or(0.0, |rank| 1.0 / rank as f32);
     let citation_coverage = if response.hits.is_empty() {
         0.0
@@ -140,18 +165,9 @@ pub fn evaluate_retrieval_eval_case_with_config(
             top_hit_rank,
         ));
     }
-    if recall_at_k == 0.0 && expected_count > 0 {
-        failures.push(failure(
-            case,
-            response.run.retrieval_mode,
-            RetrievalEvalFailureLabel::ExpectedEvidenceMissing,
-            RetrievalEvalFailureSeverity::Critical,
-            "No expected chunk or document was retrieved.",
-            top_hit_rank,
-        ));
-    } else if matched_expected_documents > 0
-        && !expected_chunk_ids.is_empty()
+    if !expected_chunk_ids.is_empty()
         && matched_expected_chunks == 0
+        && (matched_expected_documents > 0 || matched_expected_chunk_parent_documents > 0)
     {
         failures.push(failure(
             case,
@@ -159,6 +175,15 @@ pub fn evaluate_retrieval_eval_case_with_config(
             RetrievalEvalFailureLabel::CorrectDocumentWrongChunk,
             RetrievalEvalFailureSeverity::Warning,
             "The expected document matched, but the expected chunk did not.",
+            top_hit_rank.or(wrong_chunk_rank),
+        ));
+    } else if recall_at_k == 0.0 && expected_count > 0 {
+        failures.push(failure(
+            case,
+            response.run.retrieval_mode,
+            RetrievalEvalFailureLabel::ExpectedEvidenceMissing,
+            RetrievalEvalFailureSeverity::Critical,
+            "No expected chunk or document was retrieved.",
             top_hit_rank,
         ));
     }
@@ -234,6 +259,26 @@ pub fn evaluate_retrieval_eval_case_with_config(
             }),
         )),
     }
+}
+
+pub fn expected_chunk_parent_document_ids(
+    case: &RetrievalEvalCase,
+    candidates: &[SearchableChunk],
+) -> Vec<DocumentId> {
+    let expected_chunk_ids = case
+        .expected_chunk_ids
+        .iter()
+        .copied()
+        .collect::<HashSet<_>>();
+    let mut document_ids = Vec::new();
+    for candidate in candidates {
+        if expected_chunk_ids.contains(&candidate.chunk.id)
+            && !document_ids.contains(&candidate.document.id)
+        {
+            document_ids.push(candidate.document.id);
+        }
+    }
+    document_ids
 }
 
 pub fn summarize_mode_result(
@@ -1075,6 +1120,36 @@ mod tests {
                 RetrievalEvalFailureLabel::DuplicateEvidence,
             ]
         );
+    }
+
+    #[test]
+    fn exact_chunk_only_expectation_can_report_same_document_wrong_chunk() {
+        let document_id = DocumentId(Uuid::now_v7());
+        let expected_chunk_id = ChunkId(Uuid::now_v7());
+        let retrieved_chunk_id = ChunkId(Uuid::now_v7());
+        let case = eval_case(expected_chunk_id, None);
+        let response = eval_response(
+            vec![hit(retrieved_chunk_id, document_id)],
+            RetrievalEmbeddingReadiness::Ready,
+        );
+
+        let result = evaluate_retrieval_eval_case_with_context(
+            &case,
+            &response,
+            &DebuggerConfig::default(),
+            &[document_id],
+        );
+        let labels = result
+            .failures
+            .iter()
+            .map(|failure| failure.label)
+            .collect::<Vec<_>>();
+
+        assert!(!result.passed);
+        assert_eq!(result.recall_at_k, 0.0);
+        assert!(result.expected_document_ids.is_empty());
+        assert!(labels.contains(&RetrievalEvalFailureLabel::CorrectDocumentWrongChunk));
+        assert!(!labels.contains(&RetrievalEvalFailureLabel::ExpectedEvidenceMissing));
     }
 
     #[test]

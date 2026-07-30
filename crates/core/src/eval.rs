@@ -4,14 +4,14 @@ use uuid::Uuid;
 use time::OffsetDateTime;
 
 use crate::{
-    chunk::ChunkId,
+    chunk::{ChunkId, ChunkQualityFlag},
     config::RetrievalWeights,
     diagnosis::EvidenceDiagnosisSummary,
     embedding::EmbeddingModelInfo,
     model::ModelConfigId,
     project::ProjectId,
     retrieval::{RetrievalMode, DEFAULT_RETRIEVAL_TOP_K},
-    source::DocumentId,
+    source::{DocumentId, DocumentProfile, DocumentWarning, ExtractionQuality, SourceId},
     trace::TraceId,
 };
 
@@ -134,7 +134,103 @@ pub struct UpdateRetrievalEvalCaseRequest {
     pub top_k: Option<u32>,
     pub expected_chunk_ids: Option<Vec<ChunkId>>,
     pub expected_document_ids: Option<Vec<DocumentId>>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_present_option",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub notes: Option<Option<String>>,
+}
+
+fn deserialize_present_option<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct QueryEvalLabEvidenceRequest {
+    pub query: Option<String>,
+    #[serde(default)]
+    pub document_ids: Vec<DocumentId>,
+    #[serde(default)]
+    pub chunk_ids: Vec<ChunkId>,
+    pub limit: Option<u32>,
+    pub document_limit: Option<u32>,
+    pub chunk_limit: Option<u32>,
+    #[serde(default)]
+    pub include_chunks: bool,
+}
+
+pub const EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT: u32 = 25;
+pub const EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT: u32 = 100;
+pub const EVAL_LAB_EVIDENCE_PREVIEW_CHAR_LIMIT: usize = 280;
+pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS: usize = 100;
+pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS: usize = 250;
+pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS: usize = 250;
+pub const EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS: usize = 3;
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum EvalLabEvidenceSearchQuery {
+    Browse,
+    ExactId(Uuid),
+    Text(String),
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct EvalLabEvidenceSearchRequest {
+    pub query: EvalLabEvidenceSearchQuery,
+    pub excluded_document_ids: Vec<DocumentId>,
+    pub excluded_chunk_ids: Vec<ChunkId>,
+    pub document_limit: u32,
+    pub chunk_limit: u32,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct EvalLabEvidenceSearchResult {
+    pub documents: Vec<EvalLabEvidenceDocument>,
+    pub chunks: Vec<EvalLabEvidenceChunk>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QueryEvalLabEvidenceResponse {
+    pub documents: Vec<EvalLabEvidenceDocument>,
+    pub chunks: Vec<EvalLabEvidenceChunk>,
+    pub unresolved_document_ids: Vec<DocumentId>,
+    pub unresolved_chunk_ids: Vec<ChunkId>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct EvalLabEvidenceDocument {
+    pub id: DocumentId,
+    pub source_id: SourceId,
+    pub source_name: String,
+    pub path: String,
+    pub profile: DocumentProfile,
+    pub extraction_quality: ExtractionQuality,
+    pub warnings: Vec<DocumentWarning>,
+    pub chunk_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EvalLabEvidenceChunk {
+    pub id: ChunkId,
+    pub document_id: DocumentId,
+    pub source_id: SourceId,
+    pub source_name: String,
+    pub document_path: String,
+    pub ordinal: u32,
+    pub text_preview: String,
+    pub preview_truncated: bool,
+    pub token_count: u32,
+    pub checksum: String,
+    pub section_title: Option<String>,
+    pub quality_flags: Vec<ChunkQualityFlag>,
+    pub is_duplicate: bool,
+    pub text_density: f32,
+    pub evidence_score_hint: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -458,6 +554,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn update_case_notes_distinguish_missing_null_and_string_values() {
+        let missing: UpdateRetrievalEvalCaseRequest =
+            serde_json::from_value(json!({})).expect("missing notes deserialize");
+        let cleared: UpdateRetrievalEvalCaseRequest = serde_json::from_value(json!({
+            "notes": null
+        }))
+        .expect("null notes deserialize");
+        let replaced: UpdateRetrievalEvalCaseRequest = serde_json::from_value(json!({
+            "notes": "Updated"
+        }))
+        .expect("string notes deserialize");
+
+        assert_eq!(missing.notes, None);
+        assert_eq!(cleared.notes, Some(None));
+        assert_eq!(replaced.notes, Some(Some("Updated".to_owned())));
+
+        let missing_json = serde_json::to_value(missing).expect("missing notes serialize");
+        let cleared_json = serde_json::to_value(cleared).expect("null notes serialize");
+        let replaced_json = serde_json::to_value(replaced).expect("string notes serialize");
+        assert!(missing_json.get("notes").is_none());
+        assert_eq!(cleared_json["notes"], serde_json::Value::Null);
+        assert_eq!(replaced_json["notes"], "Updated");
+    }
+
+    #[test]
     fn regression_contract_uses_stable_wire_values() {
         let case_id = RetrievalEvalCaseId(Uuid::now_v7());
         let chunk_id = ChunkId(Uuid::now_v7());
@@ -543,6 +664,78 @@ mod tests {
         let round_trip: RetrievalEvalTrendSummary =
             serde_json::from_value(json).expect("trend deserializes");
         assert_eq!(round_trip, summary);
+    }
+
+    #[test]
+    fn evidence_lookup_contract_round_trips() {
+        let document_id = DocumentId(Uuid::now_v7());
+        let chunk_id = ChunkId(Uuid::now_v7());
+        let source_id = SourceId(Uuid::now_v7());
+        let response = QueryEvalLabEvidenceResponse {
+            documents: vec![EvalLabEvidenceDocument {
+                id: document_id,
+                source_id,
+                source_name: "Support KB".to_owned(),
+                path: "support/account-recovery.md".to_owned(),
+                profile: DocumentProfile::SupportKb,
+                extraction_quality: ExtractionQuality::High,
+                warnings: Vec::new(),
+                chunk_count: 2,
+            }],
+            chunks: vec![EvalLabEvidenceChunk {
+                id: chunk_id,
+                document_id,
+                source_id,
+                source_name: "Support KB".to_owned(),
+                document_path: "support/account-recovery.md".to_owned(),
+                ordinal: 0,
+                text_preview: "Password reset links expire after fifteen minutes.".to_owned(),
+                preview_truncated: false,
+                token_count: 7,
+                checksum: "abc123".to_owned(),
+                section_title: Some("Account recovery".to_owned()),
+                quality_flags: vec![ChunkQualityFlag::GoodEvidenceCandidate],
+                is_duplicate: false,
+                text_density: 0.9,
+                evidence_score_hint: 0.8,
+            }],
+            unresolved_document_ids: vec![DocumentId(Uuid::now_v7())],
+            unresolved_chunk_ids: Vec::new(),
+        };
+
+        let json = serde_json::to_value(&response).expect("evidence serializes");
+        assert_eq!(json["documents"][0]["profile"], "support_kb");
+        assert_eq!(
+            json["chunks"][0]["quality_flags"][0],
+            "good_evidence_candidate"
+        );
+        assert!(json["unresolved_document_ids"][0].is_string());
+
+        let round_trip: QueryEvalLabEvidenceResponse =
+            serde_json::from_value(json).expect("evidence deserializes");
+        assert_eq!(round_trip, response);
+    }
+
+    #[test]
+    fn evidence_lookup_request_keeps_legacy_and_independent_limits_optional() {
+        let request: QueryEvalLabEvidenceRequest = serde_json::from_value(json!({
+            "query": "indexing",
+            "limit": 2,
+            "include_chunks": true
+        }))
+        .expect("legacy evidence request deserializes");
+
+        assert_eq!(request.limit, Some(2));
+        assert_eq!(request.document_limit, None);
+        assert_eq!(request.chunk_limit, None);
+
+        let explicit: QueryEvalLabEvidenceRequest = serde_json::from_value(json!({
+            "document_limit": 0,
+            "chunk_limit": 12
+        }))
+        .expect("independent evidence limits deserialize");
+        assert_eq!(explicit.document_limit, Some(0));
+        assert_eq!(explicit.chunk_limit, Some(12));
     }
 
     #[test]

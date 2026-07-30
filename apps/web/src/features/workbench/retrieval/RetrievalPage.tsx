@@ -7,6 +7,7 @@ import { EmbeddingPanel } from "./components/EmbeddingPanel";
 import { RetrievalFiltersPanel } from "./components/RetrievalFiltersPanel";
 import { RetrievalQueryPanel } from "./components/RetrievalQueryPanel";
 import { RetrievalStatusAlert } from "./components/RetrievalStatusAlert";
+import { SaveEvidenceToEvalPanel } from "../eval-lab/evidence/SaveEvidenceToEvalPanel";
 import { useRetrievalWorkbench } from "./hooks/useRetrievalWorkbench";
 import styles from "./RetrievalPage.module.css";
 import { AnswerPanel, HitsPanel } from "./RetrievalResults";
@@ -96,6 +97,26 @@ export function RetrievalPage() {
             isQuerying={workbench.isQuerying}
             response={workbench.response}
           />
+          {workbench.response ? (
+            <SaveEvidenceToEvalPanel
+              candidateHits={workbench.response.hits.map((hit) => ({
+                chunkId: hit.chunk.id,
+                documentId: hit.document.id,
+                label: hit.citation.label,
+                rank: hit.rank,
+                path: hit.document.path,
+                sectionTitle: hit.chunk.section_title,
+                snippet: hit.snippet,
+                weak: hit.evidence_strength === "weak",
+                duplicate: hit.duplicate_count > 1,
+              }))}
+              query={workbench.response.run.query}
+              sourceIdentity={workbench.response.run.id}
+              sourceNote={`Saved from retrieval run ${workbench.response.run.id.slice(0, 8)}.`}
+              sourcePending={workbench.isQuerying}
+              topK={workbench.response.run.top_k}
+            />
+          ) : null}
         </div>
       </section>
     </section>

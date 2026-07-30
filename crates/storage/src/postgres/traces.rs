@@ -6,8 +6,34 @@ use super::{codec::*, PostgresStore};
 use crate::StorageError;
 
 impl PostgresStore {
-    pub(super) async fn save_trace(&self, trace: Trace) -> Result<Trace, StorageError> {
+    pub(super) async fn save_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<Trace, StorageError> {
         let mut transaction = self.pool.begin().await?;
+        let owns_trace_inputs: bool = sqlx::query_scalar(
+            "SELECT
+                EXISTS (
+                    SELECT 1 FROM projects
+                    WHERE id = $1 AND workspace_id = $2
+                )
+                AND (
+                    $3::uuid IS NULL
+                    OR EXISTS (
+                        SELECT 1 FROM retrieval_playground_runs
+                        WHERE id = $3 AND workspace_id = $2
+                    )
+                )",
+        )
+        .bind(trace.project_id.0)
+        .bind(workspace_id.0)
+        .bind(trace.source_run_id.map(|id| id.0))
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !owns_trace_inputs {
+            return Err(StorageError::NotFound);
+        }
         let now = OffsetDateTime::now_utc();
         let retrieval = trace.retrieval.as_ref();
         let retrieval_mode = retrieval
@@ -22,13 +48,13 @@ impl PostgresStore {
             })
             .unwrap_or(EvidenceStrength::Weak);
 
-        sqlx::query(
+        let trace_write = sqlx::query(
             "INSERT INTO debug_traces (
-                id, project_id, source_run_id, query, retrieval_mode, summary, status,
+                id, workspace_id, project_id, source_run_id, query, retrieval_mode, summary, status,
                 evidence_strength, failure_labels, span_count, rerun_count, latency_ms,
                 trace_json, created_at, updated_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
              ON CONFLICT (id) DO UPDATE SET
                 source_run_id = EXCLUDED.source_run_id,
                 query = EXCLUDED.query,
@@ -41,9 +67,11 @@ impl PostgresStore {
                 rerun_count = EXCLUDED.rerun_count,
                 latency_ms = EXCLUDED.latency_ms,
                 trace_json = EXCLUDED.trace_json,
-                updated_at = EXCLUDED.updated_at",
+                updated_at = EXCLUDED.updated_at
+             WHERE debug_traces.workspace_id = EXCLUDED.workspace_id",
         )
         .bind(trace.id.0)
+        .bind(workspace_id.0)
         .bind(trace.project_id.0)
         .bind(trace.source_run_id.map(|id| id.0))
         .bind(&trace.input)
@@ -60,6 +88,9 @@ impl PostgresStore {
         .bind(now)
         .execute(&mut *transaction)
         .await?;
+        if trace_write.rows_affected() == 0 {
+            return Err(StorageError::NotFound);
+        }
 
         sqlx::query("DELETE FROM trace_rerun_experiments WHERE trace_id = $1")
             .bind(trace.id.0)
@@ -94,26 +125,36 @@ impl PostgresStore {
         Ok(trace)
     }
 
-    pub(super) async fn list_traces(&self) -> Result<Vec<TraceSummary>, StorageError> {
+    pub(super) async fn list_traces(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<TraceSummary>, StorageError> {
         let rows = sqlx::query(
             "SELECT id, query, retrieval_mode, latency_ms, evidence_strength,
                     failure_labels, span_count, rerun_count, created_at
              FROM debug_traces
+             WHERE workspace_id = $1
              ORDER BY created_at DESC
              LIMIT 100",
         )
+        .bind(workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
 
         rows.iter().map(trace_summary_from_row).collect()
     }
 
-    pub(super) async fn get_trace_detail(&self, id: TraceId) -> Result<Trace, StorageError> {
+    pub(super) async fn get_trace_detail(
+        &self,
+        workspace_id: WorkspaceId,
+        id: TraceId,
+    ) -> Result<Trace, StorageError> {
         let row = sqlx::query(
             "SELECT trace_json
              FROM debug_traces
-             WHERE id = $1",
+             WHERE workspace_id = $1 AND id = $2",
         )
+        .bind(workspace_id.0)
         .bind(id.0)
         .fetch_optional(&self.pool)
         .await?

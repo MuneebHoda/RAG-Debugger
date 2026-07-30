@@ -12,7 +12,7 @@ use super::{
     api_keys, auth_routes, ci_eval, config, demo, embeddings, eval_lab, evals, health, overview,
     reports, retrieval, sources, traces,
 };
-use crate::{auth, config::RuntimeEnvironment, error::ApiError, state::AppState};
+use crate::{auth, error::ApiError, state::AppState};
 
 pub fn router(state: AppState) -> Router {
     let cors_layer = cors_layer(&state);
@@ -67,6 +67,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
             "/eval-lab/datasets",
             get(eval_lab::list_datasets).post(eval_lab::create_dataset),
         )
+        .route("/eval-lab/evidence/query", post(eval_lab::query_evidence))
         .route("/eval-lab/datasets/:dataset_id", get(eval_lab::get_dataset))
         .route(
             "/eval-lab/datasets/:dataset_id/experiments",
@@ -146,14 +147,13 @@ fn protected_routes(state: AppState) -> Router<AppState> {
 async fn require_session(
     axum::extract::State(state): axum::extract::State<AppState>,
     headers: HeaderMap,
-    request: Request<axum::body::Body>,
+    mut request: Request<axum::body::Body>,
     next: Next,
 ) -> Result<Response, ApiError> {
-    if matches!(state.config().environment, RuntimeEnvironment::Test) {
-        return Ok(next.run(request).await);
-    }
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    auth::authenticate_session(repository.as_ref(), &headers, &state.config().auth).await?;
+    let authenticated =
+        auth::authenticate_session(repository.as_ref(), &headers, &state.config().auth).await?;
+    request.extensions_mut().insert(authenticated);
     Ok(next.run(request).await)
 }
 

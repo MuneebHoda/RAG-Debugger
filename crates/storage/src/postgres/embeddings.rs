@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use rag_debugger_core::*;
 use sqlx::Row;
 
@@ -7,6 +9,7 @@ use crate::StorageError;
 impl PostgresStore {
     pub(super) async fn embedding_status(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
         model: &EmbeddingModelInfo,
     ) -> Result<EmbeddingStatus, StorageError> {
@@ -17,33 +20,37 @@ impl PostgresStore {
                 COUNT(*)::INT AS total_chunks,
                 (COUNT(*) FILTER (
                     WHERE e.chunk_id IS NOT NULL
-                      AND e.model_provider = $5
-                      AND e.model_name = $6
-                      AND e.dimension = $7
+                      AND e.model_provider = $6
+                      AND e.model_name = $7
+                      AND e.dimension = $8
                       AND e.chunk_checksum = c.checksum
                 ))::INT AS indexed_chunks,
                 (COUNT(*) FILTER (WHERE e.chunk_id IS NULL))::INT AS missing_chunks,
                 (COUNT(*) FILTER (
                     WHERE e.chunk_id IS NOT NULL
                       AND (
-                        e.model_provider <> $5
-                        OR e.model_name <> $6
-                        OR e.dimension <> $7
+                        e.model_provider <> $6
+                        OR e.model_name <> $7
+                        OR e.dimension <> $8
                         OR e.chunk_checksum <> c.checksum
                       )
                 ))::INT AS stale_chunks,
                 MAX(e.indexed_at) FILTER (
                     WHERE e.chunk_id IS NOT NULL
-                      AND e.model_provider = $5
-                      AND e.model_name = $6
-                      AND e.dimension = $7
+                      AND e.model_provider = $6
+                      AND e.model_name = $7
+                      AND e.dimension = $8
                       AND e.chunk_checksum = c.checksum
                 ) AS last_indexed_at
              FROM chunks c
+             INNER JOIN sources s ON s.id = c.source_id
+             INNER JOIN projects p ON p.id = s.project_id
              LEFT JOIN chunk_embeddings e ON e.chunk_id = c.id
-             WHERE ($1 OR c.source_id = ANY($2))
-               AND ($3 OR c.document_id = ANY($4))",
+             WHERE p.workspace_id = $1
+               AND ($2 OR c.source_id = ANY($3))
+               AND ($4 OR c.document_id = ANY($5))",
         )
+        .bind(workspace_id.0)
         .bind(source_ids.is_empty())
         .bind(source_ids)
         .bind(document_ids.is_empty())
@@ -66,6 +73,7 @@ impl PostgresStore {
 
     pub(super) async fn list_embedding_candidates(
         &self,
+        workspace_id: WorkspaceId,
         request: &EmbeddingIndexRequest,
     ) -> Result<Vec<EmbeddingIndexCandidate>, StorageError> {
         let source_ids = source_filter_ids(&request.source_ids);
@@ -73,10 +81,14 @@ impl PostgresStore {
         let rows = sqlx::query(
             "SELECT c.id, c.source_id, c.document_id, c.text, c.checksum, c.strategy
              FROM chunks c
-             WHERE ($1 OR c.source_id = ANY($2))
-               AND ($3 OR c.document_id = ANY($4))
+             INNER JOIN sources s ON s.id = c.source_id
+             INNER JOIN projects p ON p.id = s.project_id
+             WHERE p.workspace_id = $1
+               AND ($2 OR c.source_id = ANY($3))
+               AND ($4 OR c.document_id = ANY($5))
              ORDER BY c.document_id ASC, c.ordinal ASC",
         )
+        .bind(workspace_id.0)
         .bind(source_ids.is_empty())
         .bind(source_ids)
         .bind(document_ids.is_empty())
@@ -102,9 +114,33 @@ impl PostgresStore {
 
     pub(super) async fn upsert_chunk_embeddings(
         &self,
+        workspace_id: WorkspaceId,
         embeddings: Vec<ChunkEmbedding>,
     ) -> Result<(), StorageError> {
         let mut transaction = self.pool.begin().await?;
+        let chunk_ids = embeddings
+            .iter()
+            .map(|embedding| embedding.chunk_id.0)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>();
+        if !chunk_ids.is_empty() {
+            let owned_count: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*)
+                 FROM chunks chunk
+                 INNER JOIN sources source ON source.id = chunk.source_id
+                 INNER JOIN projects project ON project.id = source.project_id
+                 WHERE project.workspace_id = $1
+                   AND chunk.id = ANY($2)",
+            )
+            .bind(workspace_id.0)
+            .bind(&chunk_ids)
+            .fetch_one(&mut *transaction)
+            .await?;
+            if owned_count != chunk_ids.len() as i64 {
+                return Err(StorageError::NotFound);
+            }
+        }
 
         for embedding in embeddings {
             sqlx::query(

@@ -5,23 +5,31 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Trace } from "../../../lib/api/traces";
 import { RunsPage } from "./RunsPage";
 import { TraceDetailPage } from "./TraceDetailPage";
+import { SaveToQualityPanel } from "./components/SaveToQualityPanel";
 
 const traceId = "018f7a2a-6e2e-7000-a000-000000000201";
 const secondTraceId = "018f7a2a-6e2e-7000-a000-000000000202";
 const datasetId = "018f7a2a-6e2e-7000-a000-000000000210";
+const documentId = "document-1";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000205";
+const secondDocumentId = "document-2";
+const secondChunkId = "018f7a2a-6e2e-7000-a000-000000000206";
+let createdCaseBody: unknown;
 
 describe("guided run workflow", () => {
   beforeEach(() => {
+    createdCaseBody = undefined;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = input.toString();
         if (url.endsWith("/api/v1/traces")) {
           return responseJson([traceSummary]);
@@ -47,7 +55,21 @@ describe("guided run workflow", () => {
             },
           ]);
         }
+        if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
+          return responseJson({
+            id: datasetId,
+            name: "Critical questions",
+            description: null,
+            cases: [],
+            created_at: "2026-06-27T10:46:19Z",
+            updated_at: "2026-06-27T10:46:19Z",
+          });
+        }
+        if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
+          return responseJson(evidenceLookup());
+        }
         if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}/cases`)) {
+          createdCaseBody = JSON.parse(String(init?.body ?? "{}"));
           return responseJson({ id: "case-1" });
         }
         return responseJson(trace);
@@ -133,13 +155,22 @@ describe("guided run workflow", () => {
       target: { value: datasetId },
     });
     expect(datasetSelect).toHaveValue(datasetId);
-    const evidenceCheckbox = screen.getByRole("checkbox");
-    fireEvent.click(evidenceCheckbox);
-    await waitFor(() => expect(evidenceCheckbox).toBeChecked());
     const saveButton = screen.getByRole("button", {
       name: /save quality case/i,
     });
-    expect(saveButton).toBeEnabled();
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Expect this exact chunk" })[0],
+    );
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toMatchObject({
+      expected_chunk_ids: [chunkId],
+      expected_document_ids: [],
+    });
   });
 
   it("shows a loading state when navigating to a different trace", async () => {
@@ -189,6 +220,65 @@ describe("guided run workflow", () => {
     ).toBeInTheDocument();
   });
 
+  it("resets source-owned Quality state when the trace identity changes", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const view = render(
+      <QueryClientProvider client={client}>
+        <SaveToQualityPanel trace={trace} />
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose evidence" }));
+    const datasetSelect = await screen.findByLabelText("Quality dataset");
+    await screen.findByRole("option", { name: "Critical questions" });
+    fireEvent.change(datasetSelect, { target: { value: datasetId } });
+    fireEvent.change(screen.getByLabelText("Case name"), {
+      target: { value: "Edited first trace" },
+    });
+    fireEvent.change(screen.getByLabelText("Notes"), {
+      target: { value: "First trace note" },
+    });
+    selectTraceCandidate("Expect this exact chunk");
+    selectTraceCandidate("Accept evidence from this document");
+
+    const nextTrace = secondTrace();
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <SaveToQualityPanel trace={nextTrace} />
+      </QueryClientProvider>,
+    );
+
+    expect(datasetSelect).toHaveValue(datasetId);
+    expect(screen.getByLabelText("Case name")).toHaveValue(nextTrace.input);
+    expect(screen.getByLabelText("Notes")).toHaveValue(
+      `Saved from trace ${secondTraceId.slice(0, 8)}.`,
+    );
+    expect(
+      screen.getByText(/Select at least one expected document or chunk/i),
+    ).toBeInTheDocument();
+    selectTraceCandidate("Expect this exact chunk");
+    selectTraceCandidate("Accept evidence from this document");
+    const saveButton = screen.getByRole("button", {
+      name: "Save quality case",
+    });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toEqual({
+      name: nextTrace.input,
+      query: nextTrace.input,
+      top_k: 7,
+      expected_chunk_ids: [secondChunkId],
+      expected_document_ids: [secondDocumentId],
+      notes: `Saved from trace ${secondTraceId.slice(0, 8)}.`,
+    });
+    expect(JSON.stringify(createdCaseBody)).not.toContain(chunkId);
+    expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
+  });
+
   it("keeps legacy traces readable when structured diagnosis is absent", async () => {
     vi.stubGlobal(
       "fetch",
@@ -209,6 +299,52 @@ describe("guided run workflow", () => {
     ).toBeInTheDocument();
   });
 });
+
+function selectTraceCandidate(name: string) {
+  const candidateRegion = screen.getByRole("region", {
+    name: "Retrieved evidence from this run",
+  });
+  fireEvent.click(within(candidateRegion).getByRole("button", { name }));
+}
+
+function secondTrace(): Trace {
+  const hit = trace.retrieval!.hits[0];
+  return {
+    ...trace,
+    id: secondTraceId,
+    input: "second trace evidence",
+    retrieval: {
+      ...trace.retrieval!,
+      run: {
+        ...trace.retrieval!.run,
+        id: "run-2",
+        query: "second trace evidence",
+        top_k: 7,
+      },
+      hits: [
+        {
+          ...hit,
+          chunk: {
+            ...hit.chunk,
+            id: secondChunkId,
+            document_id: secondDocumentId,
+          },
+          document: {
+            ...hit.document,
+            id: secondDocumentId,
+            path: "second-guide.md",
+          },
+          citation: {
+            ...hit.citation,
+            chunk_id: secondChunkId,
+            document_id: secondDocumentId,
+            document_path: "second-guide.md",
+          },
+        },
+      ],
+    },
+  };
+}
 
 function renderWithClient(children: React.ReactNode) {
   const client = new QueryClient({
@@ -251,7 +387,7 @@ const retrieval = {
       score: 3.4,
       chunk: {
         id: chunkId,
-        document_id: "document-1",
+        document_id: documentId,
         ordinal: 0,
         text: "GPU workers speed up embedding refreshes.",
         token_count: 6,
@@ -266,7 +402,7 @@ const retrieval = {
         evidence_score_hint: 0.8,
       },
       document: {
-        id: "document-1",
+        id: documentId,
         source_id: "source-1",
         path: "platform-guide.md",
         mime_type: "text/markdown",
@@ -309,7 +445,7 @@ const retrieval = {
       citation: {
         label: "[1]",
         chunk_id: chunkId,
-        document_id: "document-1",
+        document_id: documentId,
         document_path: "platform-guide.md",
         chunk_ordinal: 0,
         section_title: "Indexing",
@@ -400,6 +536,43 @@ const retrieval = {
   },
 };
 
+function evidenceLookup() {
+  return {
+    documents: [
+      {
+        id: documentId,
+        source_id: "source-1",
+        source_name: "Corpus upload",
+        path: "platform-guide.md",
+        profile: "technical_docs",
+        extraction_quality: "high",
+        warnings: [],
+        chunk_count: 1,
+      },
+    ],
+    chunks: [
+      {
+        id: chunkId,
+        document_id: documentId,
+        source_id: "source-1",
+        source_name: "Corpus upload",
+        document_path: "platform-guide.md",
+        ordinal: 0,
+        text: "GPU workers speed up embedding refreshes.",
+        token_count: 6,
+        checksum: "1234567890abcdef",
+        section_title: "Indexing",
+        quality_flags: ["good_evidence_candidate"],
+        is_duplicate: false,
+        text_density: 0.9,
+        evidence_score_hint: 0.8,
+      },
+    ],
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
+  };
+}
+
 const trace = {
   id: traceId,
   project_id: "project-1",
@@ -434,7 +607,7 @@ const trace = {
   retrieval,
   reruns: [],
   diagnosis: retrieval.diagnosis,
-};
+} as Trace;
 
 const comparison = {
   id: "comparison-1",

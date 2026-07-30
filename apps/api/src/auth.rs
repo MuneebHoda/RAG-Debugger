@@ -115,9 +115,15 @@ pub async fn authenticate_session(
     if session.revoked_at.is_some() || session.expires_at <= OffsetDateTime::now_utc() {
         return Err(ApiError::Unauthorized("session expired".to_owned()));
     }
-    Ok(repository
+    repository
         .get_authenticated_user(session.user_id, session.workspace_id)
-        .await?)
+        .await
+        .map_err(|error| match error {
+            rag_debugger_storage::StorageError::NotFound => {
+                ApiError::Unauthorized("invalid session".to_owned())
+            }
+            other => ApiError::Storage(other),
+        })
 }
 
 pub async fn revoke_session(

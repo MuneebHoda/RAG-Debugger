@@ -9,7 +9,7 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 - **API service:** Axum backend for health checks, runtime config, local auth, workspaces, API keys, ingestion, embedding status/indexing, retrieval, traces, evals, CI gates, and reports.
 - **Core crate:** Shared domain contracts for projects, sources, documents, chunks, traces, retrieval runs, evals, reports, config, models, and privacy mode.
 - **RAG crate:** File text extraction, structured and whitespace chunking, document intelligence, local embedding generation, hybrid retrieval, trace construction, eval scoring, ingestion, and retrieval interfaces. Implementations are intentionally replaceable.
-- **Storage crate:** Bounded repository traits for health, projects, sources, documents, embeddings, retrieval, traces, evals, auth, CI evals, and audit reports, plus Postgres and in-memory adapters.
+- **Storage crate:** Bounded repository traits for health, projects, sources, documents, evidence lookup, embeddings, retrieval, traces, evals, auth, CI evals, and audit reports, plus Postgres and in-memory adapters.
 - **Local collector:** Future local process that reads raw documents, builds indexes, runs local traces, and syncs approved summaries.
 - **Workers:** Future local or remote jobs for parsing, embedding, indexing, retrieval, reranking, generation, and eval scoring.
 
@@ -65,6 +65,7 @@ Current ingestion APIs:
 - `GET /api/v1/eval-lab/datasets`
 - `POST /api/v1/eval-lab/datasets`
 - `GET /api/v1/eval-lab/datasets/:dataset_id`
+- `POST /api/v1/eval-lab/evidence/query`
 - `POST /api/v1/eval-lab/datasets/:dataset_id/cases`
 - `PATCH /api/v1/eval-lab/cases/:case_id`
 - `DELETE /api/v1/eval-lab/cases/:case_id`
@@ -99,11 +100,17 @@ The guided demo is an orchestration layer over existing bounded contexts, not a 
 
 Eval Lab is the release-readiness layer. It stores datasets, expected-evidence cases, cross-mode experiments, deterministic failure labels, and pass/fail gates. Retrieval and trace workflows can save observed evidence directly into a dataset so real debugging sessions become regression coverage.
 
+`EvidenceRepository` separates direct expected-evidence resolution from bounded candidate search. Every operation requires the authenticated `WorkspaceId`; ownership is enforced by the MemoryStore/Postgres adapter before metadata is returned. The API caps submitted ID work before repository access, performs fixed direct-resolution calls, and uses typed `Browse`, `ExactId`, or `Text` search modes rather than storage-specific string interpretation. Requested IDs retain stable request order and sit outside candidate limits. Postgres joins evidence through `documents → sources → projects` and requires the project workspace; MemoryStore applies the same check through its project ownership index. Cross-workspace IDs are indistinguishable from nonexistent IDs. Evidence responses expose 280-character UTF-8-safe previews rather than complete chunk bodies.
+
+The same repository boundary owns runtime RAG state. Retrieval runs and traces persist `workspace_id`; trace writes additionally verify the trace project and optional source run. Embedding status, candidate loading, and writes derive ownership through `chunk → source → project`, and a mixed or foreign write set is rejected before mutation. Trace lists, details, reruns, report creation, guided-demo progress, and Overview metrics all pass the authenticated workspace into storage. Foreign and nonexistent run or trace IDs use the same sanitized `404` behavior.
+
+Eval datasets, cases, legacy runs, experiments, CI runs, and related overview/report reads use the same repository-enforced workspace boundary. Dataset ownership is persisted directly; cases and experiments inherit it through their dataset. The workspace-isolation migration backfills records only when ownership is uniquely attributable or the installation has exactly one workspace. Ambiguous multi-workspace legacy rows remain unowned and invisible until an operator deliberately repairs them.
+
 Local auth protects workbench APIs with opaque HttpOnly session cookies. Workspace-scoped API keys authorize CI automation and are stored only as hashes. The local auth provider owns signup/login/session validation today; an external provider can replace that boundary later.
 
 ## Storage Direction
 
-Postgres stores organizations, workspaces, users, memberships, sessions, API keys, projects, sources, ingestion runs, documents, chunks, chunking metadata, document profile metadata, chunk quality metadata, local chunk embeddings, retrieval playground runs, retrieval hits, trace debugger records, trace rerun experiments, retrieval eval datasets, eval cases, legacy eval run results, Eval Lab experiments, CI eval runs, workspace-scoped audit report snapshots, and gate outcomes. Existing rows stay readable through migration defaults. The semantic retrieval migration stores vectors as local Postgres arrays for the first debugger loop; vector/index storage can evolve toward pgvector, LanceDB, or GPU-backed services as benchmarks justify it.
+Postgres stores organizations, workspaces, users, memberships, sessions, API keys, projects, sources, ingestion runs, documents, chunks, chunking metadata, document profile metadata, chunk quality metadata, local chunk embeddings, workspace-owned retrieval playground runs, retrieval hits, workspace-owned trace debugger records, trace rerun experiments, retrieval eval datasets, eval cases, legacy eval run results, Eval Lab experiments, CI eval runs, workspace-scoped audit report snapshots, and gate outcomes. Legacy ownership is backfilled only when unambiguous or when exactly one workspace exists; ambiguous multi-workspace runtime records remain quarantined. The semantic retrieval migration stores vectors as local Postgres arrays for the first debugger loop; vector/index storage can evolve toward pgvector, LanceDB, or GPU-backed services as benchmarks justify it.
 
 ## Hosted Product Direction
 

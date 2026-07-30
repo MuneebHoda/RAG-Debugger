@@ -1,38 +1,19 @@
-use std::sync::Arc;
+mod support;
 
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use rag_debugger_api::{
-    app,
-    config::{ApiConfig, RuntimeEnvironment, StorageBackend},
-    state::AppState,
-};
-use rag_debugger_core::ProductConfig;
-use rag_debugger_storage::memory::MemoryStore;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-fn test_app() -> axum::Router {
-    app(AppState::new(
-        ApiConfig {
-            environment: RuntimeEnvironment::Test,
-            bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
-            storage_backend: StorageBackend::Memory,
-            database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
-                .to_owned(),
-            web_origin: "http://127.0.0.1:5173".to_owned(),
-            auth: Default::default(),
-            product: ProductConfig::default(),
-        },
-        Arc::new(MemoryStore::default()),
-    ))
+async fn test_app() -> axum::Router {
+    support::authenticated_test_app().await.router
 }
 
 #[tokio::test]
 async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
-    let app = test_app();
+    let app = test_app().await;
     upload_text_file(
         &app,
         "platform-guide.md",
@@ -112,7 +93,7 @@ async fn retrieval_run_can_be_saved_as_trace_and_rerun() {
 
 #[tokio::test]
 async fn creating_trace_without_retrieval_run_is_rejected() {
-    let app = test_app();
+    let app = test_app().await;
 
     let response = app
         .oneshot(json_request(
@@ -134,7 +115,7 @@ async fn creating_trace_without_retrieval_run_is_rejected() {
 
 #[tokio::test]
 async fn missing_trace_returns_not_found() {
-    let app = test_app();
+    let app = test_app().await;
 
     let response = app
         .oneshot(empty_request(

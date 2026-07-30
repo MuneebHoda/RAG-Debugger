@@ -11,10 +11,18 @@ impl PostgresStore {
         Ok(())
     }
 
-    pub(super) async fn ensure_default_project(&self) -> Result<Project, StorageError> {
+    pub(super) async fn ensure_default_project(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Project, StorageError> {
         if let Some(row) = sqlx::query(
-            "SELECT id, name, privacy_mode, created_at, updated_at FROM projects ORDER BY created_at ASC LIMIT 1",
+            "SELECT id, name, privacy_mode, created_at, updated_at
+             FROM projects
+             WHERE workspace_id = $1
+             ORDER BY created_at ASC
+             LIMIT 1",
         )
+        .bind(workspace_id.0)
         .fetch_optional(&self.pool)
         .await?
         {
@@ -31,16 +39,22 @@ impl PostgresStore {
         };
 
         sqlx::query(
-            "INSERT INTO projects (id, name, privacy_mode, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, $5)",
+            "INSERT INTO projects (id, workspace_id, name, privacy_mode, created_at, updated_at)
+             SELECT $1, $2, $3, $4, $5, $6
+             WHERE EXISTS (SELECT 1 FROM workspaces WHERE id = $2)",
         )
         .bind(project.id.0)
+        .bind(workspace_id.0)
         .bind(&project.name)
         .bind(privacy_mode_to_str(project.privacy_mode))
         .bind(project.created_at)
         .bind(project.updated_at)
         .execute(&self.pool)
-        .await?;
+        .await?
+        .rows_affected()
+        .eq(&1)
+        .then_some(())
+        .ok_or(StorageError::NotFound)?;
 
         Ok(project)
     }

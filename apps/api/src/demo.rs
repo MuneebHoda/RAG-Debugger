@@ -142,12 +142,14 @@ pub(crate) async fn demo_status(
         document_ids: Vec::new(),
     };
     let embeddings = repository
-        .embedding_status(&embedding_request, model)
+        .embedding_status(workspace_id, &embedding_request, model)
         .await?;
     let retrieval = repository
-        .latest_retrieval_query_for_source(source.source.id)
+        .latest_retrieval_query_for_source(workspace_id, source.source.id)
         .await?;
-    let trace = repository.latest_trace_for_source(source.source.id).await?;
+    let trace = repository
+        .latest_trace_for_source(workspace_id, source.source.id)
+        .await?;
     let report_id = if let Some(trace) = &trace {
         repository
             .list_debug_reports(workspace_id)

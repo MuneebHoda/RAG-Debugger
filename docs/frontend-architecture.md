@@ -75,6 +75,14 @@ Current workbench implementations live in:
 - `features/workbench/reports`: report creation, generated report lists, focused report detail, privacy status, and Markdown copy actions.
 - `features/workbench/settings`: workspace, API-key, runtime, and privacy settings; the route file remains a thin compatibility export.
 
+The shared Retrieval/Trace save-to-Quality workflow remains owned by
+`features/workbench/eval-lab/evidence`. Its lifecycle hook separates persistent
+workflow intent (open state and selected dataset) from run- or trace-owned draft
+state. Mutations receive immutable source-keyed snapshots, abort on source
+changes, invalidate the dataset they actually wrote, and suppress stale
+feedback for the currently displayed source. Picker search state follows the
+same source identity without remounting focused controls.
+
 ## Workbench Shell And Information Architecture
 
 The authenticated shell is deliberately separate from marketing composition. A
@@ -138,6 +146,7 @@ UI tests should mock the narrow domain boundary or the HTTP route relevant to th
 - Stable boards, score bars, tabs, and tool layouts need explicit responsive dimensions so dynamic data cannot shift controls or overlap text.
 - Grid and flex children that own technical content use `min-width: 0`; paths, identifiers, queries, and evidence wrap safely or use a deliberate local scroll region. Do not mask a child overflow at the page root.
 - Reusable controls placed inside nested panels must respond to their available container width. Viewport breakpoints alone are insufficient for split workbench layouts.
+- Evidence selectors use native `aria-pressed` toggles with visible state text, named removal and clear actions, polite loading/success regions, alert errors, and feature-owned CSS modules composed from existing Eval Lab and workbench primitives.
 - Marketing motion must preserve visible labels and state, provide controls for automatically changing content, and render a complete static experience under `prefers-reduced-motion`.
 - Landing story examples must remain typed, deterministic, and clearly framed as examples; they do not fetch workbench state.
 - New UI must be checked at desktop, tablet, and mobile widths with no horizontal overflow.

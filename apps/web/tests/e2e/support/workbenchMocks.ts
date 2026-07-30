@@ -4,6 +4,8 @@ import type { ProductConfig } from "../../../src/lib/api/config";
 import type { DemoStatus } from "../../../src/lib/api/demo";
 import type { EmbeddingStatus } from "../../../src/lib/api/embeddings";
 import type {
+  EvalLabEvidenceChunk,
+  EvalLabEvidenceDocument,
   RetrievalEvalDatasetSummary,
   RetrievalEvalExperiment,
   RetrievalEvalExperimentSummary,
@@ -158,11 +160,32 @@ export async function installWorkbenchMocks(
   await fulfillJson(page, "**/api/v1/retrieval/evals", []);
   await fulfillJson(page, "**/api/v1/traces", state.traces);
   await fulfillJson(page, "**/api/v1/eval-lab/datasets", state.datasets);
+  await page.route("**/api/v1/eval-lab/evidence/query", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      json: evidenceLookup(state),
+    }),
+  );
   await fulfillJson(
     page,
     "**/api/v1/eval-lab/datasets/*/experiments",
     allExperiments(state).map(summarizeExperiment),
   );
+  await page.route("**/api/v1/eval-lab/datasets/*", (route) => {
+    const datasetId = route.request().url().split("/").at(-1);
+    const dataset = state.datasets.find((item) => item.id === datasetId);
+    return route.fulfill({
+      contentType: "application/json",
+      json: {
+        id: dataset?.id ?? datasetId,
+        name: dataset?.name ?? "Mock dataset",
+        description: dataset?.description ?? null,
+        cases: [],
+        created_at: dataset?.updated_at ?? "2026-07-04T08:00:00Z",
+        updated_at: dataset?.updated_at ?? "2026-07-04T08:00:00Z",
+      },
+    });
+  });
   await fulfillJson(page, "**/api/v1/eval-lab/experiments", state.experiments);
   await fulfillRegression(page, state);
   await fulfillJson(page, "**/api/v1/eval-lab/ci/runs", []);
@@ -191,6 +214,51 @@ export async function installWorkbenchMocks(
   }
 
   return state;
+}
+
+function evidenceLookup(state: WorkbenchMockState) {
+  const documents: EvalLabEvidenceDocument[] = [];
+  const chunks: EvalLabEvidenceChunk[] = [];
+  for (const source of state.sources) {
+    for (const summary of source.documents) {
+      documents.push({
+        id: summary.document.id,
+        source_id: source.source.id,
+        source_name: source.source.name,
+        path: summary.document.path,
+        profile: summary.document.profile,
+        extraction_quality: summary.document.extraction_quality,
+        warnings: summary.document.warnings,
+        chunk_count: summary.chunk_count,
+      });
+      for (const chunk of state.documentChunks[summary.document.id] ?? []) {
+        chunks.push({
+          id: chunk.id,
+          document_id: chunk.document_id,
+          source_id: source.source.id,
+          source_name: source.source.name,
+          document_path: summary.document.path,
+          ordinal: chunk.ordinal,
+          text_preview: chunk.text,
+          preview_truncated: false,
+          token_count: chunk.token_count,
+          checksum: chunk.checksum,
+          section_title: chunk.section_title,
+          quality_flags: chunk.quality_flags,
+          is_duplicate: chunk.is_duplicate,
+          text_density: chunk.text_density,
+          evidence_score_hint: chunk.evidence_score_hint,
+        });
+      }
+    }
+  }
+
+  return {
+    documents,
+    chunks,
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
+  };
 }
 
 async function fulfillJson(page: Page, url: string, json: unknown) {

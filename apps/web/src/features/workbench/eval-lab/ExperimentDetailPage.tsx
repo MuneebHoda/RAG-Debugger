@@ -11,6 +11,7 @@ import {
 import { formatDateTime } from "../../../lib/dateTime";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import { BaselineSelector, RegressionPanel } from "./components/QualityViews";
+import { EvidenceStateList } from "./evidence/EvidenceStateList";
 import {
   classifyBaselineCompatibility,
   findAutomaticBaseline,
@@ -80,7 +81,7 @@ export function ExperimentDetailPage() {
         <button type="button" onClick={() => void experimentQuery.refetch()}>
           Retry
         </button>
-        <Link className={styles.secondaryButton} to="/app/evals">
+        <Link className="secondary-button" to="/app/evals">
           Back to Quality
         </Link>
       </section>
@@ -100,6 +101,12 @@ export function ExperimentDetailPage() {
   const currentSummary =
     historyQuery.data?.find((candidate) => candidate.id === experiment.id) ??
     summarizeExperimentForComparison(experiment);
+  const evidenceStateResult =
+    experiment.mode_results.find(
+      (result) => result.retrieval_mode === experiment.comparison.best_mode,
+    ) ??
+    experiment.mode_results[0] ??
+    null;
 
   const updateBaseline = (baselineId: string | null) => {
     const nextParams = new URLSearchParams(searchParams);
@@ -200,6 +207,44 @@ export function ExperimentDetailPage() {
                   {failure.retrieval_mode} ·{" "}
                   {failure.label.replaceAll("_", " ")} · {failure.severity}
                 </small>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {evidenceStateResult ? (
+        <section className={styles.panel}>
+          <div className={styles.panelHeading}>
+            <div>
+              <h2>Evidence states</h2>
+              <p>
+                Expected and retrieved evidence states from the{" "}
+                {evidenceStateResult.retrieval_mode} run.
+              </p>
+            </div>
+          </div>
+          <div className={styles.list}>
+            {evidenceStateResult.case_results.slice(0, 5).map((result) => (
+              <article className={styles.failureCard} key={result.case_id}>
+                <strong>{result.query}</strong>
+                <EvidenceStateList
+                  context={{
+                    kind: "retrieval",
+                    hits: result.retrieved_chunk_ids.map((chunkId, index) => ({
+                      chunkId,
+                      rank: index + 1,
+                    })),
+                  }}
+                  failureLabels={result.failures.map(
+                    (failure) => failure.label,
+                  )}
+                  selection={{
+                    documentIds: result.expected_document_ids,
+                    chunkIds: result.expected_chunk_ids,
+                  }}
+                  title="Case evidence states"
+                />
               </article>
             ))}
           </div>

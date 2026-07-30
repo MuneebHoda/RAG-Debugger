@@ -1,38 +1,19 @@
-use std::sync::Arc;
+mod support;
 
 use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use rag_debugger_api::{
-    app,
-    config::{ApiConfig, RuntimeEnvironment, StorageBackend},
-    state::AppState,
-};
-use rag_debugger_core::ProductConfig;
-use rag_debugger_storage::memory::MemoryStore;
 use serde_json::Value;
 use tower::ServiceExt;
 
-fn test_app() -> axum::Router {
-    app(AppState::new(
-        ApiConfig {
-            environment: RuntimeEnvironment::Test,
-            bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
-            storage_backend: StorageBackend::Memory,
-            database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
-                .to_owned(),
-            web_origin: "http://127.0.0.1:5173".to_owned(),
-            auth: Default::default(),
-            product: ProductConfig::default(),
-        },
-        Arc::new(MemoryStore::default()),
-    ))
+async fn test_app() -> axum::Router {
+    support::authenticated_test_app().await.router
 }
 
 #[tokio::test]
 async fn uploads_text_file_and_returns_preview_chunks() {
-    let app = test_app();
+    let app = test_app().await;
     let response = app
         .oneshot(multipart_request(
             vec![("guide.md", "text/markdown", "one two three four five")],
@@ -62,7 +43,7 @@ async fn uploads_text_file_and_returns_preview_chunks() {
 
 #[tokio::test]
 async fn defaults_to_structured_chunking() {
-    let app = test_app();
+    let app = test_app().await;
     let response = app
         .oneshot(multipart_request(
             vec![(
@@ -93,7 +74,7 @@ async fn defaults_to_structured_chunking() {
 
 #[tokio::test]
 async fn accepts_legacy_smart_section_chunking_alias() {
-    let app = test_app();
+    let app = test_app().await;
     let response = app
         .oneshot(multipart_request(
             vec![(
@@ -120,7 +101,7 @@ async fn accepts_legacy_smart_section_chunking_alias() {
 
 #[tokio::test]
 async fn unsupported_file_returns_structured_unprocessable_response() {
-    let app = test_app();
+    let app = test_app().await;
     let response = app
         .oneshot(multipart_request(
             vec![("archive.zip", "application/zip", "not useful here")],
@@ -141,7 +122,7 @@ async fn unsupported_file_returns_structured_unprocessable_response() {
 
 #[tokio::test]
 async fn uploaded_documents_are_listed_and_chunks_are_retrievable() {
-    let app = test_app();
+    let app = test_app().await;
     let upload_response = app
         .clone()
         .oneshot(multipart_request(

@@ -88,6 +88,12 @@ The migration `migrations/20260625170000_hosted_ci_eval_workflows.sql` adds:
 
 Passwords are hashed with Argon2. Sessions and API key secrets are hashed before storage. API key prefixes are stored for display and support workflows.
 
+`migrations/20260726120000_workspace_evidence_isolation.sql` attaches Eval Lab datasets and legacy eval runs to workspaces. `migrations/20260727120000_trace_embedding_workspace_isolation.sql` adds workspace ownership and workspace/date indexes for retrieval runs and traces. Projects, sources, documents, chunks, evidence search, embedding reads and writes, retrieval candidates and saved runs, traces and reruns, datasets, cases, experiments, CI runs, reports, demo progress, and overview reads are authorized at the repository boundary. Protected-route middleware validates the session in every runtime environment and inserts the resulting `AuthenticatedUser` for handlers; tests use real memberships and session cookies rather than bypassing this boundary.
+
+Corpus, embedding, retrieval, and evidence operations currently span all projects owned by the active workspace because sessions do not yet carry an active-project selection. Source and document filters narrow that set and are still ownership checked. Trace creation verifies both the trace project and its optional source retrieval run. Cross-workspace and nonexistent runs, traces, and other resources return equivalent unresolved-ID or resource-specific `404` responses.
+
+Legacy ownership is privacy conservative. Projects, Eval records, retrieval runs, and traces with one uniquely attributable workspace are backfilled. Records in a single-workspace installation are assigned to that workspace. Ambiguous records in a multi-workspace installation remain unowned and are quarantined from normal reads until deliberately repaired. Embedding ownership is derived from the owning chunk's document, source, and project rather than duplicated on each vector row.
+
 ## Provider Boundary
 
 `RAG_DEBUGGER_AUTH_PROVIDER=local` is the only implemented provider in this pass. The code shape keeps auth behavior behind API helpers and repository methods so a hosted provider can later validate identity/session state without rewriting route handlers.

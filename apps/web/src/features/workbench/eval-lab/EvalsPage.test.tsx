@@ -1,8 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { RetrievalEvalCase } from "../../../lib/api/evalLab";
 import { DatasetDetailPage } from "./DatasetDetailPage";
 import { ExperimentDetailPage } from "./ExperimentDetailPage";
 import { EvalsPage } from "./EvalsPage";
@@ -12,18 +19,23 @@ const caseId = "018f7a2a-6e2e-7000-a000-000000000302";
 const sourceId = "018f7a2a-6e2e-7000-a000-000000000303";
 const documentId = "018f7a2a-6e2e-7000-a000-000000000304";
 const chunkId = "018f7a2a-6e2e-7000-a000-000000000305";
+const retrievedChunkId = "018f7a2a-6e2e-7000-a000-000000000311";
 const experimentId = "018f7a2a-6e2e-7000-a000-000000000306";
 const baselineId = "018f7a2a-6e2e-7000-a000-000000000307";
 const partialBaselineId = "018f7a2a-6e2e-7000-a000-000000000308";
 const newerExperimentId = "018f7a2a-6e2e-7000-a000-000000000309";
 const firstExperimentId = "018f7a2a-6e2e-7000-a000-000000000310";
+const staleDocumentId = "018f7a2a-6e2e-7000-a000-000000000312";
+const staleChunkId = "018f7a2a-6e2e-7000-a000-000000000313";
 let historyShouldFail = false;
 let regressionShouldFail = false;
+let experimentResponse: ReturnType<typeof experiment> | null = null;
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
     historyShouldFail = false;
     regressionShouldFail = false;
+    experimentResponse = null;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -43,7 +55,7 @@ describe("guided Eval Lab workflow", () => {
           return responseJson(trendSummary());
         }
         if (url.endsWith(`/api/v1/eval-lab/experiments/${experimentId}`)) {
-          return responseJson(experiment());
+          return responseJson(experimentResponse ?? experiment());
         }
         if (url.endsWith(`/api/v1/eval-lab/experiments/${firstExperimentId}`)) {
           return responseJson(firstExperiment());
@@ -73,6 +85,9 @@ describe("guided Eval Lab workflow", () => {
         }
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
           return responseJson([]);
+        }
+        if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
+          return responseJson(evidenceLookup());
         }
         if (url.endsWith(`/api/v1/documents/${documentId}/chunks`)) {
           return responseJson([chunk()]);
@@ -149,6 +164,9 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getAllByText(/release retrieval gate/i).length,
     ).toBeGreaterThan(0);
+    expect(await screen.findByText("Expected exact chunk")).toBeInTheDocument();
+    expect(screen.getByText("Expected document")).toBeInTheDocument();
+    expect(screen.queryByText("Expected but missing")).not.toBeInTheDocument();
   });
 
   it("shows gate failures before the detailed mode metrics", async () => {
@@ -190,6 +208,31 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
     ).toBeInTheDocument();
+    expect(
+      await screen.findByText("Expected document retrieved"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Expected document retrieved, wrong chunk"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(/platform-guide\.md/).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/metadata unavailable/i)).not.toBeInTheDocument();
+  });
+
+  it("shows missing expectations for a completed experiment with zero hits", async () => {
+    experimentResponse = experimentWithRetrievedChunks([]);
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Release retrieval gate" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Expected but missing")).toBeInTheDocument();
+    expect(screen.getByText("Expected document missing")).toBeInTheDocument();
   });
 
   it("persists explicit baseline choice and warns for partial compatibility", async () => {
@@ -340,6 +383,365 @@ describe("guided Eval Lab workflow", () => {
       ),
     ).toBe(false);
   });
+});
+
+describe("stale expected evidence repair", () => {
+  let persistedCase: ReturnType<typeof legacyCase>;
+  let updateBodies: Record<string, unknown>[];
+  let blockDatasetRefetch: boolean;
+  let datasetRequestCount: number;
+  let pendingDatasetRefetch: Deferred<Response> | null;
+
+  beforeEach(() => {
+    persistedCase = legacyCase();
+    updateBodies = [];
+    blockDatasetRefetch = false;
+    datasetRequestCount = 0;
+    pendingDatasetRefetch = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input.toString();
+        if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
+          datasetRequestCount += 1;
+          if (
+            blockDatasetRefetch &&
+            datasetRequestCount > 1 &&
+            pendingDatasetRefetch
+          ) {
+            return pendingDatasetRefetch.promise;
+          }
+          return responseJson({ ...dataset(), cases: [persistedCase] });
+        }
+        if (
+          url.includes(`/api/v1/eval-lab/datasets/${datasetId}/experiments`)
+        ) {
+          return responseJson([]);
+        }
+        if (url.includes(`/api/v1/eval-lab/datasets/${datasetId}/trends`)) {
+          return responseJson({ ...trendSummary(), points: [] });
+        }
+        if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
+          const request = requestBody(init);
+          const requestedDocuments = stringArray(request.document_ids);
+          const requestedChunks = stringArray(request.chunk_ids);
+          const includeSearchResults = typeof request.query === "string";
+          const lookup = evidenceLookup();
+          return responseJson({
+            documents:
+              includeSearchResults || requestedDocuments.includes(documentId)
+                ? lookup.documents
+                : [],
+            chunks:
+              includeSearchResults || requestedChunks.includes(chunkId)
+                ? lookup.chunks
+                : [],
+            unresolved_document_ids: requestedDocuments.filter(
+              (id) => id === staleDocumentId,
+            ),
+            unresolved_chunk_ids: requestedChunks.filter(
+              (id) => id === staleChunkId,
+            ),
+          });
+        }
+        if (
+          url.endsWith(`/api/v1/eval-lab/cases/${caseId}`) &&
+          init?.method === "PATCH"
+        ) {
+          const request = requestBody(init);
+          updateBodies.push(request);
+          if (
+            stringArray(request.expected_document_ids).includes(
+              staleDocumentId,
+            ) ||
+            stringArray(request.expected_chunk_ids).includes(staleChunkId)
+          ) {
+            return responseError(
+              400,
+              "bad request: Some selected evidence is unavailable. Remove or replace stale evidence before saving.",
+            );
+          }
+          persistedCase = mergeCaseUpdate(persistedCase, request);
+          return responseJson(persistedCase);
+        }
+        return responseJson([]);
+      }),
+    );
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("omits evidence fields for name, notes, and top_k-only edits", async () => {
+    renderDatasetDetail();
+
+    let caseCard = await openCaseEditor();
+    fireEvent.change(within(caseCard).getByLabelText("Case name"), {
+      target: { value: "Renamed legacy case" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).not.toHaveProperty("expected_chunk_ids");
+    expect(updateBodies[0]).not.toHaveProperty("expected_document_ids");
+
+    caseCard = await openCaseEditor("Renamed legacy case");
+    fireEvent.change(within(caseCard).getByLabelText("Notes"), {
+      target: { value: "Updated without touching stale evidence." },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(2));
+    expect(updateBodies[1]).not.toHaveProperty("expected_chunk_ids");
+    expect(updateBodies[1]).not.toHaveProperty("expected_document_ids");
+
+    caseCard = await openCaseEditor("Renamed legacy case");
+    fireEvent.change(within(caseCard).getByLabelText("Results per question"), {
+      target: { value: "9" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(3));
+    expect(updateBodies[2]).not.toHaveProperty("expected_chunk_ids");
+    expect(updateBodies[2]).not.toHaveProperty("expected_document_ids");
+  });
+
+  it("clears existing notes and reopens with the persisted empty value", async () => {
+    renderDatasetDetail();
+
+    let caseCard = await openCaseEditor();
+    fireEvent.change(within(caseCard).getByLabelText("Notes"), {
+      target: { value: "" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).toHaveProperty("notes", null);
+    expect(persistedCase.notes).toBeNull();
+    expect(screen.queryByText("Stored legacy note.")).not.toBeInTheDocument();
+
+    caseCard = await openCaseEditor();
+    expect(within(caseCard).getByLabelText("Notes")).toHaveValue("");
+  });
+
+  it("replaces stale evidence through complete normalized arrays", async () => {
+    renderDatasetDetail();
+    let caseCard = await openCaseEditor();
+
+    await removeStaleEvidence(caseCard);
+    fireEvent.click(
+      (
+        await within(caseCard).findAllByRole("button", {
+          name: "Expect this exact chunk",
+        })
+      )[0],
+    );
+    fireEvent.click(
+      (
+        await within(caseCard).findAllByRole("button", {
+          name: "Accept evidence from this document",
+        })
+      )[0],
+    );
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).toMatchObject({
+      expected_chunk_ids: [chunkId],
+      expected_document_ids: [documentId],
+    });
+
+    caseCard = await openCaseEditor();
+    fireEvent.change(within(caseCard).getByLabelText("Notes"), {
+      target: { value: "Evidence snapshot was reset after saving." },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(2));
+    expect(updateBodies[1]).not.toHaveProperty("expected_chunk_ids");
+    expect(updateBodies[1]).not.toHaveProperty("expected_document_ids");
+  });
+
+  it("reopens from the synchronous cache while dataset refetch is pending", async () => {
+    renderDatasetDetail();
+    let caseCard = await openCaseEditor();
+    blockDatasetRefetch = true;
+    pendingDatasetRefetch = deferred<Response>();
+
+    fireEvent.change(within(caseCard).getByLabelText("Case name"), {
+      target: { value: "Cache-authoritative case" },
+    });
+    await removeStaleEvidence(caseCard);
+    fireEvent.click(
+      (
+        await within(caseCard).findAllByRole("button", {
+          name: "Expect this exact chunk",
+        })
+      )[0],
+    );
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).toMatchObject({
+      expected_chunk_ids: [chunkId],
+      expected_document_ids: [],
+    });
+
+    caseCard = await openCaseEditor("Cache-authoritative case");
+    expect(within(caseCard).getByLabelText("Case name")).toHaveValue(
+      "Cache-authoritative case",
+    );
+    expect(
+      await within(caseCard).findByRole("button", { name: "Remove chunk 2" }),
+    ).toBeInTheDocument();
+    expect(
+      within(caseCard).queryByRole("button", { name: /Remove stale/ }),
+    ).not.toBeInTheDocument();
+
+    fireEvent.change(within(caseCard).getByLabelText("Results per question"), {
+      target: { value: "11" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(2));
+    expect(updateBodies[1]).not.toHaveProperty("expected_chunk_ids");
+    expect(updateBodies[1]).not.toHaveProperty("expected_document_ids");
+
+    pendingDatasetRefetch.resolve(
+      await responseJson({ ...dataset(), cases: [persistedCase] }),
+    );
+  });
+
+  it("sends explicit empty arrays when all stale evidence is removed", async () => {
+    renderDatasetDetail();
+    const caseCard = await openCaseEditor();
+
+    await removeStaleEvidence(caseCard);
+    expect(
+      within(caseCard).getByText(/Saving will clear this case's evidence/),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0]).toMatchObject({
+      expected_chunk_ids: [],
+      expected_document_ids: [],
+    });
+  });
+
+  it("shows strict validation errors without abandoning the stale selection", async () => {
+    renderDatasetDetail();
+    const caseCard = await openCaseEditor();
+
+    fireEvent.click(
+      await within(caseCard).findByRole("button", {
+        name: /Remove stale document/,
+      }),
+    );
+    fireEvent.change(within(caseCard).getByLabelText("Case name"), {
+      target: { value: "Must not persist" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+
+    expect(await within(caseCard).findByRole("alert")).toHaveTextContent(
+      "Some selected evidence is unavailable. Remove or replace stale evidence before saving.",
+    );
+    expect(updateBodies[0]).toMatchObject({
+      expected_chunk_ids: [staleChunkId],
+      expected_document_ids: [],
+    });
+    expect(persistedCase.name).toBe("Legacy stale evidence");
+    expect(
+      within(caseCard).getByRole("button", { name: /Remove stale chunk/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("restores persisted fields and evidence after cancellation", async () => {
+    renderDatasetDetail();
+    let caseCard = await openCaseEditor();
+
+    fireEvent.change(within(caseCard).getByLabelText("Case name"), {
+      target: { value: "Abandoned name" },
+    });
+    fireEvent.change(within(caseCard).getByLabelText("Question"), {
+      target: { value: "Abandoned query" },
+    });
+    fireEvent.change(within(caseCard).getByLabelText("Notes"), {
+      target: { value: "Abandoned notes" },
+    });
+    fireEvent.change(within(caseCard).getByLabelText("Results per question"), {
+      target: { value: "17" },
+    });
+    await removeStaleEvidence(caseCard);
+    fireEvent.click(within(caseCard).getByRole("button", { name: "Cancel" }));
+
+    caseCard = await openCaseEditor();
+    expect(within(caseCard).getByLabelText("Case name")).toHaveValue(
+      "Legacy stale evidence",
+    );
+    expect(within(caseCard).getByLabelText("Question")).toHaveValue(
+      "Which legacy evidence is required?",
+    );
+    expect(within(caseCard).getByLabelText("Notes")).toHaveValue(
+      "Stored legacy note.",
+    );
+    expect(within(caseCard).getByLabelText("Results per question")).toHaveValue(
+      5,
+    );
+    expect(
+      await within(caseCard).findByRole("button", {
+        name: /Remove stale document/,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      within(caseCard).getByRole("button", { name: /Remove stale chunk/ }),
+    ).toBeInTheDocument();
+    expect(updateBodies).toHaveLength(0);
+  });
+
+  function renderDatasetDetail() {
+    renderRoute(
+      `/app/evals/datasets/${datasetId}`,
+      <Route
+        path="/app/evals/datasets/:datasetId"
+        element={<DatasetDetailPage />}
+      />,
+    );
+  }
+
+  async function openCaseEditor(name = persistedCase.name) {
+    const editButton = await screen.findByRole("button", {
+      name: `Edit ${name}`,
+    });
+    const caseCard = editButton.closest("article") as HTMLElement;
+    fireEvent.click(editButton);
+    return caseCard;
+  }
+
+  async function removeStaleEvidence(caseCard: HTMLElement) {
+    fireEvent.click(
+      await within(caseCard).findByRole("button", {
+        name: /Remove stale document/,
+      }),
+    );
+    fireEvent.click(
+      await within(caseCard).findByRole("button", {
+        name: /Remove stale chunk/,
+      }),
+    );
+  }
 });
 
 function renderRoute(initialEntry: string, route: React.ReactElement) {
@@ -588,6 +990,61 @@ function chunk() {
   };
 }
 
+function evidenceLookup() {
+  return {
+    documents: [
+      {
+        id: documentId,
+        source_id: sourceId,
+        source_name: "Platform docs",
+        path: "platform-guide.md",
+        profile: "technical_docs",
+        extraction_quality: "high",
+        warnings: [],
+        chunk_count: 1,
+      },
+    ],
+    chunks: [
+      {
+        id: chunkId,
+        document_id: documentId,
+        source_id: sourceId,
+        source_name: "Platform docs",
+        document_path: "platform-guide.md",
+        ordinal: 0,
+        text_preview: "GPU workers accelerate embedding indexing.",
+        preview_truncated: false,
+        token_count: 5,
+        checksum: "1234567890abcdef",
+        section_title: "Indexing",
+        quality_flags: ["good_evidence_candidate"],
+        is_duplicate: false,
+        text_density: 0.9,
+        evidence_score_hint: 0.8,
+      },
+      {
+        id: retrievedChunkId,
+        document_id: documentId,
+        source_id: sourceId,
+        source_name: "Platform docs",
+        document_path: "platform-guide.md",
+        ordinal: 1,
+        text_preview: "A sibling chunk describes the indexing queue.",
+        preview_truncated: false,
+        token_count: 7,
+        checksum: "fedcba0987654321",
+        section_title: "Indexing queue",
+        quality_flags: [],
+        is_duplicate: false,
+        text_density: 0.88,
+        evidence_score_hint: 0.72,
+      },
+    ],
+    unresolved_document_ids: [],
+    unresolved_chunk_ids: [],
+  };
+}
+
 function experiment() {
   return {
     id: experimentId,
@@ -607,7 +1064,7 @@ function experiment() {
       dataset_case_count: 1,
     },
     mode_results: [
-      modeResult("hybrid", 0.5, 0.4, 20),
+      modeResult("hybrid", 0.5, 0.4, 20, [caseEvaluation([retrievedChunkId])]),
       modeResult("vector", 0.25, 0.2, 18),
       modeResult("lexical", 0, 0, 12),
     ],
@@ -632,6 +1089,47 @@ function experiment() {
       },
     ],
     created_at: "2026-06-25T00:00:00Z",
+  };
+}
+
+function experimentWithRetrievedChunks(retrievedChunkIds: string[]) {
+  const value = experiment();
+  value.mode_results[0].case_results = [caseEvaluation(retrievedChunkIds)];
+  return value;
+}
+
+function caseEvaluation(retrievedChunkIds: string[]) {
+  return {
+    case_id: caseId,
+    query: "Which evidence explains GPU indexing workers?",
+    top_k: 5,
+    recall_at_k: retrievedChunkIds.includes(chunkId) ? 1 : 0,
+    precision_at_k: 0,
+    mrr: 0,
+    top_hit_rank: retrievedChunkIds.length > 0 ? 1 : null,
+    citation_coverage: 0,
+    weak_evidence_count: 0,
+    missing_embedding_failures: 0,
+    passed: retrievedChunkIds.includes(chunkId),
+    expected_chunk_ids: [chunkId],
+    expected_document_ids: [documentId],
+    retrieved_chunk_ids: retrievedChunkIds,
+    latency_ms: 20,
+    failures:
+      retrievedChunkIds.length > 0
+        ? [
+            {
+              case_id: caseId,
+              query: "Which evidence explains GPU indexing workers?",
+              retrieval_mode: "hybrid",
+              label: "correct_document_wrong_chunk",
+              severity: "warning",
+              message:
+                "The correct document ranked, but the exact chunk did not.",
+              top_hit_rank: 1,
+            },
+          ]
+        : [],
   };
 }
 
@@ -670,6 +1168,7 @@ function modeResult(
   recall: number,
   precision: number,
   latency: number,
+  caseResults: ReturnType<typeof caseEvaluation>[] = [],
 ) {
   return {
     retrieval_mode: mode,
@@ -683,7 +1182,7 @@ function modeResult(
     missing_embedding_failures: 0,
     latency_p50_ms: latency,
     latency_p95_ms: latency,
-    case_results: [],
+    case_results: caseResults,
   };
 }
 
@@ -726,6 +1225,52 @@ function noBaselineRegression() {
   };
 }
 
+function legacyCase(): RetrievalEvalCase {
+  return {
+    ...dataset().cases[0],
+    name: "Legacy stale evidence",
+    query: "Which legacy evidence is required?",
+    expected_chunk_ids: [staleChunkId],
+    expected_document_ids: [staleDocumentId],
+    notes: "Stored legacy note.",
+  };
+}
+
+function requestBody(init?: RequestInit): Record<string, unknown> {
+  return typeof init?.body === "string"
+    ? (JSON.parse(init.body) as Record<string, unknown>)
+    : {};
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
+function mergeCaseUpdate(
+  current: RetrievalEvalCase,
+  request: Record<string, unknown>,
+): RetrievalEvalCase {
+  return {
+    ...current,
+    name: typeof request.name === "string" ? request.name : current.name,
+    query: typeof request.query === "string" ? request.query : current.query,
+    top_k: typeof request.top_k === "number" ? request.top_k : current.top_k,
+    expected_chunk_ids: Object.hasOwn(request, "expected_chunk_ids")
+      ? stringArray(request.expected_chunk_ids)
+      : current.expected_chunk_ids,
+    expected_document_ids: Object.hasOwn(request, "expected_document_ids")
+      ? stringArray(request.expected_document_ids)
+      : current.expected_document_ids,
+    notes: Object.hasOwn(request, "notes")
+      ? typeof request.notes === "string"
+        ? request.notes
+        : null
+      : current.notes,
+  };
+}
+
 function responseJson(json: unknown) {
   return Promise.resolve({ status: 200, json: async () => json } as Response);
 }
@@ -735,4 +1280,17 @@ function responseError(status: number, message: string) {
     status,
     text: async () => JSON.stringify({ error: { message } }),
   } as Response);
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }

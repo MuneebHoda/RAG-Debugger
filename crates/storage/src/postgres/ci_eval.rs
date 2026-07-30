@@ -11,7 +11,12 @@ impl PostgresStore {
                 id, workspace_id, dataset_id, dataset_name, experiment_id, status, gate_status,
                 branch, commit_sha, base_ref, head_ref, config_label, run_json, created_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+             SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+             WHERE EXISTS (
+                 SELECT 1
+                 FROM retrieval_eval_datasets
+                 WHERE id = $3 AND workspace_id = $2
+             )",
         )
         .bind(run.id.0)
         .bind(run.workspace_id.0)
@@ -28,28 +33,42 @@ impl PostgresStore {
         .bind(Json(&run))
         .bind(run.created_at)
         .execute(&self.pool)
-        .await?;
+        .await?
+        .rows_affected()
+        .eq(&1)
+        .then_some(())
+        .ok_or(StorageError::NotFound)?;
         Ok(run)
     }
 
-    pub(super) async fn list_ci_eval_runs(&self) -> Result<Vec<CiEvalRun>, StorageError> {
+    pub(super) async fn list_ci_eval_runs(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<CiEvalRun>, StorageError> {
         let rows = sqlx::query(
             "SELECT run_json
              FROM ci_eval_runs
+             WHERE workspace_id = $1
              ORDER BY created_at DESC
              LIMIT 100",
         )
+        .bind(workspace_id.0)
         .fetch_all(&self.pool)
         .await?;
         rows.iter().map(ci_eval_run_from_row).collect()
     }
 
-    pub(super) async fn get_ci_eval_run(&self, id: CiEvalRunId) -> Result<CiEvalRun, StorageError> {
+    pub(super) async fn get_ci_eval_run(
+        &self,
+        workspace_id: WorkspaceId,
+        id: CiEvalRunId,
+    ) -> Result<CiEvalRun, StorageError> {
         let row = sqlx::query(
             "SELECT run_json
              FROM ci_eval_runs
-             WHERE id = $1",
+             WHERE workspace_id = $1 AND id = $2",
         )
+        .bind(workspace_id.0)
         .bind(id.0)
         .fetch_optional(&self.pool)
         .await?
@@ -59,16 +78,18 @@ impl PostgresStore {
 
     pub(super) async fn latest_ci_eval_run_for_dataset(
         &self,
+        workspace_id: WorkspaceId,
         dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
     ) -> Result<Option<CiEvalRun>, StorageError> {
         let row = sqlx::query(
             "SELECT run_json
              FROM ci_eval_runs
-             WHERE dataset_id = $1 AND config_label = $2
+             WHERE workspace_id = $1 AND dataset_id = $2 AND config_label = $3
              ORDER BY created_at DESC
              LIMIT 1",
         )
+        .bind(workspace_id.0)
         .bind(dataset_id.0)
         .bind(config_label)
         .fetch_optional(&self.pool)

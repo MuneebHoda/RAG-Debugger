@@ -1,0 +1,99 @@
+.picker,
+.savePanel {
+  composes: list from "../QualityPage.module.css";
+}
+
+.picker {
+  container-type: inline-size;
+}
+
+.review,
+.stateList,
+.resultColumn,
+.selectedList {
+  composes: list from "../QualityPage.module.css";
+}
+
+.form,
+.field {
+  composes: form from "../QualityPage.module.css";
+}
+
+.form {
+  border: 0;
+}
+
+.searchRow,
+.actions,
+.badgeRow {
+  composes: inlineActions from "../QualityPage.module.css";
+}
+
+.selectedHeader,
+.stateHeader {
+  composes: cardHeader from "../QualityPage.module.css";
+}
+
+.resultGrid {
+  composes: formGrid from "../QualityPage.module.css";
+}
+
+.option,
+.selectedItem,
+.stateItem {
+  composes: caseCard from "../QualityPage.module.css";
+  composes: identityCard from "../QualityPage.module.css";
+}
+
+.selected,
+.success {
+  composes: success from "../../../../components/workbench/WorkbenchStatusPill.module.css";
+}
+
+.weak,
+.warning {
+  composes: warning from "../../../../components/workbench/WorkbenchStatusPill.module.css";
+}
+
+.duplicate {
+  composes: info from "../../../../components/workbench/WorkbenchStatusPill.module.css";
+}
+
+.stale,
+.danger,
+.error {
+  composes: danger from "../../../../components/workbench/WorkbenchStatusPill.module.css";
+}
+
+.warning,
+.error,
+.success {
+  composes: caseCard from "../QualityPage.module.css";
+}
+
+.unselected,
+.neutral,
+.loading,
+.notice,
+.empty,
+.resultCount {
+  composes: empty from "../QualityPage.module.css";
+}
+
+.choice {
+  composes: neutral from "../../../../components/workbench/WorkbenchStatusPill.module.css";
+}
+
+.badge {
+  composes: pill from "../../../../components/workbench/WorkbenchStatusPill.module.css";
+}
+
+.choiceState {
+  composes: empty from "../QualityPage.module.css";
+}
+
+@container (max-width: 42rem) {
+  .resultGrid {
+    grid-template-columns: 1fr;
+  }
+}

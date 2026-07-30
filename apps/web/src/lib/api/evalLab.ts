@@ -1,6 +1,12 @@
 import { jsonRequest, requestJson } from "./client";
 import type { EmbeddingModelInfo } from "./embeddings";
 import type { RetrievalMode } from "./retrieval";
+import type {
+  ChunkQualityFlag,
+  DocumentProfile,
+  DocumentWarning,
+  ExtractionQuality,
+} from "./sources";
 
 export interface CreateRetrievalEvalCaseRequest {
   name?: string;
@@ -96,6 +102,52 @@ export interface UpdateRetrievalEvalCaseRequest {
   expected_chunk_ids?: string[];
   expected_document_ids?: string[];
   notes?: string | null;
+}
+
+export interface QueryEvalLabEvidenceRequest {
+  query?: string | null;
+  document_ids?: string[];
+  chunk_ids?: string[];
+  limit?: number;
+  document_limit?: number;
+  chunk_limit?: number;
+  include_chunks?: boolean;
+}
+
+export interface EvalLabEvidenceDocument {
+  id: string;
+  source_id: string;
+  source_name: string;
+  path: string;
+  profile: DocumentProfile;
+  extraction_quality: ExtractionQuality;
+  warnings: DocumentWarning[];
+  chunk_count: number;
+}
+
+export interface EvalLabEvidenceChunk {
+  id: string;
+  document_id: string;
+  source_id: string;
+  source_name: string;
+  document_path: string;
+  ordinal: number;
+  text_preview: string;
+  preview_truncated: boolean;
+  token_count: number;
+  checksum: string;
+  section_title: string | null;
+  quality_flags: ChunkQualityFlag[];
+  is_duplicate: boolean;
+  text_density: number;
+  evidence_score_hint: number;
+}
+
+export interface QueryEvalLabEvidenceResponse {
+  documents: EvalLabEvidenceDocument[];
+  chunks: EvalLabEvidenceChunk[];
+  unresolved_document_ids: string[];
+  unresolved_chunk_ids: string[];
 }
 
 export interface RunRetrievalEvalExperimentRequest {
@@ -351,6 +403,16 @@ export function getEvalLabDataset(
   return requestJson<RetrievalEvalDataset>(
     `/api/v1/eval-lab/datasets/${datasetId}`,
     { signal },
+  );
+}
+
+export function queryEvalLabEvidence(
+  request: QueryEvalLabEvidenceRequest,
+  signal?: AbortSignal,
+): Promise<QueryEvalLabEvidenceResponse> {
+  return requestJson<QueryEvalLabEvidenceResponse>(
+    "/api/v1/eval-lab/evidence/query",
+    jsonRequest("POST", request, signal),
   );
 }
 

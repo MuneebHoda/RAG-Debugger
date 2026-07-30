@@ -24,7 +24,7 @@ The implementation is deterministic and local in this pass. It does not call a h
 
 `GET /api/v1/traces`
 
-Returns recent trace summaries. The response is optimized for the trace list and includes query, retrieval mode, latency, evidence strength, failure labels, span count, rerun count, and creation time.
+Returns recent trace summaries for the authenticated workspace. The response is optimized for the trace list and includes query, retrieval mode, latency, evidence strength, failure labels, span count, rerun count, and creation time.
 
 `GET /api/v1/traces/:trace_id`
 
@@ -40,7 +40,7 @@ Creates a saved trace from a retrieval playground run. Request body:
 }
 ```
 
-If `run_id` is omitted, the API saves the latest retrieval response that was persisted by `POST /api/v1/retrieval/query`.
+If `run_id` is omitted, the API saves the latest retrieval response in the authenticated workspace that was persisted by `POST /api/v1/retrieval/query`.
 
 `POST /api/v1/traces/:trace_id/rerun`
 
@@ -82,7 +82,9 @@ The trace migration adds:
 - `debug_traces`: one saved debugger trace per inspected run.
 - `trace_rerun_experiments`: persisted rerun comparison records attached to traces.
 
-`debug_traces` stores searchable/listable fields such as query, retrieval mode, status, evidence strength, failure labels, span count, rerun count, latency, and timestamps. The full timeline is also stored as JSON so the debugger can evolve without forcing every nested span field into relational columns immediately.
+The runtime-isolation migration adds workspace ownership and workspace/date indexes to retrieval runs and traces. New writes always carry the authenticated workspace. Trace writes verify that `project_id` and the optional source retrieval run belong to that workspace; ambiguous legacy records remain invisible until repaired.
+
+`debug_traces` stores searchable/listable fields such as query, retrieval mode, status, evidence strength, failure labels, span count, rerun count, latency, and timestamps. The full timeline is also stored as JSON so the debugger can evolve without forcing every nested span field into relational columns immediately. Foreign and nonexistent trace or source-run identifiers return the same non-enumerating not-found response.
 
 ## Trace Spans
 
@@ -147,7 +149,9 @@ This helps users see whether lexical, vector, or hybrid retrieval is improving e
 - **Timeline** shows ordered query, retrieval, evidence, eval, and generation spans.
 - **Compare** reruns the same question with changed retrieval settings and shows score, latency, overlap, and rank movement.
 
-Summary also exposes **Add to Quality**. It requires an explicit dataset and expected chunk selection; CorpusLab never silently treats the first hit or first dataset as correct.
+Summary also exposes **Add to Quality**. It uses the shared Eval Lab evidence picker and requires an explicit dataset plus reviewed expected evidence before saving. Users explicitly choose exact chunks or whole-document expectations, search other corpus evidence, and review stale or unresolved evidence before creating the Quality case. CorpusLab never silently treats the first dataset, first chunk, or parent document as correct.
+
+The save draft is keyed to the trace ID. Reruns and comparison updates for the same trace preserve deliberate edits, while navigation to another trace clears source-owned fields, picker search, selection, validation, and mutation feedback without discarding the selected dataset or closing the panel. Submissions snapshot the trace identity and normalized evidence, prevent duplicate activation, and ignore stale completion feedback.
 
 Trace Detail also exposes **Create audit report** above the debugger tabs. The action defaults to metadata-only output, requires privacy confirmation, and opens the generated report at `/app/reports/:reportId`.
 
