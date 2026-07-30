@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Security
 
+- Added a strict Cargo Deny gate for RustSec advisories, dependency bans, approved licenses, and trusted dependency sources.
 - Removed compiled bootstrap and Postgres passwords from API runtime defaults, require explicit non-empty bootstrap credentials and Postgres configuration, and stopped displaying or prefilling login credentials in the web app.
 
 ### Added
