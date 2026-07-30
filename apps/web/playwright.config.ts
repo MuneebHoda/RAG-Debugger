@@ -1,5 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
+import { testCredentials } from "./tests/e2e/support/testCredentials";
+
 export default defineConfig({
   testDir: "./tests/e2e",
   timeout: 30_000,
@@ -18,6 +20,10 @@ export default defineConfig({
       command:
         "RAG_DEBUGGER_STORAGE_BACKEND=memory RAG_DEBUGGER_API_PORT=18080 RAG_DEBUGGER_PUBLIC_API_BASE_URL=http://127.0.0.1:18080 RAG_DEBUGGER_WEB_ORIGIN=http://127.0.0.1:15173 cargo run -p rag-debugger-api",
       cwd: "../..",
+      env: {
+        RAG_DEBUGGER_BOOTSTRAP_EMAIL: testCredentials.email,
+        RAG_DEBUGGER_BOOTSTRAP_PASSWORD: testCredentials.password,
+      },
       url: "http://127.0.0.1:18080/healthz",
       reuseExistingServer: true,
       timeout: 120_000,

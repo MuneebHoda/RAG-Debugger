@@ -1,3 +1,5 @@
+mod support;
+
 use axum::{
     body::Body,
     http::{Request, StatusCode},
@@ -18,10 +20,9 @@ fn test_state(environment: RuntimeEnvironment) -> AppState {
             environment,
             bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
             storage_backend: StorageBackend::Memory,
-            database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test"
-                .to_owned(),
+            database_url: String::new(),
             web_origin: "http://127.0.0.1:5173".to_owned(),
-            auth: Default::default(),
+            auth: support::test_auth_config(),
             product: ProductConfig::default(),
         },
         Arc::new(MemoryStore::default()),
@@ -33,9 +34,9 @@ fn not_ready_state() -> AppState {
         environment: RuntimeEnvironment::Test,
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
-        database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test".to_owned(),
+        database_url: String::new(),
         web_origin: "http://127.0.0.1:5173".to_owned(),
-        auth: Default::default(),
+        auth: support::test_auth_config(),
         product: ProductConfig::default(),
     })
 }

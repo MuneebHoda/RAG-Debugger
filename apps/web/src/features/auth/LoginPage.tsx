@@ -5,14 +5,14 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { Button } from "../../components/ui/Button";
 import { login } from "../../lib/api/auth";
-import { createAuthSessionFromResponse, DEMO_CREDENTIALS } from "./authSession";
+import { createAuthSessionFromResponse } from "./authSession";
 import styles from "./AuthPages.module.css";
 
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState(DEMO_CREDENTIALS.email);
-  const [password, setPassword] = useState(DEMO_CREDENTIALS.password);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -44,12 +44,6 @@ export function LoginPage() {
           Open your workbench, review retrieval runs, and continue improving
           corpus quality with your team.
         </p>
-      </div>
-
-      <div className={styles.credentialBox} aria-label="Demo credentials">
-        <span>Demo credentials</span>
-        <code>{DEMO_CREDENTIALS.email}</code>
-        <code>{DEMO_CREDENTIALS.password}</code>
       </div>
 
       {error ? (

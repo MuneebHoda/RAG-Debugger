@@ -16,7 +16,7 @@ Public marketing pages, `/healthz`, `/readyz`, `/api/v1/config`, and auth routes
 
 ## Environment
 
-Local defaults live in `.env.example`:
+Local non-secret defaults live in `.env.example`:
 
 ```text
 RAG_DEBUGGER_AUTH_PROVIDER=local
@@ -24,11 +24,23 @@ RAG_DEBUGGER_SESSION_COOKIE_NAME=corpuslab_session
 RAG_DEBUGGER_SESSION_TTL_HOURS=168
 RAG_DEBUGGER_SESSION_COOKIE_SECURE=false
 RAG_DEBUGGER_BOOTSTRAP_EMAIL=demo@corpuslab.ai
-RAG_DEBUGGER_BOOTSTRAP_PASSWORD=CorpusLab#2026
+RAG_DEBUGGER_BOOTSTRAP_PASSWORD=
 RAG_DEBUGGER_BOOTSTRAP_USER_NAME=Demo User
 RAG_DEBUGGER_BOOTSTRAP_ORGANIZATION=CorpusLab Demo Organization
 RAG_DEBUGGER_BOOTSTRAP_WORKSPACE=Corpus Demo Workspace
 ```
+
+Generate a password for each local checkout, then put it in the ignored `.env`
+file:
+
+```sh
+openssl rand -base64 32
+```
+
+The API requires `RAG_DEBUGGER_BOOTSTRAP_PASSWORD` and rejects missing or empty
+values. It never sends that password through `GET /api/v1/config`, and the login
+page neither displays nor prefills credentials. Deployments should provide the
+password through their secret manager or environment injection mechanism.
 
 Use `RAG_DEBUGGER_SESSION_COOKIE_SECURE=true` behind HTTPS. Keep it `false` for local `http://127.0.0.1` development.
 
@@ -116,3 +128,4 @@ Future provider work should add:
 - Keep CI keys workspace-scoped.
 - Prefer short-lived sessions in hosted deployments.
 - Require HTTPS before setting secure cookies.
+- Keep bootstrap passwords and database credentials out of committed files.

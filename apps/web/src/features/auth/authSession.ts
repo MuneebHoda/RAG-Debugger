@@ -1,6 +1,5 @@
 export const DEMO_CREDENTIALS = {
   email: "demo@corpuslab.ai",
-  password: "CorpusLab#2026",
   workspaceName: "Corpus Demo Workspace",
 };
 

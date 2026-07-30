@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::Arc;
 
 use axum::{
@@ -20,9 +22,9 @@ async fn test_app(environment: RuntimeEnvironment) -> axum::Router {
         environment,
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
-        database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test".to_owned(),
+        database_url: String::new(),
         web_origin: "http://127.0.0.1:5173".to_owned(),
-        auth: Default::default(),
+        auth: support::test_auth_config(),
         product: ProductConfig::default(),
     };
     let repository = Arc::new(store);
@@ -47,7 +49,7 @@ async fn protected_routes_require_login_and_accept_session_cookie() {
     assert!(unauthorized_body["error"]["message"].is_string());
 
     let (cookie, body) = login(&app).await;
-    assert_eq!(body["user"]["user"]["email"], "demo@corpuslab.ai");
+    assert_eq!(body["user"]["user"]["email"], support::TEST_BOOTSTRAP_EMAIL);
 
     let authorized = app
         .oneshot(
@@ -245,8 +247,8 @@ async fn login(app: &axum::Router) -> (String, Value) {
             Method::POST,
             "/api/v1/auth/login",
             json!({
-                "email": "demo@corpuslab.ai",
-                "password": "CorpusLab#2026"
+                "email": support::TEST_BOOTSTRAP_EMAIL,
+                "password": support::TEST_BOOTSTRAP_PASSWORD
             }),
         ))
         .await
