@@ -1,7 +1,9 @@
 import type { Page } from "@playwright/test";
 
+import { testCredentials } from "./testCredentials";
+
 export const authSession = {
-  email: "demo@corpuslab.ai",
+  email: testCredentials.email,
   workspaceName: "Corpus Demo Workspace",
   issuedAt: "2026-06-24T00:00:00.000Z",
 };

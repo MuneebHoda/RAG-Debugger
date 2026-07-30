@@ -24,8 +24,13 @@ Install Rust and Node.js 24 or newer, then:
 
 ```sh
 cp .env.example .env
+openssl rand -base64 32
 cd apps/web && npm install
 ```
+
+Put the generated value after `RAG_DEBUGGER_BOOTSTRAP_PASSWORD=` in `.env`.
+The ignored `.env` file is for local secrets; `.env.example` intentionally
+contains no bootstrap password.
 
 Start local Postgres:
 
@@ -36,7 +41,7 @@ docker compose up -d postgres
 Run the API:
 
 ```sh
-cargo run -p rag-debugger-api
+just api
 ```
 
 Run the web app:
@@ -45,12 +50,10 @@ Run the web app:
 cd apps/web && npm run dev
 ```
 
-The default local login is seeded from `.env.example`:
-
-```text
-demo@corpuslab.ai
-CorpusLab#2026
-```
+Sign in with the bootstrap email from `.env` and the password you generated.
+The API rejects startup when the bootstrap password is missing or empty.
+If you run `cargo run -p rag-debugger-api` directly, export the required
+environment variables first because Cargo does not load `.env`.
 
 ## Quality Checks
 
@@ -72,7 +75,7 @@ just api
 just web
 ```
 
-Open `http://127.0.0.1:5173/login`, sign in with `demo@corpuslab.ai` / `CorpusLab#2026`, and follow the six-step checklist on Home. The API is available at `http://127.0.0.1:8080`.
+Open `http://127.0.0.1:5173/login`, sign in with the bootstrap credentials you configured in `.env`, and follow the six-step checklist on Home. The API is available at `http://127.0.0.1:8080`.
 
 The demo adds three versioned Markdown documents to the active workspace. It never resets existing data. See [Guided Demo](docs/guided-demo.md) for architecture, privacy, troubleshooting, and the complete walkthrough.
 

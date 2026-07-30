@@ -67,7 +67,9 @@ describe("App", () => {
     expect(
       screen.getByRole("heading", { name: /sign in/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText(DEMO_CREDENTIALS.email)).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveValue("");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.queryByLabelText("Demo credentials")).not.toBeInTheDocument();
   });
 });
 

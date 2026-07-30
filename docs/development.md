@@ -13,28 +13,34 @@
 
 ```sh
 cp .env.example .env
+openssl rand -base64 32
 cd apps/web && npm install
 docker compose up -d postgres
 ```
+
+Put the generated password after `RAG_DEBUGGER_BOOTSTRAP_PASSWORD=` in `.env`.
+The repository ignores `.env`; never commit the generated value.
 
 ## Run
 
 API:
 
 ```sh
-cargo run -p rag-debugger-api
+just api
 ```
 
-The API connects to `DATABASE_URL`, runs migrations from `migrations/`, and creates a default local project on startup.
+When the Postgres backend is selected, the API requires `DATABASE_URL`, runs migrations from `migrations/`, and creates a default local project on startup. The fixed Postgres credentials in `.env.example`, `docker-compose.yml`, and `Justfile` are only for the local Docker service.
+
+`just api` loads the ignored `.env` file. When running `cargo run -p rag-debugger-api` directly, export `DATABASE_URL`, `RAG_DEBUGGER_BOOTSTRAP_PASSWORD`, and any other deployment settings in the shell first.
 
 On startup the API also bootstraps the local demo identity from `.env`:
 
 ```text
 RAG_DEBUGGER_BOOTSTRAP_EMAIL=demo@corpuslab.ai
-RAG_DEBUGGER_BOOTSTRAP_PASSWORD=CorpusLab#2026
+RAG_DEBUGGER_BOOTSTRAP_PASSWORD=<your generated password>
 ```
 
-Use those credentials on `/login`, or create another local workspace through `/signup`.
+`RAG_DEBUGGER_BOOTSTRAP_PASSWORD` is required and must not be empty. Use the configured credentials on `/login`, or create another local workspace through `/signup`.
 
 Web:
 
@@ -53,12 +59,7 @@ just api
 just web
 ```
 
-Open `http://127.0.0.1:5173/login`. The API is at `http://127.0.0.1:8080`. Unless overridden in `.env`, sign in with:
-
-```text
-demo@corpuslab.ai
-CorpusLab#2026
-```
+Open `http://127.0.0.1:5173/login`. The API is at `http://127.0.0.1:8080`. Sign in with the bootstrap email and generated password in your ignored `.env` file.
 
 Home guides you through loading the versioned sample corpus, indexing only that source, running a suggested query, saving a trace, generating a metadata-only report, and copying or downloading Markdown. Loading is additive and idempotent.
 
@@ -111,7 +112,7 @@ sqlx migrate run
 
 The API runs migrations automatically at startup for local development. `just db-migrate` exists for explicit migration checks and CI-style workflows. `/readyz` checks database connectivity.
 
-The `just` migration recipes honor `DATABASE_URL` from the environment or `.env`. When neither is present, they use the documented Docker default `postgres://postgres:postgres@localhost:5432/rag_debugger`.
+The `just` migration recipes honor `DATABASE_URL` from the environment or `.env`. When neither is present, those local-development recipes use the Docker-only default `postgres://postgres:postgres@localhost:5432/rag_debugger`. The API runtime itself has no database URL fallback and rejects startup when Postgres is selected without a non-empty `DATABASE_URL`.
 
 ## File Ingestion Flow
 
@@ -184,7 +185,7 @@ Trace APIs live under `/api/v1/traces`. The API stores the full retrieval respon
 
 ## Configuration Flow
 
-Backend defaults are loaded from `.env` into typed config in `apps/api/src/config.rs`. Shared config contracts live in `crates/core/src/config.rs`. Safe values are exposed to the UI through `GET /api/v1/config`; deployment-sensitive values such as `DATABASE_URL` remain server-only.
+Backend values are loaded from the process environment into typed config in `apps/api/src/config.rs`; `just` loads the ignored `.env` file for local commands. Shared config contracts live in `crates/core/src/config.rs`. Safe values are exposed to the UI through `GET /api/v1/config`; deployment-sensitive values such as `DATABASE_URL` and the bootstrap password remain server-only.
 
 When adding a new tunable value:
 

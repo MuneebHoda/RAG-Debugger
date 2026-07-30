@@ -10,6 +10,10 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ## [Unreleased]
 
+### Security
+
+- Removed compiled bootstrap and Postgres passwords from API runtime defaults, require explicit non-empty bootstrap credentials and Postgres configuration, and stopped displaying or prefilling login credentials in the web app.
+
 ### Added
 
 - Workspace-isolation contracts for MemoryStore, migrated Postgres, authenticated two-workspace APIs, runtime retrieval/trace/embedding paths, and legacy ownership backfill/quarantine behavior.

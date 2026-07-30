@@ -305,7 +305,9 @@ describe("auth pages", () => {
     expect(
       screen.getByRole("heading", { name: /sign in/i }),
     ).toBeInTheDocument();
-    expect(screen.getByText("demo@corpuslab.ai")).toBeInTheDocument();
+    expect(screen.getByLabelText("Email")).toHaveValue("");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    expect(screen.queryByLabelText("Demo credentials")).not.toBeInTheDocument();
     expect(screen.getByText(/SSO/i)).toBeInTheDocument();
 
     rerender(

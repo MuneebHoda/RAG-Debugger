@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
 import { authResponse } from "./support/auth";
+import { testCredentials } from "./support/testCredentials";
 import { expectNoHorizontalOverflow } from "./support/layoutAssertions";
 
 test("renders the CorpusLab public site", async ({ page }) => {
@@ -177,9 +178,11 @@ test("renders pricing and auth pages", async ({ page }) => {
     route.fulfill({ contentType: "application/json", json: authResponse }),
   );
   await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
-  await expect(page.getByText("demo@corpuslab.ai")).toBeVisible();
-  await page.getByLabel("Email").fill("demo@corpuslab.ai");
-  await page.getByLabel("Password").fill("CorpusLab#2026");
+  await expect(page.getByLabel("Email")).toHaveValue("");
+  await expect(page.getByLabel("Password")).toHaveValue("");
+  await expect(page.getByLabel("Demo credentials")).toHaveCount(0);
+  await page.getByLabel("Email").fill(testCredentials.email);
+  await page.getByLabel("Password").fill(testCredentials.password);
   await page.getByRole("button", { name: /open workbench/i }).click();
   await expect(page).toHaveURL(/\/app$/);
 

@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::Arc;
 
 use axum::{
@@ -212,9 +214,9 @@ async fn setup() -> TestContext {
         environment: RuntimeEnvironment::Local,
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
-        database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test".to_owned(),
+        database_url: String::new(),
         web_origin: "http://127.0.0.1:5173".to_owned(),
-        auth: Default::default(),
+        auth: support::test_auth_config(),
         product: ProductConfig::default(),
     };
     let user = auth::bootstrap_identity(store.as_ref(), &config.auth)

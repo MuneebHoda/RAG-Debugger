@@ -11,7 +11,7 @@ use axum::{
 };
 use rag_debugger_api::{
     app, auth,
-    config::{ApiConfig, RuntimeEnvironment, StorageBackend},
+    config::{ApiConfig, AuthConfig, AuthProviderKind, RuntimeEnvironment, StorageBackend},
     state::AppState,
 };
 use rag_debugger_core::{
@@ -31,6 +31,23 @@ pub struct AuthenticatedTestApp {
     pub store: Arc<MemoryStore>,
     #[allow(dead_code)]
     pub workspace_id: WorkspaceId,
+}
+
+pub const TEST_BOOTSTRAP_EMAIL: &str = "api-test-bootstrap@example.test";
+pub const TEST_BOOTSTRAP_PASSWORD: &str = "test-only-bootstrap-password";
+
+pub fn test_auth_config() -> AuthConfig {
+    AuthConfig {
+        provider: AuthProviderKind::Local,
+        session_cookie_name: "corpuslab_test_session".to_owned(),
+        session_ttl_hours: 1,
+        cookie_secure: false,
+        bootstrap_email: TEST_BOOTSTRAP_EMAIL.to_owned(),
+        bootstrap_password: TEST_BOOTSTRAP_PASSWORD.to_owned(),
+        bootstrap_user_name: "API Test User".to_owned(),
+        bootstrap_organization_name: "API Test Organization".to_owned(),
+        bootstrap_workspace_name: "API Test Workspace".to_owned(),
+    }
 }
 
 pub async fn authenticated_test_app() -> AuthenticatedTestApp {
@@ -90,9 +107,9 @@ pub fn test_config() -> ApiConfig {
         environment: RuntimeEnvironment::Test,
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
-        database_url: "postgres://postgres:postgres@localhost:5432/rag_debugger_test".to_owned(),
+        database_url: String::new(),
         web_origin: "http://127.0.0.1:5173".to_owned(),
-        auth: Default::default(),
+        auth: test_auth_config(),
         product: ProductConfig::default(),
     }
 }

@@ -1,3 +1,4 @@
+use std::env::VarError;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
 use rag_debugger_core::{
@@ -37,22 +38,6 @@ pub enum AuthProviderKind {
     External,
 }
 
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            provider: AuthProviderKind::Local,
-            session_cookie_name: "corpuslab_session".to_owned(),
-            session_ttl_hours: 168,
-            cookie_secure: false,
-            bootstrap_email: "demo@corpuslab.ai".to_owned(),
-            bootstrap_password: "CorpusLab#2026".to_owned(),
-            bootstrap_user_name: "Demo User".to_owned(),
-            bootstrap_organization_name: "CorpusLab Demo Organization".to_owned(),
-            bootstrap_workspace_name: "Corpus Demo Workspace".to_owned(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum StorageBackend {
     Postgres,
@@ -78,6 +63,12 @@ pub enum ConfigError {
     InvalidNumber { name: &'static str, value: String },
     #[error("{name} must be a finite number between 0 and 1, got: {value}")]
     InvalidRatio { name: &'static str, value: String },
+    #[error("required environment variable {name} is not set")]
+    MissingEnvironmentVariable { name: &'static str },
+    #[error("required environment variable {name} must not be empty")]
+    EmptyEnvironmentVariable { name: &'static str },
+    #[error("environment variable {name} is not valid Unicode")]
+    InvalidEnvironmentVariable { name: &'static str },
 }
 
 impl ApiConfig {
@@ -101,10 +92,11 @@ impl ApiConfig {
             .parse::<u16>()
             .map_err(|error| ConfigError::InvalidPort(error.to_string()))?;
 
-        let database_url = std::env::var("DATABASE_URL").unwrap_or_else(|_| {
-            "postgres://postgres:postgres@localhost:5432/rag_debugger".to_owned()
-        });
         let storage_backend = env_storage_backend("RAG_DEBUGGER_STORAGE_BACKEND")?;
+        let database_url = match storage_backend {
+            StorageBackend::Postgres => required_env_string("DATABASE_URL")?,
+            StorageBackend::Memory => std::env::var("DATABASE_URL").unwrap_or_default(),
+        };
         let web_origin = env_string("RAG_DEBUGGER_WEB_ORIGIN", "http://127.0.0.1:5173");
         let api_base_url = env_string("RAG_DEBUGGER_PUBLIC_API_BASE_URL", "http://127.0.0.1:8080");
         let product = ProductConfig {
@@ -200,7 +192,7 @@ impl ApiConfig {
                 session_ttl_hours: env_i64("RAG_DEBUGGER_SESSION_TTL_HOURS", 168)?,
                 cookie_secure: env_bool("RAG_DEBUGGER_SESSION_COOKIE_SECURE", false),
                 bootstrap_email: env_string("RAG_DEBUGGER_BOOTSTRAP_EMAIL", "demo@corpuslab.ai"),
-                bootstrap_password: env_string("RAG_DEBUGGER_BOOTSTRAP_PASSWORD", "CorpusLab#2026"),
+                bootstrap_password: required_env_string("RAG_DEBUGGER_BOOTSTRAP_PASSWORD")?,
                 bootstrap_user_name: env_string("RAG_DEBUGGER_BOOTSTRAP_USER_NAME", "Demo User"),
                 bootstrap_organization_name: env_string(
                     "RAG_DEBUGGER_BOOTSTRAP_ORGANIZATION",
@@ -230,6 +222,22 @@ fn env_storage_backend(name: &str) -> Result<StorageBackend, ConfigError> {
 
 fn env_string(name: &str, default: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| default.to_owned())
+}
+
+fn required_env_string(name: &'static str) -> Result<String, ConfigError> {
+    validate_required_env_string(name, std::env::var(name))
+}
+
+fn validate_required_env_string(
+    name: &'static str,
+    value: Result<String, VarError>,
+) -> Result<String, ConfigError> {
+    match value {
+        Ok(value) if value.trim().is_empty() => Err(ConfigError::EmptyEnvironmentVariable { name }),
+        Ok(value) => Ok(value),
+        Err(VarError::NotPresent) => Err(ConfigError::MissingEnvironmentVariable { name }),
+        Err(VarError::NotUnicode(_)) => Err(ConfigError::InvalidEnvironmentVariable { name }),
+    }
 }
 
 fn env_list(name: &str, default: &[&str]) -> Vec<String> {
@@ -385,7 +393,7 @@ mod tests {
                 session_ttl_hours: 168,
                 cookie_secure: false,
                 bootstrap_email: "demo@corpuslab.ai".to_owned(),
-                bootstrap_password: "CorpusLab#2026".to_owned(),
+                bootstrap_password: "test-only-bootstrap-password".to_owned(),
                 bootstrap_user_name: "Demo User".to_owned(),
                 bootstrap_organization_name: "CorpusLab Demo Organization".to_owned(),
                 bootstrap_workspace_name: "Corpus Demo Workspace".to_owned(),
@@ -417,5 +425,39 @@ mod tests {
             Err(ConfigError::InvalidNumber { .. })
         ));
         assert_eq!(env_positive_u32("CORPUSLAB_TEST_TWO", 2).ok(), Some(2));
+    }
+
+    #[test]
+    fn missing_bootstrap_password_is_rejected() {
+        assert!(matches!(
+            validate_required_env_string(
+                "RAG_DEBUGGER_BOOTSTRAP_PASSWORD",
+                Err(VarError::NotPresent)
+            ),
+            Err(ConfigError::MissingEnvironmentVariable {
+                name: "RAG_DEBUGGER_BOOTSTRAP_PASSWORD"
+            })
+        ));
+    }
+
+    #[test]
+    fn empty_bootstrap_password_is_rejected() {
+        assert!(matches!(
+            validate_required_env_string("RAG_DEBUGGER_BOOTSTRAP_PASSWORD", Ok("  ".to_owned())),
+            Err(ConfigError::EmptyEnvironmentVariable {
+                name: "RAG_DEBUGGER_BOOTSTRAP_PASSWORD"
+            })
+        ));
+    }
+
+    #[test]
+    fn explicitly_supplied_bootstrap_password_is_accepted() {
+        let password = "test-only-bootstrap-password".to_owned();
+
+        assert_eq!(
+            validate_required_env_string("RAG_DEBUGGER_BOOTSTRAP_PASSWORD", Ok(password.clone()))
+                .ok(),
+            Some(password)
+        );
     }
 }

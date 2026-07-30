@@ -4,6 +4,7 @@ import {
   expectElementsNotToOverlap,
   expectNoHorizontalOverflow,
 } from "./support/layoutAssertions";
+import { testCredentials } from "./support/testCredentials";
 
 test("completes the real guided workflow against the memory API", async ({
   page,
@@ -11,8 +12,8 @@ test("completes the real guided workflow against the memory API", async ({
   const fileName = `gpu-platform-guide-${crypto.randomUUID()}.md`;
 
   await page.goto("/login");
-  await page.getByLabel("Email").fill("demo@corpuslab.ai");
-  await page.getByLabel("Password").fill("CorpusLab#2026");
+  await page.getByLabel("Email").fill(testCredentials.email);
+  await page.getByLabel("Password").fill(testCredentials.password);
   await page.getByRole("button", { name: /open workbench/i }).click();
   await expect(page).toHaveURL(/\/app$/);
 
@@ -162,8 +163,8 @@ test("completes the versioned sample demo through Markdown audit export", async 
 }) => {
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/login");
-  await page.getByLabel("Email").fill("demo@corpuslab.ai");
-  await page.getByLabel("Password").fill("CorpusLab#2026");
+  await page.getByLabel("Email").fill(testCredentials.email);
+  await page.getByLabel("Password").fill(testCredentials.password);
   await page.getByRole("button", { name: /open workbench/i }).click();
   await expect(page).toHaveURL(/\/app$/);
 

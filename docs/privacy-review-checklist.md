@@ -28,6 +28,7 @@ A pull request needs privacy review if it:
 ## Secrets And Access
 
 - [ ] Passwords, session tokens, cookies, API keys, authorization headers, provider secrets, and database URLs are never logged.
+- [ ] Runtime bootstrap passwords and non-local database credentials come from deployment-managed environment values; committed examples contain no password except credentials explicitly scoped to local Docker services.
 - [ ] API key and session secrets are stored only as one-way hashes; full API key secrets are shown once.
 - [ ] New endpoints enforce the intended session, API-key scope, workspace, and role boundary.
 - [ ] Error responses do not expose storage errors, SQL, credentials, internal paths, or provider payloads.
@@ -64,3 +65,7 @@ Structured diagnosis is derived locally from already persisted retrieval metadat
 Evidence lookup remains an authenticated local workbench operation and introduces no external provider, telemetry, export, or retention class. Requested IDs resolve through workspace-scoped storage authorization and are capped before repository access. Candidate search returns only bounded metadata and 280-character chunk previews; unrestricted chunk bodies are not copied into evidence lookup responses. MemoryStore browse uses derived ordering keys without duplicating raw corpus text, while its local-development substring search reads canonical text under the existing process-local lock. Short non-ID searches are rejected, selected IDs remain removable when metadata resolution fails, and queries, previews, credentials, headers, cookies, and database values are not logged.
 
 Issue #68 privacy review: protected middleware validates real sessions in tests and production; corpus evidence, embedding status/writes, retrieval candidates/runs, traces/reruns, Eval datasets/cases/experiments/runs, CI reads, demo progress, Overview metrics, and report inputs carry the authenticated workspace into repository calls. MemoryStore and Postgres enforce ownership before returning data or mutating evidence, embeddings, runs, or traces. Cross-workspace and nonexistent identifiers receive equivalent unresolved, unavailable, or resource-specific not-found results. Trace writes verify project and source-run ownership, while embedding ownership is derived from chunk ancestry. The migrations assign only uniquely attributable or single-workspace legacy records; ambiguous multi-workspace records remain quarantined. No raw corpus content, inaccessible IDs, membership details, cookies, or secrets are added to logs or errors.
+
+## Hard-Coded Credential Remediation Review Note
+
+The API now requires a non-empty bootstrap password from the process environment and requires `DATABASE_URL` whenever Postgres is selected. Committed examples leave the bootstrap password blank; the documented fixed Postgres account is explicitly limited to the local Docker service. The login UI starts with empty fields and exposes no credentials. API and Playwright credentials are synthetic, named test fixtures, and no password, database URL, session value, or new diagnostic field is logged or returned through runtime configuration.
