@@ -68,6 +68,12 @@ just full-check
 
 Use `just rust-check` or `just web-check` for focused iteration. `just check` composes both fast gates. `just ci-check` is the explicit release-equivalent gate, and `just full-check` remains its backward-compatible alias.
 
+## Pull Request Dependency Gate
+
+Every pull request runs the `Dependency Review` check. It compares dependency changes with the GitHub Advisory Database and fails when the pull request introduces a known High or Critical vulnerability in runtime, development, or unknown dependency scopes.
+
+The workflow uses read-only repository permissions, disables persisted checkout credentials, pins actions to immutable commit SHAs, and cancels superseded runs. Review the reported dependency diff before merging even when the check passes; severity is a screening threshold, not a complete risk assessment.
+
 ## Code Quality Rules
 
 - AI-agent and agent-assisted changes must follow the root `AGENTS.md` rules.
