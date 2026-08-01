@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Security
 
+- Upgraded PDF extraction to remove a known `lopdf` vulnerability, marked internal Rust packages as non-publishable, and refined Cargo Deny to block direct unmaintained dependencies while keeping transitive unmaintained, duplicate-version, and yanked-crate findings visible as nonblocking warnings.
 - Added a strict Cargo Deny gate for RustSec advisories, dependency bans, approved licenses, and trusted dependency sources.
 - Removed compiled bootstrap and Postgres passwords from API runtime defaults, require explicit non-empty bootstrap credentials and Postgres configuration, and stopped displaying or prefilling login credentials in the web app.
 

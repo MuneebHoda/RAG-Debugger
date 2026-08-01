@@ -1,5 +1,6 @@
 [advisories]
 ignore = []
+unmaintained = "workspace"
 
 [licenses]
 allow = [
@@ -24,6 +25,7 @@ ignore = false
 registries = []
 
 [bans]
+allow-wildcard-paths = true
 multiple-versions = "warn"
 wildcards = "deny"
 highlight = "all"
