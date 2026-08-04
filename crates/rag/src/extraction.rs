@@ -164,4 +164,19 @@ mod tests {
 
         assert!(matches!(error, ExtractionError::Pdf(_)));
     }
+
+    #[test]
+    fn extracts_text_from_valid_pdf() {
+        let extracted = TextExtractor
+            .extract(
+                "simple-text.pdf",
+                None,
+                include_bytes!("../tests/fixtures/simple-text.pdf"),
+            )
+            .expect("valid pdf extraction");
+
+        assert_eq!(extracted.kind, SupportedFileKind::Pdf);
+        assert_eq!(extracted.mime_type.as_deref(), Some("application/pdf"));
+        assert!(extracted.text.contains("CorpusLab PDF extraction works."));
+    }
 }

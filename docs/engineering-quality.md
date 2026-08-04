@@ -74,6 +74,22 @@ Every pull request runs the `Dependency Review` check. It compares dependency ch
 
 The workflow uses read-only repository permissions, disables persisted checkout credentials, pins actions to immutable commit SHAs, and cancels superseded runs. Review the reported dependency diff before merging even when the check passes; severity is a screening threshold, not a complete risk assessment.
 
+## Rust Dependency Policy Gate
+
+The `Cargo Deny` check evaluates the complete locked Rust workspace on every pull request, every push to `main`, and a weekly schedule. It checks RustSec advisories, dependency bans, license policy, and dependency sources. Known vulnerabilities block regardless of whether they are direct or transitive dependencies.
+
+Unmaintained advisories block when they apply to a direct dependency of a workspace package. Transitive unmaintained dependencies remain maintenance concerns but do not currently block CI. Versionless path dependencies are permitted only inside workspace packages explicitly marked as private with `publish = false`; wildcard registry dependencies remain denied.
+
+Unapproved licenses, unknown registries, and unknown Git sources block CI. Duplicate transitive crate versions and yanked crates, including the current `spin 0.9.8` dependency, remain visible as warnings so they can be reduced incrementally without weakening the security gate.
+
+Do not ignore an advisory or add a license exception simply to make CI pass. Any necessary license exception must name an exact crate and version, explain why the license is required and compatible with the project, and receive explicit review. Advisory exceptions require the same written justification and security review, including the exposure, available mitigations, and a removal plan.
+
+Run the same policy locally with Cargo Deny 0.20.2:
+
+```sh
+cargo deny --workspace --all-features --locked check advisories bans licenses sources
+```
+
 ## Code Quality Rules
 
 - AI-agent and agent-assisted changes must follow the root `AGENTS.md` rules.
