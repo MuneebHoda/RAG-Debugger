@@ -1,0 +1,129 @@
+name: Coverage
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-coverage:
+    name: Rust Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+      - name: Install LLVM coverage tools
+        run: |
+          rustup component add llvm-tools-preview
+          cargo install cargo-llvm-cov --version 0.8.7 --locked
+      - name: Generate Rust coverage
+        run: |
+          mkdir -p target/llvm-cov
+          cargo llvm-cov --workspace --all-features --locked \
+            --lcov --output-path target/llvm-cov/lcov.info
+      - name: Normalize and verify Rust coverage paths
+        shell: python
+        run: |
+          from pathlib import Path
+
+          report = Path("target/llvm-cov/lcov.info")
+          if not report.is_file() or report.stat().st_size == 0:
+              raise SystemExit("Rust LCOV report is missing or empty")
+
+          workspace = Path.cwd().resolve()
+          normalized = []
+          sources = 0
+          for line in report.read_text(encoding="utf-8").splitlines():
+              if line.startswith("SF:"):
+                  sources += 1
+                  source = Path(line[3:])
+                  if source.is_absolute():
+                      try:
+                          source = source.resolve().relative_to(workspace)
+                      except ValueError as error:
+                          raise SystemExit(f"LCOV source is outside the repository: {source}") from error
+                  if not source.parts or ".." in source.parts:
+                      raise SystemExit(f"LCOV source is not repository-relative: {source}")
+                  line = f"SF:{source.as_posix()}"
+              normalized.append(line)
+
+          if sources == 0:
+              raise SystemExit("Rust LCOV report contains no source records")
+          report.write_text("\n".join(normalized) + "\n", encoding="utf-8")
+      - name: Upload Rust coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: target/llvm-cov/lcov.info
+          flags: rust
+          use_oidc: true
+
+  web-coverage:
+    name: Web Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Generate web coverage
+        working-directory: apps/web
+        run: npm run test:coverage
+      - name: Verify web coverage paths
+        shell: python
+        run: |
+          from pathlib import Path
+
+          report = Path("apps/web/coverage/lcov.info")
+          if not report.is_file() or report.stat().st_size == 0:
+              raise SystemExit("Web LCOV report is missing or empty")
+
+          sources = []
+          for line in report.read_text(encoding="utf-8").splitlines():
+              if line.startswith("SF:"):
+                  source = Path(line[3:])
+                  if source.is_absolute() or not source.parts or ".." in source.parts:
+                      raise SystemExit(f"LCOV source is not repository-relative: {source}")
+                  sources.append(source.as_posix())
+
+          if not sources:
+              raise SystemExit("Web LCOV report contains no source records")
+          if any(not source.startswith("apps/web/src/") for source in sources):
+              raise SystemExit("Web LCOV report contains a source outside apps/web/src")
+      - name: Upload web coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          disable_search: true
+          fail_ci_if_error: true
+          files: apps/web/coverage/lcov.info
+          flags: web
+          use_oidc: true

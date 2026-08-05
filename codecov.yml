@@ -1,0 +1,28 @@
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+flags:
+  rust:
+    paths:
+      - apps/api/src/
+      - crates/core/src/
+      - crates/rag/src/
+      - crates/storage/src/
+    carryforward: false
+  web:
+    paths:
+      - apps/web/src/
+    carryforward: false
+
+comment:
+  layout: "diff, flags, files"
+  behavior: default
+  require_changes: false
+  require_base: false
+  require_head: true
