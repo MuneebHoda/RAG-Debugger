@@ -13,6 +13,19 @@ export function buildGitHubApiUrl(endpoint) {
       !/[\u0000-\u001f\u007f]/u.test(endpoint),
     "unsafe GitHub API endpoint",
   );
+  const rawPath = endpoint.split(/[?#]/u, 1)[0];
+  for (const segment of rawPath.split("/")) {
+    let decoded;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch (error) {
+      throw new Error("unsafe GitHub API endpoint", { cause: error });
+    }
+    invariant(
+      !decoded.split(/[\\/]/u).some((part) => part === "." || part === ".."),
+      "unsafe GitHub API endpoint",
+    );
+  }
   let url;
   try {
     url = new URL(endpoint, canonicalApiOrigin);

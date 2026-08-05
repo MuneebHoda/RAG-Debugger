@@ -121,6 +121,9 @@ test("GitHub destinations reject origin, credential, scheme, and fragment bypass
     "https://user:pass@api.github.com/repos/x",
     "/repos/x#https://evil.example",
     "\\\\evil.example\\repos\\x",
+    "/repos/MuneebHoda/RAG-Debugger/%2e%2e/issues",
+    "/repos/MuneebHoda/RAG-Debugger/%2e%2e%2fissues",
+    "/repos/MuneebHoda/RAG-Debugger/%ZZ/issues",
   ]) {
     assert.throws(() => buildGitHubApiUrl(endpoint), /unsafe|canonical/u);
   }
@@ -136,6 +139,11 @@ test("GitHub destinations reject origin, credential, scheme, and fragment bypass
   );
   assert.equal(query.origin, "https://api.github.com");
   assert.equal(query.searchParams.get("q"), "https://evil.example/collect");
+  assert.equal(
+    buildGitHubApiUrl("/repos/MuneebHoda/RAG-Debugger/labels/agent%2Fgenerated")
+      .pathname,
+    "/repos/MuneebHoda/RAG-Debugger/labels/agent%2Fgenerated",
+  );
 });
 
 test("GitHub client fixes the HTTPS origin and disables redirects", async () => {
