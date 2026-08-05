@@ -69,3 +69,11 @@ Issue #68 privacy review: protected middleware validates real sessions in tests 
 ## Hard-Coded Credential Remediation Review Note
 
 The API now requires a non-empty bootstrap password from the process environment and requires `DATABASE_URL` whenever Postgres is selected. Committed examples leave the bootstrap password blank; the documented fixed Postgres account is explicitly limited to the local Docker service. The login UI starts with empty fields and exposes no credentials. API and Playwright credentials are synthetic, named test fixtures, and no password, database URL, session value, or new diagnostic field is logged or returned through runtime configuration.
+
+## CodeRabbit Review Provider Note
+
+CodeRabbit is an external engineering review provider installed only on `MuneebHoda/RAG-Debugger`. It may process repository source, pull request diffs, review conversations, commit metadata, and CI status needed to produce advisory reviews. It is not integrated with CorpusLab runtime services and receives no documents, chunks, embeddings, retrieval queries, traces, reports, workspace records, database values, session values, API keys, headers, cookies, or deployment secrets from the product.
+
+Raw customer data remains local by default, no product export or telemetry path changes, and no new data class is persisted by CorpusLab. Repository secrets remain prohibited in source, pull request content, logs, and test artifacts; GitHub secret scanning and push protection are enabled before CodeRabbit receives a pull request diff.
+
+This public repository explicitly accepts CodeRabbit's default cache and knowledge-base retention. Code/dependency caches expire within seven days; review learnings and pull request context remain until an administrator deletes them or enables the immediate, irreversible `knowledge_base.opt_out`. The repository owner is responsible for reviewing CodeRabbit's maintained subprocessor register, currently including model providers such as OpenAI and Anthropic, and for verifying deletion in the CodeRabbit dashboard during rollback. After deletion is verified, removing repository access and reverting `.coderabbit.yaml` stops future processing without a CorpusLab data migration. ADR 0005 records this boundary and procedure.
