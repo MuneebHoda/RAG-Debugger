@@ -1,0 +1,18 @@
+{
+  "issue": {
+    "number": 27,
+    "state": "open",
+    "title": "feat: polish CI eval workflow",
+    "body": "Improve CI API-key onboarding, failed-gate diagnosis, privacy-safe reports, tests, and documentation. Do not add hosted services, billing, public links, or external model calls.",
+    "labels": ["type/feature", "area/api", "area/web"]
+  },
+  "candidate_files": {
+    "apps/api/src/http/api_keys.rs": "// Issue 27 fixture: preserve hashed CI API-key handling.\n",
+    "apps/api/tests/auth_ci.rs": "// Issue 27 fixture: verify CI API-key authentication.\n",
+    "apps/web/src/features/workbench/settings/SettingsPage.test.tsx": "// Issue 27 fixture: verify one-time CI key onboarding.\n",
+    "apps/web/src/features/workbench/settings/components/ApiKeysSettingsPanel.tsx": "// Issue 27 fixture: explain CI API-key setup.\n",
+    "crates/rag/src/reports/ci.rs": "// Issue 27 fixture: preserve privacy-safe failed-gate diagnosis.\n",
+    "docs/ci-eval-workflows.md": "# CI eval fixture\n\nUse the hashed workspace key without printing document content.\n",
+    "docs/privacy-review-checklist.md": "# Privacy fixture\n\nCI summaries contain identifiers, labels, and metrics only.\n"
+  }
+}

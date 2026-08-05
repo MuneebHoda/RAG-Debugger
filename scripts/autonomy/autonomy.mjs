@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -8,10 +7,12 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import {
-  builderPullRequestBody,
+  assertIssueClaimable,
   chooseEligibleIssue,
   containsSecretLikeValue,
-  deriveBranchName,
+  createBuilderContext,
+  createBuilderPublicationPlan,
+  createTrustedBootstrapAuthorization,
   invariant,
   isReviewedBootstrap,
   normalizeTitle,
@@ -31,6 +32,7 @@ import {
 import {
   applyCandidate,
   captureCandidate,
+  readStableCandidateSnapshot,
   validateCandidate,
   verifyAttestation,
 } from "./candidate.mjs";
@@ -77,7 +79,6 @@ function githubClient(tokenName = "GITHUB_TOKEN") {
   return new GitHubClient({
     repository: env("GITHUB_REPOSITORY"),
     token: env(tokenName),
-    apiUrl: env("GITHUB_API_URL", "https://api.github.com"),
   });
 }
 
@@ -147,23 +148,24 @@ async function issueContext(client, issue, policy, trigger, approvedEvent) {
       "latest approval label was not applied by an authorized maintainer",
     );
   }
-  return {
-    version: 1,
-    base_sha: env("GITHUB_SHA"),
+  return createBuilderContext({
+    baseSha: env("GITHUB_SHA"),
     trigger,
     repository: env("GITHUB_REPOSITORY"),
-    run_url: `${env("GITHUB_SERVER_URL", "https://github.com")}/${env("GITHUB_REPOSITORY")}/actions/runs/${env("GITHUB_RUN_ID")}`,
-    authorized_labels: authorizedLabels,
-    issue: {
-      number: issue.number,
-      title: sanitizeIssueText(issue.title, 200),
-      body: sanitizeIssueText(
-        issue.body ?? "",
-        policy.limits.issue_body_characters,
-      ),
-      labels: labelNames(issue).filter((label) => !label.startsWith("agent/")),
-    },
-  };
+    runUrl: `${env("GITHUB_SERVER_URL", "https://github.com")}/${env("GITHUB_REPOSITORY")}/actions/runs/${env("GITHUB_RUN_ID")}`,
+    authorizedLabels,
+    issue,
+    policy,
+    bootstrapEvent:
+      trigger === "bootstrap"
+        ? {
+            beforeSha: env("GITHUB_EVENT_BEFORE"),
+            eventName: env("GITHUB_EVENT_NAME"),
+            ref: env("GITHUB_REF"),
+            beforePolicyPresent: false,
+          }
+        : undefined,
+  });
 }
 
 async function assertNoGeneratedPullRequest(client, policy) {
@@ -380,15 +382,6 @@ async function builderPreflight(outputDirectory) {
     return;
   }
 
-  const names = labelNames(selected);
-  invariant(
-    ![
-      policy.labels.claimed,
-      policy.labels.blocked,
-      policy.labels.generated,
-    ].some((label) => names.includes(label)),
-    "issue is already claimed, blocked, or generated",
-  );
   assertRuntimeConfigured();
   const context = await issueContext(
     client,
@@ -397,6 +390,7 @@ async function builderPreflight(outputDirectory) {
     trigger,
     approvedEvent,
   );
+  assertIssueClaimable(selected, context, policy);
   await writeFile(
     path.join(outputDirectory, "builder-context.json"),
     `${JSON.stringify(context, null, 2)}\n`,
@@ -457,28 +451,7 @@ async function claimIssue(contextPath) {
   await upsertAgentLabels(client, policy);
   await assertNoGeneratedPullRequest(client, policy);
   const issue = await client.getIssue(context.issue.number);
-  invariant(isOpenIssue(issue), "selected issue is no longer open");
-  const names = labelNames(issue);
-  invariant(
-    ![
-      policy.labels.claimed,
-      policy.labels.blocked,
-      policy.labels.generated,
-    ].some((label) => names.includes(label)),
-    "selected issue is no longer claimable",
-  );
-  if (context.trigger === "bootstrap") {
-    invariant(
-      issue.number === policy.bootstrap.issue_number &&
-        policy.authorization_marker === "issue-99-reviewed-bootstrap-v1",
-      "invalid bootstrap authorization",
-    );
-  } else {
-    invariant(
-      names.includes(policy.labels.approved),
-      "selected issue is no longer approved",
-    );
-  }
+  assertIssueClaimable(issue, context, policy);
   await client.addLabels(issue.number, [policy.labels.claimed]);
   await client.addComment(
     issue.number,
@@ -577,13 +550,14 @@ async function publishBuilder(artifactDirectory, attestationPath) {
   ]);
   const client = githubClient("AUTONOMY_GITHUB_TOKEN");
   const issue = await client.getIssue(context.issue.number);
-  invariant(isOpenIssue(issue), "source issue is no longer open");
   const names = labelNames(issue);
-  invariant(
-    names.includes(policy.labels.claimed) &&
-      !names.includes(policy.labels.blocked),
-    "source issue is not in a publishable claim state",
-  );
+  const publication = createBuilderPublicationPlan({
+    manifest,
+    output,
+    context,
+    policy,
+    issue,
+  });
   await assertNoGeneratedPullRequest(client, policy);
   for (const required of context.authorized_labels) {
     invariant(
@@ -618,13 +592,14 @@ async function publishBuilder(artifactDirectory, attestationPath) {
       });
       continue;
     }
-    const bytes = await readFile(
-      path.join(artifactDirectory, "files", entry.path),
-    );
-    invariant(
-      createHash("sha256").update(bytes).digest("hex") === entry.sha256,
-      `candidate file changed after validation: ${entry.path}`,
-    );
+    const { bytes } = await readStableCandidateSnapshot({
+      root: path.join(artifactDirectory, "files"),
+      relativePath: entry.path,
+      errorMessage: `candidate file changed after validation: ${entry.path}`,
+      maximumBytes: entry.bytes,
+      expectedBytes: entry.bytes,
+      expectedSha256: entry.sha256,
+    });
     const blob = await client.createBlob(bytes.toString("base64"));
     treeEntries.push({
       path: entry.path,
@@ -634,27 +609,19 @@ async function publishBuilder(artifactDirectory, attestationPath) {
     });
   }
   const tree = await client.createTree(baseCommit.tree.sha, treeEntries);
-  const conventional =
-    /^(?:feat|fix|chore|docs|refactor|test|perf|security|ci)(?:\([^)]+\))?:\s\S/u.test(
-      context.issue.title,
-    );
-  const title = conventional
-    ? context.issue.title
-    : `chore: implement issue #${issue.number}`;
-  const commit = await client.createCommit(title, tree.sha, manifest.base_sha);
-  const branch = deriveBranchName(issue.number, context.issue.title);
-  await client.createRef(branch, commit.sha);
-  const pullRequest = await client.createPullRequest({
-    title,
-    body: builderPullRequestBody(output, context),
-    head: branch,
-  });
-  const transferable = names.filter((label) =>
-    policy.allowed_issue_labels.includes(label),
+  const commit = await client.createCommit(
+    publication.pull_request.title,
+    tree.sha,
+    manifest.base_sha,
   );
+  await client.createRef(publication.branch, commit.sha);
+  const pullRequest = await client.createPullRequest({
+    ...publication.pull_request,
+    head: publication.branch,
+  });
   await client.addLabels(pullRequest.number, [
     policy.labels.generated,
-    ...transferable,
+    ...publication.transferable_labels,
   ]);
   await client.addLabels(issue.number, [policy.labels.generated]);
   await client.removeLabel(issue.number, policy.labels.claimed);
@@ -706,6 +673,15 @@ async function validateConfiguration() {
     policy.limits.planner_proposals <= 3 && policy.limits.open_proposals <= 3,
     "proposal bounds cannot exceed three",
   );
+  createTrustedBootstrapAuthorization({
+    policy,
+    issueNumber: policy.bootstrap.issue_number,
+    baseSha: "a".repeat(40),
+    beforeSha: "b".repeat(40),
+    eventName: "push",
+    ref: "refs/heads/main",
+    beforePolicyPresent: false,
+  });
   for (const schemaPath of [plannerSchemaPath, builderSchemaPath]) {
     const schema = await readJson(schemaPath);
     invariant(

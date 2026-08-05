@@ -349,9 +349,11 @@ CorpusLab's repository automation separates planning, implementation, validation
 
 Generation runs through the pinned official Codex action with workspace-write and `drop-sudo`, but no GitHub App token. A fresh job validates schema output, sanitization, path and size policy, artifact hashes, tests, Rust/web quality, Playwright, documentation, migrations, Postgres contracts, and Cargo Deny. Only a final non-executing publisher receives a short-lived App token for repository contents, issues, and draft pull requests.
 
-Schedules are disabled by default. Approval-label provenance, global builder concurrency, one-open-PR enforcement, protected/sensitive paths, pause checks, and explicit recovery prevent the automation from becoming a retry or merge loop. Humans retain issue approval, review, ready status, merge, deployment, release, and closure authority. See `docs/autonomous-engineering.md` and ADR 0006 for setup, privacy, cost, rotation, audit, pause, and rollback.
+Schedules are disabled by default. Approval-label provenance, global builder concurrency, one-open-PR enforcement, protected/sensitive paths, pause checks, and explicit recovery prevent the automation from becoming a retry or merge loop. Humans retain issue approval, review, ready status, merge, deployment, release, and closure authority. The one-time Issue #27 bootstrap uses an event-bound trusted capability for a fixed set of exact CI-key, Settings, report, and privacy-document files; every other sensitive change requires maintainer `agent/sensitive-approved` provenance.
 
-Deterministic tests run through `just autonomy-check` and require no model credential or live GitHub mutation.
+Candidate and artifact files use bounded no-follow handles, post-read identity/version checks, and immutable byte snapshots for scanning, hashing, validation, copying, and publication. The publisher permits only the canonical HTTPS GitHub API origin and refuses redirects. See `docs/autonomous-engineering.md` and ADR 0006 for setup, privacy, cost, rotation, audit, pause, and rollback.
+
+Deterministic tests run through `just autonomy-check` and require no model credential or live GitHub mutation. The fixture suite includes an end-to-end Issue #27 publication-eligibility path and negative bootstrap, sensitive-path, file-race, integrity, destination, and retry cases.
 
 ## Testing Strategy
 

@@ -13,7 +13,9 @@ Use independent planner and builder workflows with repository-owned prompts, pol
 
 Codex generation is isolated from publication. It runs through the pinned official action with workspace-write and `drop-sudo`, receives no GitHub App token, and produces schema-constrained output plus a candidate artifact. A fresh credential-free job applies and tests the artifact with trusted code copied before candidate application. A separate publisher verifies an attestation and creates Git objects with a short-lived repository-only GitHub App token.
 
-The planner can create proposed issues but cannot approve them. The builder can open one draft pull request but cannot mark it ready, approve, merge, deploy, release, repair, or close work. Protected paths are unavailable to autonomous changes, sensitive paths need an additional maintainer label, and size limits fail closed.
+The planner can create proposed issues but cannot approve them. The builder can open one draft pull request but cannot mark it ready, approve, merge, deploy, release, repair, or close work. Protected paths are unavailable to autonomous changes, sensitive paths need an additional maintainer label, and size limits fail closed. The reviewed Issue #27 bootstrap carries a policy-owned, event-bound capability for a fixed list of exact CI-key, Settings, report, and privacy-document files. It cannot be created by issue or model content and does not weaken ordinary sensitive approval.
+
+Candidate data is captured through bounded no-follow handles and immutable byte snapshots. Handle/path identity and version metadata is checked after each read, and the same bytes are scanned, hashed, copied, validated, and published. The publication client constructs only canonical HTTPS GitHub API destinations and refuses redirects.
 
 ## Consequences
 

@@ -14,7 +14,25 @@
     }
   },
   "bootstrap": {
-    "issue_number": 27
+    "issue_number": 27,
+    "authorization": {
+      "id": "issue-27-ci-eval-bootstrap-v1",
+      "sensitive_paths": [
+        "apps/api/src/http/api_keys.rs",
+        "apps/api/src/http/reports.rs",
+        "apps/web/src/features/workbench/settings/SettingsPage.module.css",
+        "apps/web/src/features/workbench/settings/SettingsPage.test.tsx",
+        "apps/web/src/features/workbench/settings/SettingsPage.tsx",
+        "apps/web/src/features/workbench/settings/components/ApiKeysSettingsPanel.tsx",
+        "apps/web/src/features/workbench/settings/components/SettingsPanels.tsx",
+        "apps/web/src/lib/api/apiKeys.ts",
+        "apps/web/src/lib/api/reports.ts",
+        "crates/core/src/report.rs",
+        "crates/rag/src/reports/ci.rs",
+        "docs/privacy-review-checklist.md",
+        "docs/rag-audit-reports.md"
+      ]
+    }
   },
   "labels": {
     "proposed": "agent/proposed",

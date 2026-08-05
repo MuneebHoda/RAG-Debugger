@@ -16,7 +16,7 @@ RAG Debugger is a hybrid corpus observability system for diagnosing retrieval-au
 
 ## Engineering Automation Boundary
 
-Autonomous engineering uses a three-stage trust split: Codex generation without GitHub publication credentials, fresh-checkout validation without repository write credentials, and a non-executing publisher with a short-lived repository-only GitHub App token. Policy, prompts, schemas, protected paths, size limits, and fixtures are versioned in the repository. This system processes public source and sanitized engineering requirements only; it has no access path to CorpusLab documents, retrieval data, workspaces, databases, or deployments. ADR 0006 and [`docs/autonomous-engineering.md`](autonomous-engineering.md) define the boundary.
+Autonomous engineering uses a three-stage trust split: Codex generation without GitHub publication credentials, fresh-checkout validation without repository write credentials, and a non-executing publisher with a short-lived repository-only GitHub App token. Policy, prompts, schemas, protected paths, size limits, and fixtures are versioned in the repository. Candidate files move through bounded no-follow snapshots, and publication is fixed to the canonical HTTPS GitHub API without redirects. The one-time Issue #27 trial has an event-bound, policy-owned capability for an exact list of CI-key, Settings, report, and privacy-document files; it is not a general sensitive-path bypass. This system processes public source and sanitized engineering requirements only; it has no access path to CorpusLab documents, retrieval data, workspaces, databases, or deployments. ADR 0006 and [`docs/autonomous-engineering.md`](autonomous-engineering.md) define the boundary.
 
 ## Privacy Boundary
 

@@ -55,6 +55,151 @@ export function isReviewedBootstrap({
   );
 }
 
+const commitShaPattern = /^[0-9a-f]{40}$/u;
+
+function bootstrapSensitivePaths(policy) {
+  const paths = policy.bootstrap?.authorization?.sensitive_paths;
+  invariant(
+    Array.isArray(paths) && paths.length > 0,
+    "bootstrap sensitive-path authorization is missing",
+  );
+  const normalized = uniqueFirst(paths.map(normalizeRepositoryPath));
+  invariant(
+    normalized.length === paths.length &&
+      normalized.every((filePath) => !filePath.endsWith("/")),
+    "bootstrap authorization must contain unique exact file paths",
+  );
+  const classification = classifyPaths(normalized, policy);
+  invariant(
+    classification.sensitive.length === normalized.length,
+    "bootstrap authorization may contain only sensitive paths",
+  );
+  invariant(
+    classification.protected.length === 0 &&
+      classification.artifacts.length === 0,
+    "bootstrap authorization cannot include protected or artifact paths",
+  );
+  return normalized;
+}
+
+export function createTrustedBootstrapAuthorization({
+  policy,
+  issueNumber,
+  baseSha,
+  beforeSha,
+  eventName,
+  ref,
+  beforePolicyPresent,
+}) {
+  invariant(
+    issueNumber === policy.bootstrap.issue_number,
+    "bootstrap authorization is restricted to the configured issue",
+  );
+  invariant(
+    isReviewedBootstrap({
+      eventName,
+      ref,
+      beforePolicyPresent,
+      authorizationMarker: policy.authorization_marker,
+    }),
+    "bootstrap authorization requires the reviewed policy-introducing push",
+  );
+  invariant(
+    commitShaPattern.test(baseSha) &&
+      commitShaPattern.test(beforeSha) &&
+      baseSha !== beforeSha,
+    "bootstrap authorization requires distinct trusted commit SHAs",
+  );
+  invariant(
+    typeof policy.bootstrap.authorization.id === "string" &&
+      policy.bootstrap.authorization.id.length >= 12,
+    "bootstrap authorization identifier is invalid",
+  );
+  return {
+    version: 1,
+    id: policy.bootstrap.authorization.id,
+    issue_number: issueNumber,
+    policy_marker: policy.authorization_marker,
+    event_name: eventName,
+    ref,
+    before_sha: beforeSha,
+    base_sha: baseSha,
+    sensitive_paths: bootstrapSensitivePaths(policy),
+  };
+}
+
+export function validateTrustedBootstrapAuthorization(context, policy) {
+  invariant(
+    context.trigger === "bootstrap" &&
+      context.issue?.number === policy.bootstrap.issue_number,
+    "bootstrap capability is restricted to its configured issue",
+  );
+  const authorization = context.bootstrap_authorization;
+  invariant(
+    authorization && typeof authorization === "object",
+    "trusted bootstrap authorization is missing",
+  );
+  const expected = createTrustedBootstrapAuthorization({
+    policy,
+    issueNumber: context.issue.number,
+    baseSha: context.base_sha,
+    beforeSha: authorization.before_sha,
+    eventName: authorization.event_name,
+    ref: authorization.ref,
+    beforePolicyPresent: false,
+  });
+  invariant(
+    JSON.stringify(authorization) === JSON.stringify(expected),
+    "bootstrap authorization does not match trusted repository policy",
+  );
+  return expected;
+}
+
+export function createBuilderContext({
+  baseSha,
+  trigger,
+  repository,
+  runUrl,
+  authorizedLabels,
+  issue,
+  policy,
+  bootstrapEvent,
+}) {
+  const bootstrapAuthorization =
+    trigger === "bootstrap"
+      ? createTrustedBootstrapAuthorization({
+          policy,
+          issueNumber: issue.number,
+          baseSha,
+          ...bootstrapEvent,
+        })
+      : null;
+  invariant(
+    trigger === "bootstrap" || bootstrapEvent === undefined,
+    "ordinary issues cannot carry bootstrap provenance",
+  );
+  return {
+    version: 1,
+    base_sha: baseSha,
+    trigger,
+    repository,
+    run_url: runUrl,
+    authorized_labels: uniqueFirst(authorizedLabels),
+    bootstrap_authorization: bootstrapAuthorization,
+    issue: {
+      number: issue.number,
+      title: sanitizeIssueText(issue.title, 200),
+      body: sanitizeIssueText(
+        issue.body ?? "",
+        policy.limits.issue_body_characters,
+      ),
+      labels: (issue.labels ?? [])
+        .map((label) => (typeof label === "string" ? label : label.name))
+        .filter((label) => !label.startsWith("agent/")),
+    },
+  };
+}
+
 const secretPatterns = [
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/i,
   /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/,
@@ -258,6 +403,139 @@ export function classifyPaths(paths, policy) {
       policy.artifact_paths.some((candidate) =>
         matchesPolicyPath(filePath, candidate),
       ),
+    ),
+  };
+}
+
+export function validateSensitivePathAuthorization(
+  sensitivePaths,
+  context,
+  policy,
+) {
+  if (context.trigger === "bootstrap") {
+    const authorization = validateTrustedBootstrapAuthorization(
+      context,
+      policy,
+    );
+    if (sensitivePaths.length === 0) return;
+    const allowed = new Set(authorization.sensitive_paths);
+    const unauthorized = sensitivePaths.filter(
+      (filePath) => !allowed.has(filePath),
+    );
+    invariant(
+      unauthorized.length === 0,
+      `bootstrap candidate contains unauthorized sensitive paths: ${unauthorized.join(", ")}`,
+    );
+    return;
+  }
+  if (sensitivePaths.length === 0) {
+    invariant(
+      context.bootstrap_authorization === null ||
+        context.bootstrap_authorization === undefined,
+      "ordinary issues cannot carry bootstrap authorization",
+    );
+    return;
+  }
+  invariant(
+    (context.authorized_labels ?? []).includes(
+      policy.labels.sensitive_approved,
+    ),
+    `sensitive paths require ${policy.labels.sensitive_approved}`,
+  );
+  invariant(
+    context.bootstrap_authorization === null ||
+      context.bootstrap_authorization === undefined,
+    "ordinary issues cannot carry bootstrap authorization",
+  );
+}
+
+function issueLabelNames(issue) {
+  return (issue.labels ?? []).map((label) =>
+    typeof label === "string" ? label : label.name,
+  );
+}
+
+export function assertIssueClaimable(issue, context, policy) {
+  invariant(
+    issue?.state === "open" && !issue.pull_request,
+    "selected issue is no longer open",
+  );
+  invariant(
+    issue.number === context.issue.number,
+    "selected issue does not match trusted context",
+  );
+  const names = issueLabelNames(issue);
+  invariant(
+    ![
+      policy.labels.claimed,
+      policy.labels.blocked,
+      policy.labels.generated,
+    ].some((label) => names.includes(label)),
+    "selected issue is no longer claimable",
+  );
+  if (context.trigger === "bootstrap") {
+    validateTrustedBootstrapAuthorization(context, policy);
+  } else {
+    invariant(
+      names.includes(policy.labels.approved),
+      "selected issue is no longer approved",
+    );
+  }
+}
+
+export function bootstrapPublicationRecorded(issue, policy) {
+  return issueLabelNames(issue).includes(policy.labels.generated);
+}
+
+export function createBuilderPublicationPlan({
+  manifest,
+  output,
+  context,
+  policy,
+  issue,
+}) {
+  invariant(
+    issue?.state === "open" && issue.number === context.issue.number,
+    "source issue is not publishable",
+  );
+  const names = issueLabelNames(issue);
+  invariant(
+    names.includes(policy.labels.claimed) &&
+      !names.includes(policy.labels.blocked) &&
+      !names.includes(policy.labels.generated),
+    "source issue is not in a publishable claim state",
+  );
+  invariant(
+    manifest.base_sha === context.base_sha &&
+      manifest.issue_number === context.issue.number,
+    "publication identity does not match the trusted candidate",
+  );
+  if (context.trigger === "bootstrap")
+    validateTrustedBootstrapAuthorization(context, policy);
+  else
+    invariant(
+      context.bootstrap_authorization === null ||
+        context.bootstrap_authorization === undefined,
+      "ordinary publication cannot carry bootstrap authorization",
+    );
+
+  const conventional =
+    /^(?:feat|fix|chore|docs|refactor|test|perf|security|ci)(?:\([^)]+\))?:\s\S/u.test(
+      context.issue.title,
+    );
+  const title = conventional
+    ? context.issue.title
+    : `chore: implement issue #${issue.number}`;
+  return {
+    branch: deriveBranchName(issue.number, context.issue.title),
+    pull_request: {
+      title,
+      body: builderPullRequestBody(output, context),
+      base: "main",
+      draft: true,
+    },
+    transferable_labels: names.filter((label) =>
+      policy.allowed_issue_labels.includes(label),
     ),
   };
 }

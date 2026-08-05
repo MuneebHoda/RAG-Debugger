@@ -19,6 +19,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 ### Added
 
 - Bounded autonomous engineering with independent GPT-5.6 Sol planner and builder workflows, maintainer-controlled approval labels, deterministic schemas and guardrails, credential-isolated validation/publication, default-disabled schedules, one-time Issue #27 bootstrap, and human-only review/merge authority.
+- Hardened the Issue #27 autonomous bootstrap with an exact-file trusted sensitive capability, a complete dry-run publication fixture, immutable no-follow candidate snapshots, and canonical no-redirect GitHub API publication.
 - Repository governance baseline with rendered-Markdown exact-link issue-policy validation, private security-reporting and containment guidance, actionable bug and feature forms, explicit CODEOWNERS coverage, and clean-worktree exact-commit release verification.
 - Advisory CodeRabbit reviews for ready pull requests with repository-owned settings, high-level summaries, nonblocking status, disabled code-generation finishing touches, and a documented external engineering-data boundary.
 - Informational Codecov project and changed-line coverage reporting for the complete Rust workspace and all production frontend TypeScript, with separate OIDC-authenticated Rust and web uploads and no merge-blocking percentage threshold.

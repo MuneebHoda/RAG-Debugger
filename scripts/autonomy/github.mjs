@@ -1,7 +1,35 @@
 import { invariant } from "./core.mjs";
 
 const apiVersion = "2022-11-28";
-const canonicalApiUrl = "https://api.github.com";
+const canonicalApiOrigin = "https://api.github.com";
+const allowedMethods = new Set(["GET", "POST", "PATCH", "DELETE"]);
+
+export function buildGitHubApiUrl(endpoint) {
+  invariant(
+    typeof endpoint === "string" &&
+      endpoint.startsWith("/") &&
+      !endpoint.startsWith("//") &&
+      !endpoint.includes("\\") &&
+      !/[\u0000-\u001f\u007f]/u.test(endpoint),
+    "unsafe GitHub API endpoint",
+  );
+  let url;
+  try {
+    url = new URL(endpoint, canonicalApiOrigin);
+  } catch (error) {
+    throw new Error("unsafe GitHub API endpoint", { cause: error });
+  }
+  invariant(
+    url.protocol === "https:" &&
+      url.origin === canonicalApiOrigin &&
+      url.username === "" &&
+      url.password === "" &&
+      url.hash === "" &&
+      !url.pathname.split("/").includes(".."),
+    "GitHub API destination is outside the canonical origin",
+  );
+  return url;
+}
 
 export function repositoryParts(repository) {
   invariant(
@@ -14,46 +42,39 @@ export function repositoryParts(repository) {
 }
 
 export class GitHubClient {
-  constructor({ repository, token, apiUrl = "https://api.github.com" }) {
+  constructor({ repository, token, transport = globalThis.fetch }) {
     invariant(token, "GitHub token is required");
-    const normalizedApiUrl = apiUrl.replace(/\/$/, "");
-    invariant(
-      normalizedApiUrl === canonicalApiUrl,
-      "autonomous publication is restricted to the canonical GitHub API",
-    );
-    repositoryParts(repository);
+    invariant(typeof transport === "function", "GitHub transport is required");
+    const { owner, name } = repositoryParts(repository);
     this.repository = repository;
     this.token = token;
-    this.apiUrl = normalizedApiUrl;
-    this.repoPath = `/repos/${repository}`;
+    this.transport = transport;
+    this.repoPath = `/repos/${owner}/${name}`;
   }
 
   async request(method, endpoint, body) {
     invariant(
-      ["GET", "POST", "PATCH", "DELETE"].includes(method),
+      allowedMethods.has(method),
       `unsupported GitHub API method: ${method}`,
     );
-    invariant(
-      endpoint.startsWith("/") &&
-        !endpoint.includes("://") &&
-        !endpoint.split(/[?#]/u, 1)[0].split("/").includes(".."),
-      "unsafe GitHub API endpoint",
-    );
-    const requestUrl = `${canonicalApiUrl}${endpoint}`;
+    const requestUrl = buildGitHubApiUrl(endpoint);
     const requestBody = body === undefined ? undefined : JSON.stringify(body);
-    // Candidate blobs are intentionally published only to the canonical GitHub API.
-    const response = await fetch(requestUrl, {
+    // Network access is centralized here: the URL is canonicalized above and
+    // redirects are disabled for every request.
+    const response = await this.transport(requestUrl, {
       method,
+      redirect: "error",
       headers: {
         Accept: "application/vnd.github+json",
         Authorization: `Bearer ${this.token}`,
+        "Content-Type": "application/json",
         "X-GitHub-Api-Version": apiVersion,
         "User-Agent": "corpuslab-bounded-autonomy",
       },
       body: requestBody,
     });
     if (!response.ok) {
-      let message = `GitHub API ${method} ${endpoint} failed with ${response.status}`;
+      let message = `GitHub API ${method} request failed with ${response.status}`;
       try {
         const payload = await response.json();
         if (typeof payload.message === "string")

@@ -31,7 +31,9 @@ Codex runs with the workspace-write sandbox and `drop-sudo`. Generation receives
 
 Validation receives no repository write credential. It rejects protected paths, unauthorized sensitive paths, unsafe paths, symlinks, generated artifacts, secret-like content, stale base commits, malformed structured output, missing tests, and changes above policy limits. It runs the complete Rust, web, Playwright, documentation, migration, Postgres contract, and Cargo Deny gates from a trusted script preserved before candidate application.
 
-Only the publisher receives a short-lived repository GitHub App token. It never executes candidate code. It verifies the attestation and file hashes, creates Git objects through the canonical GitHub API, opens a draft pull request, and applies bounded labels. Candidate and artifact files are read through no-follow file handles into immutable byte snapshots, preventing symlink swaps or file changes between validation, hashing, and copying.
+Only the publisher receives a short-lived repository GitHub App token. It never executes candidate code. It verifies the attestation and file hashes, creates Git objects through the canonical GitHub API, opens a draft pull request, and applies bounded labels. Candidate and artifact files are opened without following symlinks, read through bounded handles, and compared with their post-read handle and pathname metadata. Size checks, secret scanning, hashing, validation, copying, and publication all use the same immutable bytes. Replaced files, symlinked ancestors, in-place mutation, and hash mismatches fail closed.
+
+The GitHub client constructs destinations from the trusted `https://api.github.com` origin, requires HTTPS with no credentials or fragments, rejects authority-style and unsafe endpoints, and disables redirects. Issue, candidate, and generated content can affect bounded request fields but cannot select an outbound host. The publication client has no retry or fallback transport.
 
 ## GitHub App And Secrets
 
@@ -67,11 +69,13 @@ Only allowlisted collaborators with write, maintain, or admin permission may aut
 
 Protected paths always require manual development. They include GitHub configuration, autonomous policy and runtime, repository governance, agent/security guidance, the release guide, and quality entrypoints. Authentication, sessions, API keys, dependency manifests, migrations, storage ownership, environment configuration, report/export behavior, and privacy guidance or boundaries require `agent/sensitive-approved`. The versioned policy names these paths explicitly and fails closed on unclassified approval state.
 
+The one-time Issue #27 bootstrap has one narrower exception, because the reviewed trial itself covers CI API-key onboarding, Settings, failed-gate reports, and their privacy documentation. Trusted policy grants that exact issue a capability containing a fixed list of exact files in those areas. The sanitized context records the policy marker, capability ID, introducing `main` event, before/base SHAs, and exact paths; claim, capture, validation, and publication revalidate it against protected repository policy. It is not an approval label, cannot be requested by issue text or model output, and cannot authorize authentication/session internals, dependencies, environment files, migrations, storage, workflows, governance, deployment, or unrelated privacy boundaries. Every ordinary issue still requires an authorized `agent/sensitive-approved` label.
+
 More than 30 files or 2,000 meaningful non-generated lines requires written atomicity, testing, and rollback justification. More than 50 files or 4,000 lines requires `agent/large-approved`. The absolute limit is 100 files or 10,000 lines. Only deterministic paths listed in policy, currently the versioned handbook PDF, receive generated-file treatment.
 
 ## Bootstrap And Enablement
 
-Complete App, secret, variable, and OpenAI budget setup before merging Issue #99. The builder recognizes only the `main` push that first introduces the reviewed authorization marker. If every preflight passes, that event claims Issue #27 once. Later pushes cannot recreate the bootstrap; claim/generated state also prevents duplication.
+Complete App, secret, variable, and OpenAI budget setup before merging Issue #99. The builder recognizes only the `main` push that first introduces the reviewed authorization marker. If every preflight passes, that event claims Issue #27 once and carries the exact policy-owned capability described above. Later pushes cannot recreate the bootstrap; claim/blocked/generated state prevents duplicate attempts, and only `agent/generated` records successful draft publication.
 
 Preflight verifies that the OpenAI and GitHub App secrets are present before claiming or spending model tokens. If the initial bootstrap run stops at this setup check, configure the missing secret and manually rerun that original workflow event. Once Issue #27 is claimed, generation and validation failures remain non-retryable and require the documented label-reset recovery flow.
 

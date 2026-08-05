@@ -8,6 +8,7 @@ import console from "node:console";
 import { __parsePrettierYamlConfig as parseYaml } from "prettier/plugins/yaml";
 
 import {
+  createTrustedBootstrapAuthorization,
   invariant,
   readJson,
   validateJsonSchema,
@@ -190,10 +191,25 @@ function validateBuilder(workflow) {
     "builder publisher permissions are incomplete",
   );
   invariant(
+    serialized(workflow.jobs.validate).includes(
+      "scripts/autonomy/run-quality.sh",
+    ) && workflow.jobs.publish?.needs === "validate",
+    "draft publication must depend on the trusted complete quality gate",
+  );
+  invariant(
     serialized(workflow.jobs.block).includes(
       "needs.publish.result != 'success'",
     ),
     "builder failures must stop without retry",
+  );
+  invariant(
+    collectUses(workflow).filter((action) =>
+      action.startsWith("openai/codex-action@"),
+    ).length === 1 &&
+      !/(?:nick-invision\/retry|retry-action|max-attempts|workflow_run)/iu.test(
+        serialized(workflow),
+      ),
+    "builder must invoke the model once without automatic retry",
   );
 }
 
@@ -214,6 +230,34 @@ async function validatePolicyAndSchemas() {
   invariant(
     policy.limits.planner_proposals <= 3 && policy.limits.open_proposals <= 3,
     "planner proposal cap exceeds three",
+  );
+  invariant(
+    policy.bootstrap.issue_number === 27 &&
+      policy.bootstrap.authorization.id === "issue-27-ci-eval-bootstrap-v1",
+    "reviewed bootstrap identity drifted",
+  );
+  const bootstrap = createTrustedBootstrapAuthorization({
+    policy,
+    issueNumber: 27,
+    baseSha: "a".repeat(40),
+    beforeSha: "b".repeat(40),
+    eventName: "push",
+    ref: "refs/heads/main",
+    beforePolicyPresent: false,
+  });
+  invariant(
+    bootstrap.sensitive_paths.length > 0 &&
+      bootstrap.sensitive_paths.every(
+        (filePath) =>
+          !filePath.startsWith(".github/") &&
+          !filePath.startsWith("migrations/") &&
+          !filePath.startsWith("crates/storage/") &&
+          !filePath.endsWith("Cargo.toml") &&
+          !filePath.endsWith("package.json") &&
+          !filePath.endsWith("package-lock.json") &&
+          !filePath.endsWith(".env.example"),
+      ),
+    "bootstrap authorization exceeds the reviewed CI-eval file boundary",
   );
   for (const required of [
     ".github/",
