@@ -88,6 +88,14 @@ cd apps/web && npm run test:coverage
 
 Generated LCOV files remain ignored. Coverage thresholds will be considered only after reviewing the real Rust and web baselines, changed-line behavior, and consistently uncovered product areas across multiple pull requests.
 
+## Automated Pull Request Review
+
+CodeRabbit provides an advisory review of ready pull requests using the repository-owned `.coderabbit.yaml`. The `chill` profile prioritizes correctness, security, and maintainability findings without turning stylistic preferences into merge blockers. Reviews include a high-level summary and visible review status; draft pull requests are skipped until they are marked ready.
+
+CodeRabbit does not use the request-changes workflow and is not a required branch-protection check. Automated code edits, docstrings, unit tests, simplification, CI fixes, conflict resolution, prompts for other AI agents, poems, fortunes, and automatic chat replies are disabled. A contributor can still request a manual review through CodeRabbit's documented PR command when needed.
+
+The GitHub App is limited to this repository. It processes repository source, pull request diffs, review metadata, and check results as an external engineering provider, but it has no CorpusLab runtime, database, workspace, or customer-data integration. The provider boundary and rollback decision are recorded in [ADR 0005](adr/0005-coderabbit-review-provider.md).
+
 ## Pull Request Dependency Gate
 
 Every pull request runs the `Dependency Review` check. It compares dependency changes with the GitHub Advisory Database and fails when the pull request introduces a known High or Critical vulnerability in runtime, development, or unknown dependency scopes.
