@@ -42,6 +42,8 @@ jobs:
     outputs:
       execute_model: ${{ steps.preflight.outputs.execute_model }}
       issue_number: ${{ steps.preflight.outputs.issue_number }}
+      trigger: ${{ steps.preflight.outputs.trigger }}
+      context_sha256: ${{ steps.preflight.outputs.context_sha256 }}
     steps:
       - name: Checkout trusted main
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -86,14 +88,25 @@ jobs:
         with:
           name: builder-context
           path: ${{ runner.temp }}/builder-context
+      - name: Verify trusted builder context
+        env:
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
+        run: >-
+          node scripts/autonomy/autonomy.mjs verify-context
+          "$RUNNER_TEMP/builder-context/builder-context.json"
       - name: Create claim-only GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.AUTONOMY_APP_ID }}
           private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          owner: MuneebHoda
+          repositories: MuneebHoda/RAG-Debugger
           permission-contents: read
           permission-issues: write
           permission-pull-requests: read
@@ -125,6 +138,20 @@ jobs:
           mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"
           cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"
           cp -R scripts/autonomy "$RUNNER_TEMP/trusted/scripts/autonomy"
+      - name: Verify trusted builder context
+        env:
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
+          AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          verify-context
+          "$RUNNER_TEMP/builder-context/builder-context.json"
       - name: Prepare builder prompt
         env:
           AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
@@ -171,12 +198,19 @@ jobs:
           retention-days: 1
           if-no-files-found: error
           include-hidden-files: true
+          overwrite: false
 
   validate:
-    name: Validate candidate
-    needs: generate
+    name: Validate and seal candidate
+    needs:
+      - preflight
+      - generate
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+      artifact_digest: ${{ steps.upload.outputs.artifact-digest }}
+      bundle_sha256: ${{ steps.seal.outputs.bundle_sha256 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 20
     steps:
       - name: Checkout exact trusted base
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -202,16 +236,84 @@ jobs:
           AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
           AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
         run: node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" apply-candidate "$RUNNER_TEMP/candidate"
-      - name: Validate candidate policy
+      - name: Validate and seal candidate before code execution
+        id: seal
         env:
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
           AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
           AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
         run: >-
           node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
-          validate-candidate
+          seal-candidate
           "$RUNNER_TEMP/candidate"
-          "$RUNNER_TEMP/trusted"
-          "$RUNNER_TEMP/attestation.json"
+          "$RUNNER_TEMP/candidate/attestation.json"
+          "$RUNNER_TEMP/builder-sealed.json"
+      - name: Upload immutable validated candidate
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          path: ${{ runner.temp }}/builder-sealed.json
+          archive: false
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: false
+      - name: Verify immutable upload digest
+        env:
+          LOCAL_DIGEST: ${{ steps.seal.outputs.bundle_sha256 }}
+          UPLOAD_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: test "$LOCAL_DIGEST" = "$UPLOAD_DIGEST"
+
+  quality:
+    name: Run disposable candidate quality gate
+    needs:
+      - preflight
+      - validate
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout exact trusted base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Preserve trusted automation
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"
+          cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"
+          cp -R scripts/autonomy "$RUNNER_TEMP/trusted/scripts/autonomy"
+      - name: Download immutable candidate by artifact ID
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.validate.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sealed
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Revalidate and apply disposable candidate
+        env:
+          AUTONOMY_DOWNLOADED_ARTIFACT_DIGEST: ${{ needs.validate.outputs.artifact_digest }}
+          AUTONOMY_DOWNLOADED_ARTIFACT_ID: ${{ needs.validate.outputs.artifact_id }}
+          AUTONOMY_EXPECTED_ARTIFACT_DIGEST: ${{ needs.validate.outputs.bundle_sha256 }}
+          AUTONOMY_EXPECTED_ARTIFACT_ID: ${{ needs.validate.outputs.artifact_id }}
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
+          AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          revalidate-sealed-candidate
+          "$RUNNER_TEMP/sealed/builder-sealed.json"
+          "$RUNNER_TEMP/quality-candidate"
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - name: Cache Rust
@@ -228,31 +330,21 @@ jobs:
       - name: Install Playwright
         working-directory: apps/web
         run: npx playwright install --with-deps chromium
-      - name: Install database and security tools
+      - name: Install pinned database and security tools
         run: |
-          cargo install sqlx-cli --no-default-features --features rustls,postgres --locked
+          cargo install sqlx-cli --version 0.8.6 --no-default-features --features rustls,postgres --locked
           cargo install cargo-deny --version 0.20.2 --locked
       - name: Run trusted complete quality gate
         run: >-
           "$RUNNER_TEMP/trusted/scripts/autonomy/run-quality.sh"
           "$GITHUB_WORKSPACE"
-      - name: Package validated candidate
-        run: |
-          mkdir -p "$RUNNER_TEMP/validated"
-          cp -R "$RUNNER_TEMP/candidate/." "$RUNNER_TEMP/validated/"
-          cp "$RUNNER_TEMP/attestation.json" "$RUNNER_TEMP/validated/attestation.json"
-      - name: Upload validated candidate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: builder-validated
-          path: ${{ runner.temp }}/validated
-          retention-days: 1
-          if-no-files-found: error
-          include-hidden-files: true
 
   publish:
     name: Publish draft pull request
-    needs: validate
+    needs:
+      - preflight
+      - validate
+      - quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -261,31 +353,76 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Download validated candidate
+      - name: Preserve trusted automation
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"
+          cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"
+          cp -R scripts/autonomy "$RUNNER_TEMP/trusted/scripts/autonomy"
+      - name: Download original immutable candidate by artifact ID
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: builder-validated
-          path: ${{ runner.temp }}/validated
+          artifact-ids: ${{ needs.validate.outputs.artifact_id }}
+          path: ${{ runner.temp }}/sealed
+          skip-decompress: true
+          digest-mismatch: error
+      - name: Recheck pause before publisher validation
+        env:
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          assert-unpaused validation
+      - name: Revalidate and apply candidate without executing it
+        env:
+          AUTONOMY_DOWNLOADED_ARTIFACT_DIGEST: ${{ needs.validate.outputs.artifact_digest }}
+          AUTONOMY_DOWNLOADED_ARTIFACT_ID: ${{ needs.validate.outputs.artifact_id }}
+          AUTONOMY_EXPECTED_ARTIFACT_DIGEST: ${{ needs.validate.outputs.bundle_sha256 }}
+          AUTONOMY_EXPECTED_ARTIFACT_ID: ${{ needs.validate.outputs.artifact_id }}
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
+          AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          revalidate-sealed-candidate
+          "$RUNNER_TEMP/sealed/builder-sealed.json"
+          "$RUNNER_TEMP/publisher-candidate"
       - name: Recheck pause before publication
-        run: node scripts/autonomy/autonomy.mjs assert-unpaused publication
+        env:
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          assert-unpaused publication
       - name: Create publication-only GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.AUTONOMY_APP_ID }}
           private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          owner: MuneebHoda
+          repositories: MuneebHoda/RAG-Debugger
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
       - name: Publish validated draft
         env:
           AUTONOMY_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
+          AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
         run: >-
-          node scripts/autonomy/autonomy.mjs publish-builder
-          "$RUNNER_TEMP/validated"
-          "$RUNNER_TEMP/validated/attestation.json"
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          publish-builder
+          "$RUNNER_TEMP/publisher-candidate"
+          "$RUNNER_TEMP/publisher-candidate/attestation.json"
 
   block:
     name: Record blocked attempt
@@ -294,6 +431,7 @@ jobs:
       - claim
       - generate
       - validate
+      - quality
       - publish
     if: ${{ always() && needs.preflight.outputs.execute_model == 'true' && needs.claim.result == 'success' && needs.publish.result != 'success' }}
     runs-on: ubuntu-latest
@@ -309,14 +447,25 @@ jobs:
         with:
           name: builder-context
           path: ${{ runner.temp }}/builder-context
+      - name: Verify trusted builder context
+        env:
+          AUTONOMY_EXPECTED_BASE_SHA: ${{ github.sha }}
+          AUTONOMY_EXPECTED_CONTEXT_SHA256: ${{ needs.preflight.outputs.context_sha256 }}
+          AUTONOMY_EXPECTED_ISSUE_NUMBER: ${{ needs.preflight.outputs.issue_number }}
+          AUTONOMY_EXPECTED_REPOSITORY: MuneebHoda/RAG-Debugger
+          AUTONOMY_EXPECTED_RUN_URL: https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}
+          AUTONOMY_EXPECTED_TRIGGER: ${{ needs.preflight.outputs.trigger }}
+        run: >-
+          node scripts/autonomy/autonomy.mjs verify-context
+          "$RUNNER_TEMP/builder-context/builder-context.json"
       - name: Create issue-only GitHub App token
         id: app-token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           app-id: ${{ secrets.AUTONOMY_APP_ID }}
           private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: ${{ github.repository }}
+          owner: MuneebHoda
+          repositories: MuneebHoda/RAG-Debugger
           permission-contents: read
           permission-issues: write
       - name: Mark attempt blocked without retry

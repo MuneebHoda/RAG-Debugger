@@ -6,7 +6,7 @@
 - Node.js 24 or newer
 - Postgres for persistent features
 - Docker Desktop or another Docker daemon for local Postgres
-- SQLx CLI for manual migration commands: `cargo install sqlx-cli --no-default-features --features rustls,postgres`
+- SQLx CLI `0.8.6` for manual migration commands: `cargo install sqlx-cli --version 0.8.6 --no-default-features --features rustls,postgres --locked`
 - `just` is optional but recommended
 
 ## Setup

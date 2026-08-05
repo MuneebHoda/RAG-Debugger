@@ -22,7 +22,7 @@ The autonomous planner may propose up to three evidence-backed issues, and the b
 
 Run `just autonomy-check` to validate the model policy, schemas, workflow permissions, labels, and fixture suite. Operational setup, approval labels, pause/recovery steps, cost controls, and credential rotation are documented in [`docs/autonomous-engineering.md`](autonomous-engineering.md). ADR 0006 records the generation/validation/publication trust boundary.
 
-The dry-run suite includes the real Issue #27 bootstrap capability and publication plan, plus adversarial file-race and outbound-destination fixtures. The bootstrap grant is checked-in, exact-file, event-bound policy for Issue #27 only; it is not a general substitute for `agent/sensitive-approved`.
+The dry-run suite includes the real Issue #27 bootstrap capability and sealed publication plan, plus adversarial artifact-identity, disposable-quality mutation, context, policy, file-race, and outbound-destination fixtures. Candidate bytes are validated and uploaded immutably before generated code runs; quality cannot promote artifacts, and a fresh publisher repeats trusted validation before receiving a repository-only App token. The bootstrap grant is checked-in, exact-file, event-bound policy for Issue #27 only; it is not a general substitute for `agent/sensitive-approved`.
 
 ## Repository Governance
 

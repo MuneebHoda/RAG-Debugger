@@ -12,6 +12,7 @@ import {
   chooseEligibleIssue,
   classifyPaths,
   containsSecretLikeValue,
+  createBuilderContext,
   deriveBranchName,
   isReviewedBootstrap,
   normalizeRepositoryPath,
@@ -20,6 +21,7 @@ import {
   validateBuilderOutput,
   validateChangeSize,
   validateJsonSchema,
+  validateSchemaDefinition,
   validatePlannerOutput,
 } from "../../../scripts/autonomy/core.mjs";
 import {
@@ -27,7 +29,12 @@ import {
   captureCandidate,
 } from "../../../scripts/autonomy/candidate.mjs";
 import { repositoryParts } from "../../../scripts/autonomy/github.mjs";
-import { validateWorkflow } from "./validate-autonomy.mjs";
+import {
+  validateAppTokenSteps,
+  validateBuilder,
+  validateWorkflow,
+} from "./validate-autonomy.mjs";
+import { parse as parseYaml } from "yaml";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -39,6 +46,10 @@ const policy = JSON.parse(
     "utf8",
   ),
 );
+
+function cloneFixture(value) {
+  return JSON.parse(JSON.stringify(value));
+}
 const plannerSchema = JSON.parse(
   await readFile(
     path.join(
@@ -86,6 +97,23 @@ function plannerProposal(overrides = {}) {
     labels: ["type/test", "area/docs"],
     ...overrides,
   };
+}
+
+function ordinaryBuilderContext(baseSha) {
+  return createBuilderContext({
+    baseSha,
+    trigger: "approval_label",
+    repository: "MuneebHoda/RAG-Debugger",
+    runUrl: "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/99",
+    authorizedLabels: [policy.labels.approved],
+    issue: {
+      number: 27,
+      title: "test: add bounded autonomy fixture",
+      body: "Exercise one local deterministic candidate boundary.",
+      labels: ["type/test"],
+    },
+    policy,
+  });
 }
 
 test("model policy fixes planner to xhigh and builder to high", () => {
@@ -164,6 +192,141 @@ test("schema validator rejects unknown properties and oversized arrays", () => {
   assert.throws(
     () => validateJsonSchema(plannerSchema, { proposals: [1, 2, 3, 4] }),
     /too many items/,
+  );
+});
+
+test("schema language rejects unsupported and misspelled constraints", () => {
+  assert.doesNotThrow(() =>
+    validateSchemaDefinition({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      title: "Supported annotations remain allowed",
+      type: "string",
+      minLength: 1,
+    }),
+  );
+  for (const keyword of ["minLenght", "oneOf", "$ref"])
+    assert.throws(
+      () => validateSchemaDefinition({ type: "string", [keyword]: 1 }),
+      /unsupported JSON Schema keyword/u,
+    );
+  assert.throws(
+    () =>
+      validateSchemaDefinition({
+        type: "object",
+        properties: {},
+        additionalProperties: { type: "string" },
+      }),
+    /only booleans are supported/u,
+  );
+});
+
+test("each GitHub App token step must target the one approved repository", () => {
+  const validStep = {
+    uses: "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1",
+    with: {
+      "app-id": "${{ secrets.AUTONOMY_APP_ID }}",
+      "private-key": "${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}",
+      owner: "MuneebHoda",
+      repositories: "MuneebHoda/RAG-Debugger",
+    },
+  };
+  assert.doesNotThrow(() =>
+    validateAppTokenSteps("fixture.yml", {
+      jobs: { publish: { steps: [validStep] } },
+    }),
+  );
+  const unsafeSteps = [
+    { ...validStep, uses: "actions/create-github-app-token@" + "f".repeat(40) },
+    { ...validStep, with: { repositories: "MuneebHoda/RAG-Debugger" } },
+    { ...validStep, with: { owner: "MuneebHoda" } },
+    {
+      ...validStep,
+      with: {
+        owner: "${{ github.repository_owner }}",
+        repositories: "RAG-Debugger",
+      },
+    },
+    {
+      ...validStep,
+      with: { owner: "MuneebHoda", repositories: "RAG-Debugger,other" },
+    },
+    {
+      ...validStep,
+      with: {
+        owner: "MuneebHoda",
+        repositories: "MuneebHoda/RAG-Debugger\nother",
+      },
+    },
+    {
+      ...validStep,
+      with: {
+        owner: "MuneebHoda",
+        repositories: "MuneebHoda/RAG-Debugger",
+        enterprise: "all",
+      },
+    },
+    {
+      ...validStep,
+      with: { ...validStep.with, "skip-token-revoke": true },
+    },
+  ];
+  for (const step of unsafeSteps)
+    assert.throws(
+      () =>
+        validateAppTokenSteps("fixture.yml", {
+          env: { UNRELATED: "${{ github.repository }}" },
+          jobs: { publish: { steps: [step] } },
+        }),
+      /App-token action pin|target|dedicated repository secrets/u,
+    );
+});
+
+test("builder workflow isolates immutable validation, quality, and publication", async () => {
+  const workflow = parseYaml(
+    await readFile(
+      path.join(repositoryRoot, ".github/workflows/autonomy-builder.yml"),
+      "utf8",
+    ),
+  );
+  assert.doesNotThrow(() => validateBuilder(workflow));
+
+  const qualityUpload = cloneFixture(workflow);
+  qualityUpload.jobs.quality.steps.push({
+    uses: "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a",
+    with: { path: "candidate" },
+  });
+  assert.throws(() => validateBuilder(qualityUpload), /unable to promote/u);
+
+  const overwrite = cloneFixture(workflow);
+  const sealedUpload = overwrite.jobs.validate.steps.find((step) =>
+    String(step.uses ?? "").startsWith("actions/upload-artifact@"),
+  );
+  sealedUpload.with.overwrite = true;
+  assert.throws(() => validateBuilder(overwrite), /immutably upload/u);
+
+  const ungatedPublish = cloneFixture(workflow);
+  ungatedPublish.jobs.publish.needs = ["validate"];
+  assert.throws(
+    () => validateBuilder(ungatedPublish),
+    /after validation and quality/u,
+  );
+
+  const earlyToken = cloneFixture(workflow);
+  const steps = earlyToken.jobs.publish.steps;
+  const tokenIndex = steps.findIndex((step) =>
+    String(step.uses ?? "").startsWith("actions/create-github-app-token@"),
+  );
+  const [token] = steps.splice(tokenIndex, 1);
+  steps.splice(1, 0, token);
+  assert.throws(() => validateBuilder(earlyToken), /after revalidation/u);
+
+  const executingValidator = cloneFixture(workflow);
+  executingValidator.jobs.validate.steps.splice(-1, 0, {
+    run: "npm test",
+  });
+  assert.throws(
+    () => validateBuilder(executingValidator),
+    /before candidate execution/u,
   );
 });
 
@@ -529,9 +692,13 @@ test("candidate capture rejects non-allowlisted binary files", async () => {
     test_exception: "The candidate contains no production source behavior.",
   };
   await writeFile(path.join(control, "output.json"), JSON.stringify(output));
+  const baseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
   await writeFile(
     path.join(control, "context.json"),
-    JSON.stringify({ base_sha: "a".repeat(40), issue: { number: 27 } }),
+    `${JSON.stringify(ordinaryBuilderContext(baseSha), null, 2)}\n`,
   );
   await assert.rejects(
     () =>
@@ -542,6 +709,10 @@ test("candidate capture rejects non-allowlisted binary files", async () => {
         schemaPath: path.join(
           repositoryRoot,
           ".github/autonomy/schemas/builder-output.schema.json",
+        ),
+        contextSchemaPath: path.join(
+          repositoryRoot,
+          ".github/autonomy/schemas/builder-context.schema.json",
         ),
         policyPath: path.join(repositoryRoot, ".github/autonomy/policy.json"),
         artifactDirectory: path.join(control, "artifact"),
@@ -590,9 +761,13 @@ test("candidate capture rejects secret-like content before artifact creation", a
     test_exception: "The candidate contains no production source behavior.",
   };
   await writeFile(path.join(control, "output.json"), JSON.stringify(output));
+  const baseSha = execFileSync("git", ["rev-parse", "HEAD"], {
+    cwd: root,
+    encoding: "utf8",
+  }).trim();
   await writeFile(
     path.join(control, "context.json"),
-    JSON.stringify({ base_sha: "a".repeat(40), issue: { number: 27 } }),
+    `${JSON.stringify(ordinaryBuilderContext(baseSha), null, 2)}\n`,
   );
   await assert.rejects(
     () =>
@@ -603,6 +778,10 @@ test("candidate capture rejects secret-like content before artifact creation", a
         schemaPath: path.join(
           repositoryRoot,
           ".github/autonomy/schemas/builder-output.schema.json",
+        ),
+        contextSchemaPath: path.join(
+          repositoryRoot,
+          ".github/autonomy/schemas/builder-context.schema.json",
         ),
         policyPath: path.join(repositoryRoot, ".github/autonomy/policy.json"),
         artifactDirectory: path.join(control, "artifact"),

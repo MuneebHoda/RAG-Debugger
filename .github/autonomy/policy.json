@@ -67,6 +67,7 @@
     "apps/web/scripts/validate-autonomy.mjs",
     "apps/web/scripts/autonomy.regression.mjs",
     "apps/web/scripts/autonomy.bootstrap.regression.mjs",
+    "apps/web/scripts/autonomy.artifact.regression.mjs",
     "apps/web/scripts/autonomy.security.regression.mjs",
     "apps/web/scripts/fixtures/autonomy/",
     "docs/releasing.md"

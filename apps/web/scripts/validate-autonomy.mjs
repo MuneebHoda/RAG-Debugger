@@ -11,6 +11,7 @@ import {
   createTrustedBootstrapAuthorization,
   invariant,
   readJson,
+  validateSchemaDefinition,
   validateJsonSchema,
 } from "../../../scripts/autonomy/core.mjs";
 
@@ -21,6 +22,13 @@ const workflowPaths = [
   ".github/workflows/autonomy-builder.yml",
 ];
 const immutableAction = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/u;
+const appTokenAction =
+  "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1";
+const uploadArtifactAction =
+  "actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a";
+const downloadArtifactAction =
+  "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
+const exactRepository = "MuneebHoda/RAG-Debugger";
 
 async function readRepositoryFile(relativePath) {
   return readFile(path.join(repositoryRoot, relativePath), "utf8");
@@ -50,6 +58,45 @@ function collectUses(workflow) {
       uses.push(value.uses);
   });
   return uses;
+}
+
+function actionSteps(workflow) {
+  return Object.entries(workflow.jobs ?? {}).flatMap(([jobName, job]) =>
+    (job.steps ?? [])
+      .map((step, index) => ({ jobName, index, step }))
+      .filter(({ step }) => typeof step?.uses === "string"),
+  );
+}
+
+export function validateAppTokenSteps(relativePath, workflow) {
+  for (const { jobName, step } of actionSteps(workflow).filter(({ step }) =>
+    step.uses.startsWith("actions/create-github-app-token@"),
+  )) {
+    invariant(
+      step.uses === appTokenAction,
+      `${relativePath} ${jobName} uses an unapproved App-token action pin`,
+    );
+    invariant(
+      step.with?.owner === "MuneebHoda" &&
+        step.with?.repositories === exactRepository,
+      `${relativePath} ${jobName} App token must target exactly ${exactRepository}`,
+    );
+    invariant(
+      step.with?.["app-id"] === "${{ secrets.AUTONOMY_APP_ID }}" &&
+        step.with?.["private-key"] ===
+          "${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}",
+      `${relativePath} ${jobName} App token must use the dedicated repository secrets`,
+    );
+    invariant(
+      step.with?.enterprise === undefined &&
+        step.with?.["github-api-url"] === undefined &&
+        step.with?.["skip-token-revoke"] !== true &&
+        !String(step.with.owner).includes("${{") &&
+        !String(step.with.repositories).includes("${{") &&
+        !/[\r\n,]/u.test(step.with.repositories),
+      `${relativePath} ${jobName} App token target must be one static repository`,
+    );
+  }
 }
 
 function serialized(value) {
@@ -89,13 +136,7 @@ export function validateWorkflow(relativePath, workflow) {
       `${relativePath} action is not pinned to a full SHA: ${action}`,
     );
   const text = serialized(workflow);
-  if (text.includes("create-github-app-token")) {
-    invariant(
-      text.includes("github.repository") &&
-        !text.includes("github.event.repository.name"),
-      `${relativePath} GitHub App tokens must target the current repository`,
-    );
-  }
+  validateAppTokenSteps(relativePath, workflow);
   for (const forbidden of [
     "gh pr merge",
     "gh pr ready",
@@ -166,7 +207,7 @@ function validatePlanner(workflow) {
   );
 }
 
-function validateBuilder(workflow) {
+export function validateBuilder(workflow) {
   const triggers = workflowTriggers(workflowPaths[1], workflow);
   invariant(
     triggers.issues?.types?.includes("labeled"),
@@ -202,6 +243,8 @@ function validateBuilder(workflow) {
       !generate.includes("create-github-app-token"),
     "builder generation must not receive publication credentials",
   );
+  const validate = serialized(workflow.jobs.validate);
+  const quality = serialized(workflow.jobs.quality);
   const publish = serialized(workflow.jobs.publish);
   invariant(
     publish.includes('permission-contents":"write') &&
@@ -210,10 +253,54 @@ function validateBuilder(workflow) {
     "builder publisher permissions are incomplete",
   );
   invariant(
-    serialized(workflow.jobs.validate).includes(
-      "scripts/autonomy/run-quality.sh",
-    ) && workflow.jobs.publish?.needs === "validate",
-    "draft publication must depend on the trusted complete quality gate",
+    validate.includes("seal-candidate") &&
+      validate.includes(uploadArtifactAction) &&
+      validate.includes('"archive":false') &&
+      validate.includes('"overwrite":false') &&
+      !/(?:run-quality|cargo |npm |playwright|sqlx)/u.test(validate),
+    "validation must seal and immutably upload before candidate execution",
+  );
+  invariant(
+    quality.includes(downloadArtifactAction) &&
+      quality.includes("needs.validate.outputs.artifact_id") &&
+      quality.includes("revalidate-sealed-candidate") &&
+      quality.includes("scripts/autonomy/run-quality.sh") &&
+      quality.includes("sqlx-cli --version 0.8.6") &&
+      !quality.includes(uploadArtifactAction) &&
+      !quality.includes("create-github-app-token") &&
+      !quality.includes("secrets.") &&
+      !quality.includes("id-token") &&
+      quality.includes('"persist-credentials":false'),
+    "quality must be disposable, credential-free, and unable to promote artifacts",
+  );
+  invariant(
+    Array.isArray(workflow.jobs.publish?.needs) &&
+      workflow.jobs.publish.needs.includes("validate") &&
+      workflow.jobs.publish.needs.includes("quality") &&
+      publish.includes("needs.validate.outputs.artifact_id") &&
+      publish.includes("revalidate-sealed-candidate") &&
+      !publish.includes(uploadArtifactAction) &&
+      publish.includes('"persist-credentials":false'),
+    "draft publication must use the original artifact after validation and quality",
+  );
+  const publishSteps = workflow.jobs.publish.steps;
+  const publisherValidationIndex = publishSteps.findIndex((step) =>
+    String(step.run ?? "").includes("revalidate-sealed-candidate"),
+  );
+  const publisherTokenIndex = publishSteps.findIndex(
+    (step) => step.uses === appTokenAction,
+  );
+  invariant(
+    publisherValidationIndex >= 0 &&
+      publisherTokenIndex > publisherValidationIndex &&
+      !publishSteps
+        .slice(publisherTokenIndex + 1)
+        .some((step) =>
+          /(?:cargo|npm|playwright|run-quality|\.\/)/u.test(
+            String(step.run ?? ""),
+          ),
+        ),
+    "publisher token must be minted after revalidation and before trusted publication only",
   );
   invariant(
     serialized(workflow.jobs.block).includes(
@@ -229,6 +316,16 @@ function validateBuilder(workflow) {
         serialized(workflow),
       ),
     "builder must invoke the model once without automatic retry",
+  );
+}
+
+async function validateQualityScript() {
+  const script = await readRepositoryFile("scripts/autonomy/run-quality.sh");
+  invariant(
+    script.includes("pg_isready") &&
+      script.includes("seq 1 30") &&
+      script.includes("PostgreSQL did not become ready within 60 seconds"),
+    "autonomous quality must use a bounded PostgreSQL readiness check",
   );
 }
 
@@ -284,6 +381,7 @@ async function validatePolicyAndSchemas() {
     "SECURITY.md",
     "justfile",
     "scripts/autonomy/",
+    "apps/web/scripts/autonomy.artifact.regression.mjs",
     "apps/web/scripts/autonomy.bootstrap.regression.mjs",
     "apps/web/scripts/autonomy.security.regression.mjs",
     "apps/web/scripts/fixtures/autonomy/",
@@ -301,18 +399,21 @@ async function validatePolicyAndSchemas() {
       `autonomy label is not configured: ${label}`,
     );
 
-  const plannerSchema = await readJson(
-    path.join(
-      repositoryRoot,
-      ".github/autonomy/schemas/planner-output.schema.json",
-    ),
+  const schemaDirectory = path.join(repositoryRoot, ".github/autonomy/schemas");
+  const schemaNames = [
+    "planner-output.schema.json",
+    "builder-output.schema.json",
+    "builder-context.schema.json",
+    "candidate-manifest.schema.json",
+    "candidate-attestation.schema.json",
+    "sealed-candidate.schema.json",
+  ];
+  const schemas = await Promise.all(
+    schemaNames.map((name) => readJson(path.join(schemaDirectory, name))),
   );
-  const builderSchema = await readJson(
-    path.join(
-      repositoryRoot,
-      ".github/autonomy/schemas/builder-output.schema.json",
-    ),
-  );
+  for (const [index, schema] of schemas.entries())
+    validateSchemaDefinition(schema, schemaNames[index]);
+  const [plannerSchema, builderSchema] = schemas;
   validateJsonSchema(plannerSchema, {
     proposals: [
       {
@@ -350,6 +451,7 @@ export async function validateAutonomyRepository() {
   validatePlanner(planner);
   validateBuilder(builder);
   await validatePolicyAndSchemas();
+  await validateQualityScript();
   console.log("Autonomy workflows, policy, labels, and schemas are valid.");
 }
 

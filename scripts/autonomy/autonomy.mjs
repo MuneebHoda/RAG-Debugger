@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -13,6 +14,7 @@ import {
   createBuilderContext,
   createBuilderPublicationPlan,
   createTrustedBootstrapAuthorization,
+  canonicalJsonBytes,
   invariant,
   normalizeTitle,
   policyIntroducedByRepositoryPush,
@@ -20,6 +22,7 @@ import {
   readJson,
   sanitizeInventoryIssue,
   sanitizeIssueText,
+  validateSchemaDefinition,
   validatePlannerOutput,
 } from "./core.mjs";
 import {
@@ -32,9 +35,12 @@ import {
 import {
   applyCandidate,
   captureCandidate,
+  revalidateSealedCandidate,
   readStableCandidateSnapshot,
+  sealCandidate,
   validateCandidate,
   verifyAttestation,
+  verifyBuilderContextFile,
 } from "./candidate.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -53,6 +59,10 @@ const plannerSchemaPath = path.join(
 const builderSchemaPath = path.join(
   trustedRoot,
   ".github/autonomy/schemas/builder-output.schema.json",
+);
+const builderContextSchemaPath = path.join(
+  trustedRoot,
+  ".github/autonomy/schemas/builder-context.schema.json",
 );
 
 function env(name, fallback = "") {
@@ -91,6 +101,34 @@ async function writeOutputs(values) {
   await import("node:fs/promises").then(({ appendFile }) =>
     appendFile(outputPath, `${lines.join("\n")}\n`),
   );
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function expectedBuilderContext() {
+  const issueNumber = Number(env("AUTONOMY_EXPECTED_ISSUE_NUMBER"));
+  return {
+    baseSha: env("AUTONOMY_EXPECTED_BASE_SHA") || undefined,
+    trigger: env("AUTONOMY_EXPECTED_TRIGGER") || undefined,
+    repository: env("AUTONOMY_EXPECTED_REPOSITORY") || undefined,
+    runUrl: env("AUTONOMY_EXPECTED_RUN_URL") || undefined,
+    issueNumber:
+      Number.isSafeInteger(issueNumber) && issueNumber > 0
+        ? issueNumber
+        : undefined,
+    contextSha256: env("AUTONOMY_EXPECTED_CONTEXT_SHA256") || undefined,
+  };
+}
+
+function expectedArtifactIdentity() {
+  return {
+    expectedId: env("AUTONOMY_EXPECTED_ARTIFACT_ID"),
+    observedId: env("AUTONOMY_DOWNLOADED_ARTIFACT_ID"),
+    expectedDigest: env("AUTONOMY_EXPECTED_ARTIFACT_DIGEST"),
+    observedDigest: env("AUTONOMY_DOWNLOADED_ARTIFACT_DIGEST"),
+  };
 }
 
 async function eventPayload() {
@@ -377,15 +415,17 @@ async function builderPreflight(outputDirectory) {
     approvedEvent,
   );
   assertIssueClaimable(selected, context, policy);
+  const contextBytes = canonicalJsonBytes(context);
   await writeFile(
     path.join(outputDirectory, "builder-context.json"),
-    `${JSON.stringify(context, null, 2)}\n`,
+    contextBytes,
   );
   await writeOutputs({
     execute_model: true,
     diagnostic: false,
     issue_number: selected.number,
     trigger,
+    context_sha256: sha256(contextBytes),
   });
   console.log(`Builder selected issue #${selected.number} through ${trigger}`);
 }
@@ -527,13 +567,14 @@ async function publishPlanner(artifactDirectory) {
 
 async function publishBuilder(artifactDirectory, attestationPath) {
   invariant(!paused(), "autonomy is paused");
-  await verifyAttestation(artifactDirectory, attestationPath);
-  const [manifest, output, context, policy] = await Promise.all([
-    readJson(path.join(artifactDirectory, "manifest.json")),
-    readJson(path.join(artifactDirectory, "builder-output.json")),
-    readJson(path.join(artifactDirectory, "context.json")),
-    readJson(policyPath),
-  ]);
+  const verified = await verifyAttestation({
+    artifactDirectory,
+    attestationPath,
+    trustedDirectory: trustedRoot,
+    expectedContext: expectedBuilderContext(),
+  });
+  const { manifest, output, context } = verified;
+  const policy = await readJson(policyPath);
   const client = githubClient("AUTONOMY_GITHUB_TOKEN");
   const issue = await client.getIssue(context.issue.number);
   const names = labelNames(issue);
@@ -668,14 +709,66 @@ async function validateConfiguration() {
     ref: "refs/heads/main",
     beforePolicyPresent: false,
   });
-  for (const schemaPath of [plannerSchemaPath, builderSchemaPath]) {
+  for (const schemaPath of [
+    plannerSchemaPath,
+    builderSchemaPath,
+    builderContextSchemaPath,
+    path.join(
+      trustedRoot,
+      ".github/autonomy/schemas/candidate-manifest.schema.json",
+    ),
+    path.join(
+      trustedRoot,
+      ".github/autonomy/schemas/candidate-attestation.schema.json",
+    ),
+    path.join(
+      trustedRoot,
+      ".github/autonomy/schemas/sealed-candidate.schema.json",
+    ),
+  ]) {
     const schema = await readJson(schemaPath);
     invariant(
       schema.$schema === "https://json-schema.org/draft/2020-12/schema",
       `${schemaPath} must declare JSON Schema 2020-12`,
     );
+    validateSchemaDefinition(schema, schemaPath);
   }
   console.log("Autonomy policy and schemas are valid.");
+}
+
+async function sealCandidateCommand(
+  artifactDirectory,
+  attestationPath,
+  sealedPath,
+) {
+  const expectedContext = expectedBuilderContext();
+  await validateCandidate({
+    repositoryRoot,
+    artifactDirectory,
+    trustedDirectory: trustedRoot,
+    attestationPath,
+    expectedContext,
+  });
+  const sealed = await sealCandidate({
+    artifactDirectory,
+    sealedPath,
+    trustedDirectory: trustedRoot,
+    expectedContext,
+  });
+  await writeOutputs({ bundle_sha256: sealed.sha256 });
+  console.log(`Sealed validated candidate (${sealed.bytes} bytes).`);
+}
+
+async function revalidateSealedCandidateCommand(sealedPath, artifactDirectory) {
+  await revalidateSealedCandidate({
+    repositoryRoot,
+    sealedPath,
+    artifactDirectory,
+    trustedDirectory: trustedRoot,
+    expectedArtifact: expectedArtifactIdentity(),
+    expectedContext: expectedBuilderContext(),
+  });
+  console.log("Sealed candidate passed fresh trusted revalidation.");
 }
 
 function assertUnpaused(stage) {
@@ -701,18 +794,22 @@ const commands = {
       outputPath: arguments_[0],
       contextPath: arguments_[1],
       schemaPath: builderSchemaPath,
+      contextSchemaPath: builderContextSchemaPath,
       policyPath,
       artifactDirectory: arguments_[2],
     }),
   "apply-candidate": () =>
     applyCandidate({ repositoryRoot, artifactDirectory: arguments_[0] }),
-  "validate-candidate": () =>
-    validateCandidate({
-      repositoryRoot,
-      artifactDirectory: arguments_[0],
-      trustedDirectory: arguments_[1],
-      attestationPath: arguments_[2],
+  "verify-context": () =>
+    verifyBuilderContextFile({
+      contextPath: arguments_[0],
+      trustedDirectory: trustedRoot,
+      expectedContext: expectedBuilderContext(),
     }),
+  "seal-candidate": () =>
+    sealCandidateCommand(arguments_[0], arguments_[1], arguments_[2]),
+  "revalidate-sealed-candidate": () =>
+    revalidateSealedCandidateCommand(arguments_[0], arguments_[1]),
   "publish-builder": () => publishBuilder(arguments_[0], arguments_[1]),
   "block-issue": () => blockIssue(arguments_[0], arguments_[1] ?? "validation"),
 };

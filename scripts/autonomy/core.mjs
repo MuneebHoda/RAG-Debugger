@@ -218,6 +218,17 @@ export function createBuilderContext({
     trigger === "bootstrap" || bootstrapEvent === undefined,
     "ordinary issues cannot carry bootstrap provenance",
   );
+  const sanitizedIssue = {
+    number: issue.number,
+    title: sanitizeIssueText(issue.title, 200),
+    body: sanitizeIssueText(
+      issue.body ?? "",
+      policy.limits.issue_body_characters,
+    ),
+    labels: (issue.labels ?? [])
+      .map((label) => (typeof label === "string" ? label : label.name))
+      .filter((label) => !label.startsWith("agent/")),
+  };
   return {
     version: 1,
     base_sha: baseSha,
@@ -226,16 +237,11 @@ export function createBuilderContext({
     run_url: runUrl,
     authorized_labels: uniqueFirst(authorizedLabels),
     bootstrap_authorization: bootstrapAuthorization,
-    issue: {
-      number: issue.number,
-      title: sanitizeIssueText(issue.title, 200),
-      body: sanitizeIssueText(
-        issue.body ?? "",
-        policy.limits.issue_body_characters,
-      ),
-      labels: (issue.labels ?? [])
-        .map((label) => (typeof label === "string" ? label : label.name))
-        .filter((label) => !label.startsWith("agent/")),
+    issue: sanitizedIssue,
+    publication: {
+      branch: deriveBranchName(sanitizedIssue.number, sanitizedIssue.title),
+      base: "main",
+      draft: true,
     },
   };
 }
@@ -307,17 +313,176 @@ function typeMatches(expected, value) {
   return typeof value === expected;
 }
 
-export function validateJsonSchema(schema, value, location = "$") {
+const supportedSchemaKeywords = new Set([
+  "$schema",
+  "$id",
+  "title",
+  "description",
+  "default",
+  "examples",
+  "deprecated",
+  "readOnly",
+  "writeOnly",
+  "type",
+  "const",
+  "enum",
+  "minimum",
+  "maximum",
+  "minLength",
+  "maxLength",
+  "pattern",
+  "minItems",
+  "maxItems",
+  "uniqueItems",
+  "items",
+  "required",
+  "properties",
+  "additionalProperties",
+]);
+const supportedSchemaTypes = new Set([
+  "array",
+  "boolean",
+  "integer",
+  "null",
+  "number",
+  "object",
+  "string",
+]);
+
+function schemaIncludesType(schema, expected) {
+  return Array.isArray(schema.type)
+    ? schema.type.includes(expected)
+    : schema.type === expected;
+}
+
+function assertNonNegativeInteger(value, location) {
   invariant(
-    schema && typeof schema === "object",
+    Number.isSafeInteger(value) && value >= 0,
+    `${location}: expected a non-negative integer`,
+  );
+}
+
+export function validateSchemaDefinition(schema, location = "$schema") {
+  invariant(
+    schema && typeof schema === "object" && !Array.isArray(schema),
     `${location}: schema must be an object`,
   );
+  for (const keyword of Object.keys(schema))
+    invariant(
+      supportedSchemaKeywords.has(keyword),
+      `${location}: unsupported JSON Schema keyword ${keyword}`,
+    );
+  if (schema.$schema !== undefined)
+    invariant(
+      schema.$schema === "https://json-schema.org/draft/2020-12/schema",
+      `${location}: unsupported JSON Schema dialect`,
+    );
+  if (schema.type !== undefined) {
+    const types = Array.isArray(schema.type) ? schema.type : [schema.type];
+    invariant(
+      types.length > 0 &&
+        types.every((type) => supportedSchemaTypes.has(type)) &&
+        new Set(types).size === types.length,
+      `${location}.type: unsupported or duplicate type`,
+    );
+  }
+  if (schema.enum !== undefined)
+    invariant(
+      Array.isArray(schema.enum) && schema.enum.length > 0,
+      `${location}.enum: expected a non-empty array`,
+    );
+  for (const keyword of ["minLength", "maxLength", "minItems", "maxItems"])
+    if (schema[keyword] !== undefined)
+      assertNonNegativeInteger(schema[keyword], `${location}.${keyword}`);
+  if (schema.minLength !== undefined && schema.maxLength !== undefined)
+    invariant(
+      schema.minLength <= schema.maxLength,
+      `${location}: minLength exceeds maxLength`,
+    );
+  if (schema.minItems !== undefined && schema.maxItems !== undefined)
+    invariant(
+      schema.minItems <= schema.maxItems,
+      `${location}: minItems exceeds maxItems`,
+    );
+  for (const keyword of ["minimum", "maximum"])
+    if (schema[keyword] !== undefined)
+      invariant(
+        typeof schema[keyword] === "number" && Number.isFinite(schema[keyword]),
+        `${location}.${keyword}: expected a finite number`,
+      );
+  if (schema.pattern !== undefined) {
+    invariant(
+      typeof schema.pattern === "string",
+      `${location}.pattern: expected a string`,
+    );
+    try {
+      new RegExp(schema.pattern, "u");
+    } catch (error) {
+      throw new Error(`${location}.pattern: invalid regular expression`, {
+        cause: error,
+      });
+    }
+  }
+  if (schema.uniqueItems !== undefined)
+    invariant(
+      typeof schema.uniqueItems === "boolean",
+      `${location}.uniqueItems: expected a boolean`,
+    );
+  if (schema.items !== undefined) {
+    invariant(
+      schemaIncludesType(schema, "array"),
+      `${location}.items: parent schema must allow arrays`,
+    );
+    validateSchemaDefinition(schema.items, `${location}.items`);
+  }
+  if (schema.properties !== undefined) {
+    invariant(
+      schemaIncludesType(schema, "object") &&
+        schema.properties &&
+        typeof schema.properties === "object" &&
+        !Array.isArray(schema.properties),
+      `${location}.properties: parent schema must allow objects`,
+    );
+    for (const [key, propertySchema] of Object.entries(schema.properties))
+      validateSchemaDefinition(propertySchema, `${location}.properties.${key}`);
+  }
+  if (schema.required !== undefined) {
+    invariant(
+      schemaIncludesType(schema, "object") &&
+        Array.isArray(schema.required) &&
+        schema.required.every(
+          (key) => typeof key === "string" && key.length > 0,
+        ) &&
+        new Set(schema.required).size === schema.required.length,
+      `${location}.required: expected unique object property names`,
+    );
+    for (const key of schema.required)
+      invariant(
+        Object.hasOwn(schema.properties ?? {}, key),
+        `${location}.required: unknown property ${key}`,
+      );
+  }
+  if (schema.additionalProperties !== undefined)
+    invariant(
+      schemaIncludesType(schema, "object") &&
+        typeof schema.additionalProperties === "boolean",
+      `${location}.additionalProperties: only booleans are supported`,
+    );
+  return schema;
+}
+
+function validateJsonSchemaValue(schema, value, location) {
   if (schema.type !== undefined) {
     invariant(
       typeMatches(schema.type, value),
       `${location}: expected ${JSON.stringify(schema.type)}`,
     );
   }
+  if (Object.hasOwn(schema, "const"))
+    invariant(
+      JSON.stringify(value) === JSON.stringify(schema.const),
+      `${location}: value does not match const`,
+    );
   if (schema.enum)
     invariant(schema.enum.includes(value), `${location}: value is not allowed`);
 
@@ -366,7 +531,7 @@ export function validateJsonSchema(schema, value, location = "$") {
     }
     if (schema.items)
       value.forEach((item, index) =>
-        validateJsonSchema(schema.items, item, `${location}[${index}]`),
+        validateJsonSchemaValue(schema.items, item, `${location}[${index}]`),
       );
   }
 
@@ -387,11 +552,81 @@ export function validateJsonSchema(schema, value, location = "$") {
     }
     for (const [key, propertySchema] of Object.entries(properties)) {
       if (Object.hasOwn(value, key))
-        validateJsonSchema(propertySchema, value[key], `${location}.${key}`);
+        validateJsonSchemaValue(
+          propertySchema,
+          value[key],
+          `${location}.${key}`,
+        );
     }
   }
 
   return value;
+}
+
+export function validateJsonSchema(schema, value, location = "$") {
+  validateSchemaDefinition(schema);
+  return validateJsonSchemaValue(schema, value, location);
+}
+
+export function canonicalJsonBytes(value) {
+  return Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+export function validateBuilderContext(context, schema, policy, expected = {}) {
+  validateJsonSchema(schema, context);
+  const expectedPublication = {
+    branch: deriveBranchName(context.issue.number, context.issue.title),
+    base: "main",
+    draft: true,
+  };
+  invariant(
+    JSON.stringify(context.publication) === JSON.stringify(expectedPublication),
+    "builder context publication metadata is invalid",
+  );
+  const allowedAuthorizationLabels = new Set([
+    policy.labels.approved,
+    policy.labels.sensitive_approved,
+    policy.labels.large_approved,
+  ]);
+  invariant(
+    context.authorized_labels.every((label) =>
+      allowedAuthorizationLabels.has(label),
+    ),
+    "builder context contains an unsupported authorization label",
+  );
+  if (context.trigger === "bootstrap") {
+    invariant(
+      context.authorized_labels.length === 0,
+      "bootstrap context cannot inherit label authorization",
+    );
+    validateTrustedBootstrapAuthorization(context, policy);
+  } else {
+    invariant(
+      context.authorized_labels.includes(policy.labels.approved),
+      "ordinary builder context requires approved authorization",
+    );
+    invariant(
+      context.bootstrap_authorization === null,
+      "ordinary builder context cannot carry bootstrap authorization",
+    );
+  }
+  for (const [field, expectedValue] of Object.entries({
+    base_sha: expected.baseSha,
+    trigger: expected.trigger,
+    repository: expected.repository,
+    run_url: expected.runUrl,
+  }))
+    if (expectedValue !== undefined)
+      invariant(
+        context[field] === expectedValue,
+        `builder context ${field} does not match trusted workflow state`,
+      );
+  if (expected.issueNumber !== undefined)
+    invariant(
+      context.issue.number === expected.issueNumber,
+      "builder context issue number does not match trusted workflow state",
+    );
+  return context;
 }
 
 export function normalizeRepositoryPath(value) {
@@ -566,13 +801,20 @@ export function createBuilderPublicationPlan({
   const title = conventional
     ? context.issue.title
     : `chore: implement issue #${issue.number}`;
+  invariant(
+    context.publication.branch ===
+      deriveBranchName(issue.number, context.issue.title) &&
+      context.publication.base === "main" &&
+      context.publication.draft === true,
+    "publication metadata does not match trusted context",
+  );
   return {
-    branch: deriveBranchName(issue.number, context.issue.title),
+    branch: context.publication.branch,
     pull_request: {
       title,
       body: builderPullRequestBody(output, context),
-      base: "main",
-      draft: true,
+      base: context.publication.base,
+      draft: context.publication.draft,
     },
     transferable_labels: names.filter((label) =>
       policy.allowed_issue_labels.includes(label),
@@ -738,9 +980,7 @@ export function validateBuilderOutput(output, schema, context, actualPaths) {
 
 export function markdownList(values, fallback = "None") {
   return values.length > 0
-    ? values
-        .map((value) => `- ${sanitizePullRequestText(value)}`)
-        .join("\n")
+    ? values.map((value) => `- ${sanitizePullRequestText(value)}`).join("\n")
     : `- ${fallback}`;
 }
 

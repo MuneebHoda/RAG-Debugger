@@ -24,6 +24,19 @@ cargo build --workspace
 )
 
 docker compose up -d postgres
+postgres_ready=false
+for _attempt in $(seq 1 30); do
+  if docker compose exec -T postgres pg_isready -U postgres -d rag_debugger >/dev/null 2>&1; then
+    postgres_ready=true
+    break
+  fi
+  sleep 2
+done
+if [ "$postgres_ready" != "true" ]; then
+  echo "PostgreSQL did not become ready within 60 seconds." >&2
+  docker compose logs postgres >&2 || true
+  exit 1
+fi
 DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/rag_debugger}" sqlx migrate run
 DATABASE_URL="${DATABASE_URL:-postgres://postgres:postgres@localhost:5432/rag_debugger}" \
   cargo test -p rag-debugger-storage --test evidence_repository_contract \

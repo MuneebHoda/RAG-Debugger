@@ -18,6 +18,8 @@ import {
 import {
   applyCandidate,
   captureCandidate,
+  revalidateSealedCandidate,
+  sealCandidate,
   validateCandidate,
   verifyAttestation,
 } from "../../../scripts/autonomy/candidate.mjs";
@@ -160,9 +162,10 @@ test("Issue 27 reviewed bootstrap reaches deterministic publication eligibility"
   const outputPath = path.join(control, "builder-output.json");
   const contextPath = path.join(control, "builder-context.json");
   const artifactDirectory = path.join(control, "candidate");
-  const attestationPath = path.join(control, "attestation.json");
+  const attestationPath = path.join(artifactDirectory, "attestation.json");
+  const sealedPath = path.join(control, "builder-sealed.json");
   await writeFile(outputPath, JSON.stringify(output));
-  await writeFile(contextPath, JSON.stringify(context));
+  await writeFile(contextPath, `${JSON.stringify(context, null, 2)}\n`);
   const manifest = await captureCandidate({
     repositoryRoot: root,
     outputPath,
@@ -170,6 +173,10 @@ test("Issue 27 reviewed bootstrap reaches deterministic publication eligibility"
     schemaPath: path.join(
       repositoryRoot,
       ".github/autonomy/schemas/builder-output.schema.json",
+    ),
+    contextSchemaPath: path.join(
+      repositoryRoot,
+      ".github/autonomy/schemas/builder-context.schema.json",
     ),
     policyPath: path.join(repositoryRoot, ".github/autonomy/policy.json"),
     artifactDirectory,
@@ -188,8 +195,52 @@ test("Issue 27 reviewed bootstrap reaches deterministic publication eligibility"
   });
   git(root, ["diff", "--check"]);
   await validateAutonomyRepository();
-  await verifyAttestation(artifactDirectory, attestationPath);
+  await verifyAttestation({
+    artifactDirectory,
+    attestationPath,
+    trustedDirectory: repositoryRoot,
+    expectedContext: {
+      baseSha,
+      issueNumber: 27,
+      repository: "MuneebHoda/RAG-Debugger",
+      runUrl: "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/27",
+      trigger: "bootstrap",
+    },
+  });
   assert.equal(attestation.base_sha, baseSha);
+  const sealed = await sealCandidate({
+    artifactDirectory,
+    sealedPath,
+    trustedDirectory: repositoryRoot,
+    expectedContext: {
+      baseSha,
+      issueNumber: 27,
+      repository: "MuneebHoda/RAG-Debugger",
+      runUrl: "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/27",
+      trigger: "bootstrap",
+    },
+  });
+  git(root, ["reset", "--hard", "-q", baseSha]);
+  git(root, ["clean", "-fdq"]);
+  await revalidateSealedCandidate({
+    repositoryRoot: root,
+    sealedPath,
+    artifactDirectory: path.join(control, "publisher-candidate"),
+    trustedDirectory: repositoryRoot,
+    expectedArtifact: {
+      expectedId: "27",
+      observedId: "27",
+      expectedDigest: sealed.sha256,
+      observedDigest: sealed.sha256,
+    },
+    expectedContext: {
+      baseSha,
+      issueNumber: 27,
+      repository: "MuneebHoda/RAG-Debugger",
+      runUrl: "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/27",
+      trigger: "bootstrap",
+    },
+  });
 
   const claimedIssue = {
     ...fixture.issue,
