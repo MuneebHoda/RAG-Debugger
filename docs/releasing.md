@@ -40,22 +40,26 @@ milestone or release issue. That owner verifies:
 
 ## Release Verification
 
-Fetch the current remote refs without changing the working tree, then record and
-verify the full commit SHA before running the release gate:
+Start from a clean checkout. Fetch the current remote refs without changing the
+working tree, require both tracked and untracked files to be clean, then record
+and verify the full commit SHA before running the release gate:
 
 ```sh
 git fetch origin --tags
+test -z "$(git status --porcelain --untracked-files=all)"
 RELEASE_COMMIT="$(git rev-parse --verify 'HEAD^{commit}')"
 git cat-file -e "${RELEASE_COMMIT}^{commit}"
 git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
 printf 'Verified release commit: %s\n' "$RELEASE_COMMIT"
 just ci-check
 git diff --check
+test -z "$(git status --porcelain --untracked-files=all)"
 ```
 
 Copy the printed full SHA into the release issue and draft release notes. All
 verification results must refer to that exact commit. If the checkout changes,
-discard the previous result and verify the new commit from the beginning.
+or either clean-worktree check fails, discard every result, clean the checkout
+deliberately, and restart verification from the fetch step.
 
 Confirm the GitHub `Coverage`, Dependency Review, Cargo Deny, CodeQL, Rust, Web,
 Database migrations, and Documentation checks completed for that commit.

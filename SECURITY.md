@@ -61,3 +61,24 @@ without attaching the underlying private content.
 Credentials must never be committed, logged, pasted into issues, or included in
 advisory attachments. Revoke or rotate any credential that may have been
 exposed, then report the exposure using redacted identifiers only.
+
+## Containment And Remediation
+
+When a credible exposure is identified, take proportionate steps without
+assuming hosted incident-response infrastructure exists:
+
+- stop access to or further distribution of affected releases, artifacts, or
+  links where practical;
+- revoke affected credentials and sessions before continuing investigation;
+- preserve sanitized evidence needed to understand the event without copying
+  private corpus, query, trace, credential, or customer content;
+- assess the exposed data classes, affected versions, duration, and impacted
+  users;
+- coordinate remediation and disclosure privately through the advisory;
+- make required user, contractual, legal, or regulatory notifications through
+  the appropriate channels; and
+- publish a visible corrected release and mitigation guidance without moving
+  tags or silently rewriting published history.
+
+Containment actions, evidence handling, remediation ownership, and disclosure
+decisions should be recorded in the private advisory using redacted details.

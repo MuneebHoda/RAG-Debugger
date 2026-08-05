@@ -7,7 +7,7 @@ import console from "node:console";
 
 import { __parsePrettierYamlConfig as parseYaml } from "prettier/plugins/yaml";
 
-const PRIVATE_ADVISORY_URL =
+export const PRIVATE_ADVISORY_URL =
   "https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new";
 const REQUIRED_FORMS = new Set([
   "bug_report.yml",
@@ -41,6 +41,52 @@ function assert(condition, message) {
   if (!condition) {
     throw new Error(message);
   }
+}
+
+export function extractMarkdownLinkDestinations(markdown) {
+  const destinations = [];
+  const linkPattern =
+    /(?<!!)\[[^\]\r\n]+\]\(\s*(?:<([^>\r\n]+)>|([^\s)\r\n]+))(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\)))?\s*\)/g;
+
+  for (const match of markdown.matchAll(linkPattern)) {
+    destinations.push(match[1] ?? match[2]);
+  }
+
+  return destinations;
+}
+
+export function validateCanonicalAdvisoryLinks(relativePath, markdown) {
+  const destinations = extractMarkdownLinkDestinations(markdown);
+  assert(
+    destinations.length > 0,
+    `${relativePath} must link to the private advisory URL`,
+  );
+
+  for (const destination of destinations) {
+    assert(
+      destination === PRIVATE_ADVISORY_URL,
+      `${relativePath} contains a non-canonical vulnerability-reporting URL`,
+    );
+  }
+}
+
+function extractLevelTwoSection(markdown, heading) {
+  const marker = `## ${heading}`;
+  const headingStart = markdown.indexOf(marker);
+  if (headingStart === -1) {
+    return undefined;
+  }
+
+  const contentStart = markdown.indexOf("\n", headingStart + marker.length);
+  if (contentStart === -1) {
+    return "";
+  }
+
+  const nextHeading = markdown.indexOf("\n## ", contentStart + 1);
+  return markdown.slice(
+    contentStart + 1,
+    nextHeading === -1 ? markdown.length : nextHeading,
+  );
 }
 
 async function readRepositoryFile(relativePath) {
@@ -136,7 +182,9 @@ function validateIssueForm(relativePath, source, form, configuredLabels) {
   }
 
   const warning = markdown.find((value) =>
-    value.includes(PRIVATE_ADVISORY_URL),
+    SENSITIVE_DATA_MARKERS.every((marker) =>
+      value.toLowerCase().includes(marker),
+    ),
   );
   assert(
     warning,
@@ -150,24 +198,7 @@ function validateIssueForm(relativePath, source, form, configuredLabels) {
     );
   }
 
-  validateAdvisoryReferences(relativePath, source);
-}
-
-function validateAdvisoryReferences(relativePath, source) {
-  const referenceLines = source
-    .split("\n")
-    .filter((line) => line.includes("security/advisories"));
-
-  assert(
-    referenceLines.length > 0,
-    `${relativePath} must contain the private advisory URL`,
-  );
-  for (const line of referenceLines) {
-    assert(
-      line.includes(PRIVATE_ADVISORY_URL),
-      `${relativePath} contains a non-canonical vulnerability-reporting URL`,
-    );
-  }
+  validateCanonicalAdvisoryLinks(relativePath, warning);
 }
 
 async function main() {
@@ -216,11 +247,21 @@ async function main() {
     Array.isArray(config.contact_links),
     `${configPath} must define contact links`,
   );
-  assert(
-    config.contact_links.some((link) => link?.url === PRIVATE_ADVISORY_URL),
-    `${configPath} must expose the private advisory contact link`,
+  const securityContactLinks = config.contact_links.filter((link) =>
+    /vulnerab|security advis|private report/i.test(
+      `${link?.name ?? ""} ${link?.about ?? ""}`,
+    ),
   );
-  validateAdvisoryReferences(configPath, configDocument.source);
+  assert(
+    securityContactLinks.length > 0,
+    `${configPath} must expose a private advisory contact link`,
+  );
+  for (const link of securityContactLinks) {
+    assert(
+      link.url === PRIVATE_ADVISORY_URL,
+      `${configPath} contains a non-canonical vulnerability-reporting URL`,
+    );
+  }
 
   const securityPath = "SECURITY.md";
   const securityPolicy = await readRepositoryFile(securityPath);
@@ -228,7 +269,15 @@ async function main() {
     /do not open a public GitHub issue/i.test(securityPolicy),
     `${securityPath} must prohibit public vulnerability reports`,
   );
-  validateAdvisoryReferences(securityPath, securityPolicy);
+  const reportingSection = extractLevelTwoSection(
+    securityPolicy,
+    "Report A Vulnerability",
+  );
+  assert(
+    reportingSection,
+    `${securityPath} must define the vulnerability-reporting section`,
+  );
+  validateCanonicalAdvisoryLinks(securityPath, reportingSection);
   const normalizedPolicy = securityPolicy.toLowerCase();
   for (const marker of SENSITIVE_DATA_MARKERS) {
     assert(
@@ -242,7 +291,10 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(`Governance validation failed: ${error.message}`);
-  process.exitCode = 1;
-});
+const invokedPath = process.argv[1] && path.resolve(process.argv[1]);
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`Governance validation failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

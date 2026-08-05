@@ -25,9 +25,11 @@ The repository-specific contact links in the issue chooser keep public product
 work separate from confidential security disclosure.
 
 `npm run governance:check` validates issue-form YAML, configured labels,
-sensitive-data warnings, the canonical private-reporting URL, and the security
-policy boundary. It runs through both `just check` and the existing web test
-command so governance drift fails local and pull-request validation.
+sensitive-data warnings, exact private-reporting link destinations, and the
+security policy boundary. Deterministic URL-confusion regressions run with
+Node's built-in test runner. The check runs through both `just check` and the
+existing web test command so governance drift fails local and pull-request
+validation.
 
 [CODEOWNERS](../.github/CODEOWNERS) records the current maintainer for the
 repository and makes automation, agent policy, security policy, migrations, and
