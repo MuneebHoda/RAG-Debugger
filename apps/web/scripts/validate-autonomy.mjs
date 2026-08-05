@@ -35,64 +35,160 @@ const preserveTrustedAutomation =
   'mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"\n' +
   'cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"\n' +
   'cp -R scripts/autonomy "$RUNNER_TEMP/trusted/scripts/autonomy"\n';
+const trustedCheckout = {
+  name: "Checkout exact trusted base",
+  uses: checkoutAction,
+  with: {
+    ref: "${{ github.sha }}",
+    "persist-credentials": false,
+  },
+};
 
 const trustedValidationSteps = [
-  {
-    name: "Checkout exact trusted base",
-    uses: checkoutAction,
-  },
+  trustedCheckout,
   { name: "Preserve trusted automation", run: preserveTrustedAutomation },
-  { name: "Download candidate", uses: downloadArtifactAction },
+  {
+    name: "Download candidate",
+    uses: downloadArtifactAction,
+    with: {
+      name: "builder-candidate",
+      path: "${{ runner.temp }}/candidate",
+    },
+  },
   {
     name: "Recheck pause before validation",
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" assert-unpaused validation',
   },
   {
     name: "Apply candidate safely",
+    env: {
+      AUTONOMY_REPOSITORY_ROOT: "${{ github.workspace }}",
+      AUTONOMY_TRUSTED_ROOT: "${{ runner.temp }}/trusted",
+    },
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" apply-candidate "$RUNNER_TEMP/candidate"',
   },
   {
     name: "Validate and seal candidate before code execution",
+    id: "seal",
+    env: {
+      AUTONOMY_EXPECTED_BASE_SHA: "${{ github.sha }}",
+      AUTONOMY_EXPECTED_CONTEXT_SHA256:
+        "${{ needs.preflight.outputs.context_sha256 }}",
+      AUTONOMY_EXPECTED_ISSUE_NUMBER:
+        "${{ needs.preflight.outputs.issue_number }}",
+      AUTONOMY_EXPECTED_REPOSITORY: exactRepository,
+      AUTONOMY_EXPECTED_RUN_URL:
+        "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}",
+      AUTONOMY_EXPECTED_TRIGGER: "${{ needs.preflight.outputs.trigger }}",
+      AUTONOMY_REPOSITORY_ROOT: "${{ github.workspace }}",
+      AUTONOMY_TRUSTED_ROOT: "${{ runner.temp }}/trusted",
+    },
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" seal-candidate "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/candidate/attestation.json" "$RUNNER_TEMP/builder-sealed.json"',
   },
   {
     name: "Upload immutable validated candidate",
+    id: "upload",
     uses: uploadArtifactAction,
+    with: {
+      path: "${{ runner.temp }}/builder-sealed.json",
+      archive: false,
+      "retention-days": 1,
+      "if-no-files-found": "error",
+      overwrite: false,
+    },
   },
   {
     name: "Verify immutable upload digest",
+    env: {
+      LOCAL_DIGEST: "${{ steps.seal.outputs.bundle_sha256 }}",
+      UPLOAD_DIGEST: "${{ steps.upload.outputs.artifact-digest }}",
+    },
     run: 'test "$LOCAL_DIGEST" = "$UPLOAD_DIGEST"',
   },
 ];
 
 const trustedPublisherSteps = [
-  {
-    name: "Checkout exact trusted base",
-    uses: checkoutAction,
-  },
+  trustedCheckout,
   { name: "Preserve trusted automation", run: preserveTrustedAutomation },
   {
     name: "Download original immutable candidate by artifact ID",
     uses: downloadArtifactAction,
+    with: {
+      "artifact-ids": "${{ needs.validate.outputs.artifact_id }}",
+      path: "${{ runner.temp }}/sealed",
+      "skip-decompress": true,
+      "digest-mismatch": "error",
+    },
   },
   {
     name: "Recheck pause before publisher validation",
+    env: {
+      AUTONOMY_TRUSTED_ROOT: "${{ runner.temp }}/trusted",
+    },
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" assert-unpaused validation',
   },
   {
     name: "Revalidate and apply candidate without executing it",
+    env: {
+      AUTONOMY_DOWNLOADED_ARTIFACT_DIGEST:
+        "${{ needs.validate.outputs.artifact_digest }}",
+      AUTONOMY_DOWNLOADED_ARTIFACT_ID:
+        "${{ needs.validate.outputs.artifact_id }}",
+      AUTONOMY_EXPECTED_ARTIFACT_DIGEST:
+        "${{ needs.validate.outputs.bundle_sha256 }}",
+      AUTONOMY_EXPECTED_ARTIFACT_ID:
+        "${{ needs.validate.outputs.artifact_id }}",
+      AUTONOMY_EXPECTED_BASE_SHA: "${{ github.sha }}",
+      AUTONOMY_EXPECTED_CONTEXT_SHA256:
+        "${{ needs.preflight.outputs.context_sha256 }}",
+      AUTONOMY_EXPECTED_ISSUE_NUMBER:
+        "${{ needs.preflight.outputs.issue_number }}",
+      AUTONOMY_EXPECTED_REPOSITORY: exactRepository,
+      AUTONOMY_EXPECTED_RUN_URL:
+        "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}",
+      AUTONOMY_EXPECTED_TRIGGER: "${{ needs.preflight.outputs.trigger }}",
+      AUTONOMY_REPOSITORY_ROOT: "${{ github.workspace }}",
+      AUTONOMY_TRUSTED_ROOT: "${{ runner.temp }}/trusted",
+    },
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" revalidate-sealed-candidate "$RUNNER_TEMP/sealed/builder-sealed.json" "$RUNNER_TEMP/publisher-candidate"',
   },
   {
     name: "Recheck pause before publication",
+    env: {
+      AUTONOMY_TRUSTED_ROOT: "${{ runner.temp }}/trusted",
+    },
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" assert-unpaused publication',
   },
   {
     name: "Create publication-only GitHub App token",
+    id: "app-token",
     uses: appTokenAction,
+    with: {
+      "app-id": "${{ secrets.AUTONOMY_APP_ID }}",
+      "private-key": "${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}",
+      owner: "MuneebHoda",
+      repositories: exactRepository,
+      "permission-contents": "write",
+      "permission-issues": "write",
+      "permission-pull-requests": "write",
+    },
   },
   {
     name: "Publish validated draft",
+    env: {
+      AUTONOMY_GITHUB_TOKEN: "${{ steps.app-token.outputs.token }}",
+      AUTONOMY_EXPECTED_BASE_SHA: "${{ github.sha }}",
+      AUTONOMY_EXPECTED_CONTEXT_SHA256:
+        "${{ needs.preflight.outputs.context_sha256 }}",
+      AUTONOMY_EXPECTED_ISSUE_NUMBER:
+        "${{ needs.preflight.outputs.issue_number }}",
+      AUTONOMY_EXPECTED_REPOSITORY: exactRepository,
+      AUTONOMY_EXPECTED_RUN_URL:
+        "https://github.com/MuneebHoda/RAG-Debugger/actions/runs/${{ github.run_id }}",
+      AUTONOMY_EXPECTED_TRIGGER: "${{ needs.preflight.outputs.trigger }}",
+      AUTONOMY_REPOSITORY_ROOT: "${{ github.workspace }}",
+      AUTONOMY_TRUSTED_ROOT: "${{ runner.temp }}/trusted",
+    },
     run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" publish-builder "$RUNNER_TEMP/publisher-candidate" "$RUNNER_TEMP/publisher-candidate/attestation.json"',
   },
 ];
@@ -167,18 +263,21 @@ export function validateAppTokenSteps(relativePath, workflow) {
   }
 }
 
-function executableStep(step) {
-  return {
-    name: step?.name,
-    ...(step?.uses === undefined ? {} : { uses: step.uses }),
-    ...(step?.run === undefined ? {} : { run: step.run }),
-  };
+function canonicalValue(value) {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right, "en-US"))
+        .map(([key, item]) => [key, canonicalValue(item)]),
+    );
+  return value;
 }
 
 function validateTrustedStepAllowlist(jobName, steps, expected) {
-  const actual = (steps ?? []).map(executableStep);
   invariant(
-    JSON.stringify(actual) === JSON.stringify(expected),
+    JSON.stringify(canonicalValue(steps ?? [])) ===
+      JSON.stringify(canonicalValue(expected)),
     `${jobName} must match the exact trusted step allowlist`,
   );
 }

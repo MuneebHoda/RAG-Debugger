@@ -306,7 +306,10 @@ test("builder workflow isolates immutable validation, quality, and publication",
     String(step.uses ?? "").startsWith("actions/upload-artifact@"),
   );
   sealedUpload.with.overwrite = true;
-  assert.throws(() => validateBuilder(overwrite), /immutably upload/u);
+  assert.throws(
+    () => validateBuilder(overwrite),
+    /exact trusted step allowlist/u,
+  );
 
   const ungatedPublish = cloneFixture(workflow);
   ungatedPublish.jobs.publish.needs = ["validate"];
@@ -356,6 +359,23 @@ test("builder workflow isolates immutable validation, quality, and publication",
     assert.throws(
       () => validateBuilder(publisherBypass),
       /builder publisher must match the exact trusted step allowlist/u,
+    );
+  }
+
+  for (const [jobName, stepIndex, property, value] of [
+    ["validate", 3, "env", { NODE_OPTIONS: "--require=./candidate.mjs" }],
+    ["validate", 2, "with", { name: "builder-candidate", path: "." }],
+    ["publish", 5, "env", { AUTONOMY_TRUSTED_ROOT: "." }],
+    ["publish", 2, "with", { "artifact-ids": "untrusted" }],
+  ]) {
+    const modifiedStep = cloneFixture(workflow);
+    modifiedStep.jobs[jobName].steps[stepIndex][property] = value;
+    assert.throws(
+      () => validateBuilder(modifiedStep),
+      new RegExp(
+        `builder ${jobName === "validate" ? "validation" : "publisher"} must match the exact trusted step allowlist`,
+        "u",
+      ),
     );
   }
 });
