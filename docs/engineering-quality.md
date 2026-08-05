@@ -68,6 +68,26 @@ just full-check
 
 Use `just rust-check` or `just web-check` for focused iteration. `just check` composes both fast gates. `just ci-check` is the explicit release-equivalent gate, and `just full-check` remains its backward-compatible alias.
 
+## Coverage Baseline
+
+The separate `Coverage` workflow measures the complete locked Rust workspace with all features and every production TypeScript and TSX file under `apps/web/src`. Rust uses `cargo-llvm-cov 0.8.7`; the web uses Vitest's V8 provider through the matching `@vitest/coverage-v8 4.1.9` development dependency. Both jobs publish explicit LCOV reports to Codecov with `rust` and `web` flags.
+
+Frontend test/spec files, `setupTests.ts`, and TypeScript declaration files are excluded because they are test infrastructure or type-only inputs rather than shipped application behavior. Untested production files are deliberately included. Rust coverage excludes dependency, compiler, generated build, test-harness, example, and benchmark sources through `cargo-llvm-cov` defaults while retaining all workspace production crates.
+
+Codecov project and changed-line coverage statuses are informational while the team collects a representative baseline. No coverage percentage, target, or threshold currently blocks merging, and the coverage workflow is not a required branch-protection check. The jobs still fail when report generation, path validation, or the OIDC-authenticated upload breaks so coverage infrastructure failures remain visible.
+
+Generate the reports locally with:
+
+```sh
+rustup component add llvm-tools-preview
+cargo install cargo-llvm-cov --version 0.8.7 --locked
+cargo llvm-cov --workspace --all-features --locked \
+  --lcov --output-path target/llvm-cov/lcov.info
+cd apps/web && npm run test:coverage
+```
+
+Generated LCOV files remain ignored. Coverage thresholds will be considered only after reviewing the real Rust and web baselines, changed-line behavior, and consistently uncovered product areas across multiple pull requests.
+
 ## Pull Request Dependency Gate
 
 Every pull request runs the `Dependency Review` check. It compares dependency changes with the GitHub Advisory Database and fails when the pull request introduces a known High or Critical vulnerability in runtime, development, or unknown dependency scopes.

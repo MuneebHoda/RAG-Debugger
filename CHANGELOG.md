@@ -18,6 +18,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Informational Codecov project and changed-line coverage reporting for the complete Rust workspace and all production frontend TypeScript, with separate OIDC-authenticated Rust and web uploads and no merge-blocking percentage threshold.
 - Workspace-isolation contracts for MemoryStore, migrated Postgres, authenticated two-workspace APIs, runtime retrieval/trace/embedding paths, and legacy ownership backfill/quarantine behavior.
 - Evidence-search browse indexes and migrated query-plan regression coverage over a 20,000-document/60,000-chunk fixture.
 - Deterministic MemoryStore/Postgres evidence repositories with capped direct-ID resolution, bounded browse/results, compact UTF-8 previews, and trigram-indexed Postgres corpus search.
