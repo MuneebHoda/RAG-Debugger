@@ -94,7 +94,9 @@ CodeRabbit provides an advisory review of ready pull requests using the reposito
 
 CodeRabbit does not use the request-changes workflow and is not a required branch-protection check. Automated code edits, docstrings, unit tests, simplification, CI fixes, conflict resolution, prompts for other AI agents, poems, fortunes, and automatic chat replies are disabled. A contributor can still request a manual review through CodeRabbit's documented PR command when needed.
 
-The GitHub App is limited to this repository. It processes repository source, pull request diffs, review metadata, and check results as an external engineering provider, but it has no CorpusLab runtime, database, workspace, or customer-data integration. The provider boundary and rollback decision are recorded in [ADR 0005](adr/0005-coderabbit-review-provider.md).
+The GitHub App is limited to this public repository. It processes repository source, pull request diffs, review metadata, and check results as an external engineering provider, but it has no CorpusLab runtime, database, workspace, or customer-data integration. GitHub secret scanning and push protection are enabled before external review. The protected `main` ruleset still requires pull requests and the existing CI checks; CodeRabbit is advisory, so feature-branch changes to its configuration cannot weaken those gates.
+
+CodeRabbit's default cache and knowledge-base retention remain explicitly enabled. Review caches expire within seven days, while repository learnings and pull request context remain until an administrator deletes them or opts out. The repository owner reviews the provider's maintained subprocessor register and retention controls. The full provider boundary, deletion procedure, and rollback decision are recorded in [ADR 0005](adr/0005-coderabbit-review-provider.md).
 
 ## Pull Request Dependency Gate
 

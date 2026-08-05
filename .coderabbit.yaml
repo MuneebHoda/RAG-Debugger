@@ -3,6 +3,7 @@ language: en-US
 
 reviews:
   profile: chill
+  disable_cache: false
   request_changes_workflow: false
   high_level_summary: true
   review_status: true
@@ -30,3 +31,6 @@ reviews:
 
 chat:
   auto_reply: false
+
+knowledge_base:
+  opt_out: false
