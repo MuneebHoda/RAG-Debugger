@@ -6,9 +6,11 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
+    "governance:check": "node scripts/validate-governance.mjs",
     "size:check": "node scripts/check-bundle-budget.mjs",
     "lint": "eslint . --max-warnings 0",
-    "test": "vitest run",
+    "test": "npm run governance:check && vitest run",
+    "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "typecheck": "tsc -b",

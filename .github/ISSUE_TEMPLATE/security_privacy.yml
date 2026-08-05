@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Use this public form for non-sensitive security hardening and privacy-design work only. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new). Never include secrets, credentials, customer corpus/query content, traces, or other sensitive data.
+        Use this public form for non-sensitive security hardening and privacy-design work only. Do not include secrets, credentials, customer corpus content, queries, traces, or other sensitive data. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new).
   - type: textarea
     id: concern
     attributes:

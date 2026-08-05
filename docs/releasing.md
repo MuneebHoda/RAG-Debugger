@@ -40,12 +40,22 @@ milestone or release issue. That owner verifies:
 
 ## Release Verification
 
-From a clean checkout of the exact release commit, run:
+Fetch the current remote refs without changing the working tree, then record and
+verify the full commit SHA before running the release gate:
 
 ```sh
+git fetch origin --tags
+RELEASE_COMMIT="$(git rev-parse --verify 'HEAD^{commit}')"
+git cat-file -e "${RELEASE_COMMIT}^{commit}"
+git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+printf 'Verified release commit: %s\n' "$RELEASE_COMMIT"
 just ci-check
 git diff --check
 ```
+
+Copy the printed full SHA into the release issue and draft release notes. All
+verification results must refer to that exact commit. If the checkout changes,
+discard the previous result and verify the new commit from the beginning.
 
 Confirm the GitHub `Coverage`, Dependency Review, Cargo Deny, CodeQL, Rust, Web,
 Database migrations, and Documentation checks completed for that commit.
@@ -62,14 +72,23 @@ Prepare release notes in a reviewed file or GitHub draft. Include the version,
 release commit, major changes, compatibility or migration notes, known issues,
 verification performed, and the named rollback owner.
 
-Create and push an annotated tag:
+In the same shell session used for verification, set the intended version and
+create the annotated tag against the recorded commit explicitly:
 
 ```sh
-git switch main
-git pull --ff-only origin main
-git tag -a vX.Y.Z -m "CorpusLab vX.Y.Z"
-git push origin vX.Y.Z
+RELEASE_VERSION="v0.3.0-rc.1"
+git cat-file -e "${RELEASE_COMMIT}^{commit}"
+git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
+git tag -a "$RELEASE_VERSION" "$RELEASE_COMMIT" -m "CorpusLab ${RELEASE_VERSION}"
+TAGGED_COMMIT="$(git rev-parse "${RELEASE_VERSION}^{commit}")"
+test "$TAGGED_COMMIT" = "$RELEASE_COMMIT"
+git push origin "refs/tags/${RELEASE_VERSION}"
 ```
+
+If publishing resumes in a new shell, restore `RELEASE_COMMIT` from the exact
+full SHA recorded in the release issue rather than deriving it from the current
+checkout. Do not tag if the recorded commit is unavailable or is not an
+ancestor of `origin/main`.
 
 Create a GitHub Release from that existing tag, mark it as a pre-release while
 CorpusLab is pre-launch, and use the reviewed release notes. Verify that the

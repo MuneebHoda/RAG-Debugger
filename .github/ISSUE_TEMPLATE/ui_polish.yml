@@ -3,6 +3,10 @@ description: Improve visual quality, usability, interaction, or responsive behav
 title: "ui: "
 labels: ["area/web"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, credentials, customer corpus content, queries, traces, or other sensitive data. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new), not this public form.
   - type: textarea
     id: surface
     attributes:

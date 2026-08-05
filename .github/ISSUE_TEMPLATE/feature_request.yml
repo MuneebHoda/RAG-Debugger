@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Describe the workflow without including secrets, customer corpus content, private queries, traces, or credentials. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new), not this public form.
+        Describe the workflow without including secrets, credentials, customer corpus content, queries, traces, or other sensitive data. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new), not this public form.
 
   - type: textarea
     id: user_problem

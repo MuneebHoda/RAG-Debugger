@@ -3,6 +3,10 @@ description: Track latency, throughput, memory, database, indexing, or GPU/HPC w
 title: "perf: "
 labels: ["type/performance"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include secrets, credentials, customer corpus content, queries, traces, or other sensitive data. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new), not this public form.
   - type: textarea
     id: target
     attributes:
