@@ -1,0 +1,195 @@
+name: Autonomous Planner
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Diagnostic mode; neither option invokes Codex or publishes issues.
+        required: true
+        default: preflight
+        type: choice
+        options:
+          - preflight
+          - dry-run
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+concurrency:
+  group: bounded-autonomous-planner
+  cancel-in-progress: false
+
+env:
+  AUTONOMY_PAUSED: ${{ vars.AUTONOMY_PAUSED || 'true' }}
+  AUTONOMY_APPROVERS: ${{ vars.AUTONOMY_APPROVERS || 'MuneebHoda' }}
+  AUTONOMY_PLANNER_SCHEDULE_ENABLED: ${{ vars.AUTONOMY_PLANNER_SCHEDULE_ENABLED || 'false' }}
+
+jobs:
+  preflight:
+    name: Planner preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      execute_model: ${{ steps.preflight.outputs.execute_model }}
+      diagnostic: ${{ steps.preflight.outputs.diagnostic }}
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Run deterministic preflight
+        id: preflight
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          HAS_AUTONOMY_APP: ${{ secrets.AUTONOMY_APP_ID != '' && secrets.AUTONOMY_APP_PRIVATE_KEY != '' }}
+          HAS_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY != '' }}
+        run: node scripts/autonomy/autonomy.mjs planner-preflight "$RUNNER_TEMP/planner-context"
+      - name: Upload planner inventory
+        if: steps.preflight.outputs.execute_model == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: planner-context
+          path: ${{ runner.temp }}/planner-context
+          retention-days: 1
+          if-no-files-found: error
+
+  generate:
+    name: Generate proposals
+    needs: preflight
+    if: needs.preflight.outputs.execute_model == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout exact trusted base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download planner inventory
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: planner-context
+          path: ${{ runner.temp }}/planner-context
+      - name: Preserve trusted automation
+        run: |
+          mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"
+          cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"
+          cp -R scripts/autonomy "$RUNNER_TEMP/trusted/scripts/autonomy"
+      - name: Prepare planner prompt
+        env:
+          AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          prepare-prompt planner
+          "$RUNNER_TEMP/planner-context/planner-inventory.json"
+          "$RUNNER_TEMP/planner-prompt.md"
+      - name: Recheck pause before generation
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          assert-unpaused generation
+      - name: Run bounded planner
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1.11
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: ${{ runner.temp }}/planner-prompt.md
+          output-file: ${{ runner.temp }}/planner-output.json
+          output-schema-file: ${{ runner.temp }}/trusted/.github/autonomy/schemas/planner-output.schema.json
+          working-directory: ${{ github.workspace }}
+          sandbox: workspace-write
+          safety-strategy: drop-sudo
+          codex-version: 0.146.0
+          model: gpt-5.6-sol
+          effort: xhigh
+          allow-bots: true
+          allow-bot-users: github-actions[bot]
+      - name: Validate proposal output and clean workspace
+        env:
+          AUTONOMY_REPOSITORY_ROOT: ${{ github.workspace }}
+          AUTONOMY_TRUSTED_ROOT: ${{ runner.temp }}/trusted
+        run: >-
+          node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs"
+          validate-planner
+          "$RUNNER_TEMP/planner-output.json"
+          "$RUNNER_TEMP/planner-context/planner-inventory.json"
+          "$RUNNER_TEMP/planner-candidate"
+      - name: Upload untrusted proposal candidate
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: planner-candidate
+          path: ${{ runner.temp }}/planner-candidate
+          retention-days: 1
+          if-no-files-found: error
+
+  validate:
+    name: Validate proposals
+    needs: generate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact trusted base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download proposal candidate
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: planner-candidate
+          path: ${{ runner.temp }}/planner-candidate
+      - name: Recheck pause before validation
+        run: node scripts/autonomy/autonomy.mjs assert-unpaused validation
+      - name: Revalidate against trusted schema
+        run: >-
+          node scripts/autonomy/autonomy.mjs validate-planner
+          "$RUNNER_TEMP/planner-candidate/planner-output.json"
+          "$RUNNER_TEMP/planner-candidate/planner-inventory.json"
+          "$RUNNER_TEMP/planner-validated"
+      - name: Upload validated proposals
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: planner-validated
+          path: ${{ runner.temp }}/planner-validated
+          retention-days: 1
+          if-no-files-found: error
+
+  publish:
+    name: Publish proposed issues
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact trusted base
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Download validated proposals
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: planner-validated
+          path: ${{ runner.temp }}/planner-validated
+      - name: Recheck pause before publication
+        run: node scripts/autonomy/autonomy.mjs assert-unpaused publication
+      - name: Create narrow GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ secrets.AUTONOMY_APP_ID }}
+          private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: read
+          permission-issues: write
+      - name: Publish proposals
+        env:
+          AUTONOMY_GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/autonomy/autonomy.mjs publish-planner "$RUNNER_TEMP/planner-validated"

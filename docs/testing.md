@@ -74,6 +74,20 @@ npm run build
 npm run size:check
 ```
 
+## Autonomous Engineering
+
+Run the deterministic automation suite without an OpenAI key or GitHub write token:
+
+```sh
+cd apps/web
+npm run autonomy:test
+npm run autonomy:check
+```
+
+Fixtures cover model/effort pinning, structured-output schemas, duplicate proposals, sanitized planner inventory, issue ordering, deterministic branch names, protected/sensitive/artifact paths, size approvals, exact changed-file declarations, pre-artifact secret rejection, path traversal, control-character paths, and symlinks. Static workflow checks enforce immutable action pins, read-only default permissions, diagnostic-only dispatch, disabled schedule gates, one model call, lifecycle pause checks, generation/publication credential separation, workspace-write plus `drop-sudo`, and the absence of automatic merge/ready/close operations.
+
+Tests never call Codex, consume paid tokens, mutate repository settings, apply labels, create branches, or open issues/PRs. Live validation is the reviewed Issue #27 bootstrap after App, secrets, variables, and budget controls are configured.
+
 Expected coverage in the scaffold:
 
 - App shell and workbench navigation render tests.

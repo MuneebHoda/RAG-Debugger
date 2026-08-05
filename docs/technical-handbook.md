@@ -343,6 +343,16 @@ See `docs/guided-demo.md` for the exact walkthrough, versioning policy, privacy 
 
 All major defaults should be changed through `.env.example` values rather than hidden route constants.
 
+## Bounded Autonomous Engineering
+
+CorpusLab's repository automation separates planning, implementation, validation, and publication. The planner uses GPT-5.6 Sol with `xhigh` reasoning to propose at most three distinct issues. The builder uses GPT-5.6 Sol with `high` reasoning to implement exactly one maintainer-approved issue. Both use one standard-mode invocation with no fallback or automatic retry.
+
+Generation runs through the pinned official Codex action with workspace-write and `drop-sudo`, but no GitHub App token. A fresh job validates schema output, sanitization, path and size policy, artifact hashes, tests, Rust/web quality, Playwright, documentation, migrations, Postgres contracts, and Cargo Deny. Only a final non-executing publisher receives a short-lived App token for repository contents, issues, and draft pull requests.
+
+Schedules are disabled by default. Approval-label provenance, global builder concurrency, one-open-PR enforcement, protected/sensitive paths, pause checks, and explicit recovery prevent the automation from becoming a retry or merge loop. Humans retain issue approval, review, ready status, merge, deployment, release, and closure authority. See `docs/autonomous-engineering.md` and ADR 0006 for setup, privacy, cost, rotation, audit, pause, and rollback.
+
+Deterministic tests run through `just autonomy-check` and require no model credential or live GitHub mutation.
+
 ## Testing Strategy
 
 Rust:

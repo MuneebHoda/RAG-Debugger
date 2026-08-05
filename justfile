@@ -42,6 +42,9 @@ db-migrate:
 governance-check:
     cd apps/web && npm run governance:check
 
+autonomy-check:
+    cd apps/web && npm run autonomy:check
+
 rust-check:
     cargo fmt --all --check
     cargo clippy --workspace --all-targets -- -D warnings
@@ -55,7 +58,7 @@ web-check:
     cd apps/web && npm run test:unit -- --run
     cd apps/web && npm run build
 
-ci-check: governance-check rust-check web-check
+ci-check: governance-check autonomy-check rust-check web-check
     cd apps/web && npm run size:check
     cd apps/web && npx playwright test
     cd apps/web && npm run docs:pdf
@@ -67,6 +70,6 @@ ci-check: governance-check rust-check web-check
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test workspace_migration workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage postgres_evidence_query_plans_are_index_compatible -- --ignored
 
-check: governance-check rust-check web-check
+check: governance-check autonomy-check rust-check web-check
 
 full-check: ci-check

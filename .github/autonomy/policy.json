@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "authorization_marker": "issue-99-reviewed-bootstrap-v1",
+  "models": {
+    "planner": {
+      "id": "gpt-5.6-sol",
+      "effort": "xhigh",
+      "mode": "standard"
+    },
+    "builder": {
+      "id": "gpt-5.6-sol",
+      "effort": "high",
+      "mode": "standard"
+    }
+  },
+  "bootstrap": {
+    "issue_number": 27
+  },
+  "labels": {
+    "proposed": "agent/proposed",
+    "approved": "agent/approved",
+    "claimed": "agent/claimed",
+    "generated": "agent/generated",
+    "blocked": "agent/blocked",
+    "sensitive_approved": "agent/sensitive-approved",
+    "large_approved": "agent/large-approved"
+  },
+  "limits": {
+    "planner_proposals": 3,
+    "open_proposals": 3,
+    "issue_body_characters": 12000,
+    "justification_files": 30,
+    "justification_lines": 2000,
+    "approval_files": 50,
+    "approval_lines": 4000,
+    "absolute_files": 100,
+    "absolute_lines": 10000,
+    "single_file_bytes": 5242880,
+    "artifact_bytes": 20971520
+  },
+  "protected_paths": [
+    ".github/",
+    ".coderabbit.yaml",
+    "codecov.yml",
+    "AGENTS.md",
+    "SECURITY.md",
+    "justfile",
+    "scripts/autonomy/",
+    "apps/web/scripts/validate-autonomy.mjs",
+    "apps/web/scripts/autonomy.regression.mjs",
+    "docs/releasing.md"
+  ],
+  "sensitive_paths": [
+    ".env.example",
+    "apps/web/.env.example",
+    "Cargo.toml",
+    "Cargo.lock",
+    "apps/api/Cargo.toml",
+    "crates/core/Cargo.toml",
+    "crates/rag/Cargo.toml",
+    "crates/storage/Cargo.toml",
+    "deny.toml",
+    "docker-compose.yml",
+    "docker-compose 2.yml",
+    "migrations/",
+    "apps/web/package.json",
+    "apps/web/package-lock.json",
+    "apps/api/src/auth.rs",
+    "apps/api/src/config.rs",
+    "apps/api/src/http/auth_routes.rs",
+    "apps/api/src/http/api_keys.rs",
+    "apps/api/src/http/config.rs",
+    "apps/api/src/http/reports.rs",
+    "apps/web/src/features/auth/",
+    "apps/web/src/features/workbench/settings/",
+    "apps/web/src/lib/api/apiKeys.ts",
+    "apps/web/src/lib/api/auth.ts",
+    "apps/web/src/lib/api/reports.ts",
+    "crates/core/src/auth.rs",
+    "crates/core/src/config.rs",
+    "crates/core/src/privacy.rs",
+    "crates/core/src/report.rs",
+    "crates/rag/src/reports/",
+    "apps/web/src/features/workbench/reports/",
+    "crates/storage/",
+    "docs/auth-and-workspaces.md",
+    "docs/logging-redaction.md",
+    "docs/privacy-review-checklist.md",
+    "docs/rag-audit-reports.md"
+  ],
+  "generated_paths": ["docs/technical-handbook.pdf"],
+  "artifact_paths": [
+    "target/",
+    "node_modules/",
+    "apps/web/dist/",
+    "apps/web/coverage/",
+    "apps/web/test-results/",
+    "apps/web/playwright-report/",
+    ".data/",
+    ".cache/",
+    "uploads/"
+  ],
+  "allowed_issue_labels": [
+    "area/api",
+    "area/web",
+    "area/rag",
+    "area/storage",
+    "area/docs",
+    "type/bug",
+    "type/feature",
+    "type/refactor",
+    "type/test",
+    "type/security",
+    "type/performance",
+    "priority/p0",
+    "priority/p1",
+    "priority/p2",
+    "priority/p3"
+  ]
+}

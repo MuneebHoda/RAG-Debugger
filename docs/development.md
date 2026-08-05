@@ -85,6 +85,7 @@ With `just`:
 ```sh
 just db-up
 just db-migrate
+just autonomy-check
 just rust-check
 just web-check
 just check
@@ -97,9 +98,12 @@ just web
 
 - `rust-check`: Rust formatting, clippy, workspace tests, and workspace build.
 - `web-check`: web formatting, typecheck, lint, tests, and production build.
-- `check`: the fast local gate combining `rust-check` and `web-check`.
+- `autonomy-check`: dependency-free policy, schema, workflow, and fixture validation for the bounded engineering agent.
+- `check`: the fast local gate combining governance, autonomy, Rust, and web checks.
 - `ci-check`: the release gate adding bundle budgets, Playwright, handbook generation, Postgres, and migrations.
 - `full-check`: backward-compatible alias for `ci-check`.
+
+Autonomous workflows are configured in GitHub, not through the product runtime. Keep schedules disabled while developing or reviewing automation. Diagnostic `workflow_dispatch` runs perform preflight only and do not invoke the model or write to GitHub. See [`docs/autonomous-engineering.md`](autonomous-engineering.md) before changing prompts, policy, permissions, labels, or credentials.
 
 ## Database Flow
 

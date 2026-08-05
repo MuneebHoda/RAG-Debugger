@@ -16,6 +16,12 @@ CorpusLab uses GitHub as the engineering source of truth. Issues define work, pu
 5. Merge only after CI passes.
 6. Squash merge with a conventional title.
 
+## Bounded Autonomous Work
+
+The autonomous planner may propose up to three evidence-backed issues, and the builder may prepare one approved issue as a draft pull request. Human review and merge remain mandatory. The planner cannot approve its own work, and the builder cannot mark a PR ready, approve, merge, deploy, release, repair CI, or close an issue.
+
+Run `just autonomy-check` to validate the model policy, schemas, workflow permissions, labels, and fixture suite. Operational setup, approval labels, pause/recovery steps, cost controls, and credential rotation are documented in [`docs/autonomous-engineering.md`](autonomous-engineering.md). ADR 0006 records the generation/validation/publication trust boundary.
+
 ## Repository Governance
 
 Use the structured GitHub issue forms for actionable bug and feature intake.
