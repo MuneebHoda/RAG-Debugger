@@ -16,6 +16,32 @@ CorpusLab uses GitHub as the engineering source of truth. Issues define work, pu
 5. Merge only after CI passes.
 6. Squash merge with a conventional title.
 
+## Repository Governance
+
+Use the structured GitHub issue forms for actionable bug and feature intake.
+Suspected vulnerabilities must not enter public issues; follow
+[SECURITY.md](../SECURITY.md) and use GitHub private vulnerability reporting.
+The repository-specific contact links in the issue chooser keep public product
+work separate from confidential security disclosure.
+
+`npm run governance:check` validates issue-form YAML, configured labels,
+sensitive-data warnings, exact private-reporting link destinations, and the
+security policy boundary. Only rendered Markdown counts; fenced and inline code
+examples cannot satisfy those requirements. Deterministic URL-confusion and
+Markdown-context regressions run with Node's built-in test runner. The check
+runs through both `just check` and the existing web test command so governance
+drift fails local and pull-request validation.
+
+[CODEOWNERS](../.github/CODEOWNERS) records the current maintainer for the
+repository and makes automation, agent policy, security policy, migrations, and
+architecture decisions explicit review surfaces. It documents ownership only;
+code-owner approval is not a required branch-protection rule while the project
+has one trusted maintainer.
+
+Release preparation, verification, tagging, smoke checks, and correction policy
+are defined in the [release guide](releasing.md). A release issue or milestone
+must name the maintainer responsible for both publication and rollback.
+
 ## Versioning
 
 CorpusLab uses semantic pre-release versioning before launch:
@@ -25,7 +51,9 @@ CorpusLab uses semantic pre-release versioning before launch:
 - `v0.2.1`: patch-level fix inside a milestone.
 - `v0.3.0-rc.1`: release candidate.
 
-Every milestone release should update `CHANGELOG.md` and create a GitHub Release.
+Every milestone release should update `CHANGELOG.md`, follow the
+[release guide](releasing.md), and create a GitHub Release from an annotated,
+immutable tag.
 
 ## GitHub Project Board
 
