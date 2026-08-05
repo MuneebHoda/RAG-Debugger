@@ -43,12 +43,108 @@ function assert(condition, message) {
   }
 }
 
+function parseFence(line) {
+  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+  if (!match) {
+    return undefined;
+  }
+
+  return {
+    character: match[1][0],
+    length: match[1].length,
+    trailing: match[2],
+  };
+}
+
+function removeFencedCode(markdown) {
+  let activeFence;
+
+  return markdown
+    .split(/\r?\n/)
+    .map((line) => {
+      const fence = parseFence(line);
+      if (activeFence) {
+        if (
+          fence &&
+          fence.character === activeFence.character &&
+          fence.length >= activeFence.length &&
+          fence.trailing.trim().length === 0
+        ) {
+          activeFence = undefined;
+        }
+        return "";
+      }
+
+      if (fence) {
+        activeFence = fence;
+        return "";
+      }
+
+      return line;
+    })
+    .join("\n");
+}
+
+function backtickRunLength(markdown, start) {
+  let end = start;
+  while (markdown[end] === "`") {
+    end += 1;
+  }
+  return end - start;
+}
+
+function removeInlineCode(markdown) {
+  let rendered = "";
+  let index = 0;
+
+  while (index < markdown.length) {
+    if (markdown[index] !== "`") {
+      rendered += markdown[index];
+      index += 1;
+      continue;
+    }
+
+    const openingLength = backtickRunLength(markdown, index);
+    let searchIndex = index + openingLength;
+    let closingIndex = -1;
+
+    while (searchIndex < markdown.length) {
+      const candidateIndex = markdown.indexOf("`", searchIndex);
+      if (candidateIndex === -1) {
+        break;
+      }
+
+      const candidateLength = backtickRunLength(markdown, candidateIndex);
+      if (candidateLength === openingLength) {
+        closingIndex = candidateIndex;
+        break;
+      }
+      searchIndex = candidateIndex + candidateLength;
+    }
+
+    if (closingIndex === -1) {
+      rendered += markdown.slice(index, index + openingLength);
+      index += openingLength;
+      continue;
+    }
+
+    rendered += " ";
+    index = closingIndex + openingLength;
+  }
+
+  return rendered;
+}
+
+export function markdownOutsideCode(markdown) {
+  return removeInlineCode(removeFencedCode(markdown));
+}
+
 export function extractMarkdownLinkDestinations(markdown) {
   const destinations = [];
   const linkPattern =
     /(?<!!)\[[^\]\r\n]+\]\(\s*(?:<([^>\r\n]+)>|([^\s)\r\n]+))(?:\s+(?:"[^"\r\n]*"|'[^'\r\n]*'|\([^\r\n)]*\)))?\s*\)/g;
 
-  for (const match of markdown.matchAll(linkPattern)) {
+  for (const match of markdownOutsideCode(markdown).matchAll(linkPattern)) {
     destinations.push(match[1] ?? match[2]);
   }
 
@@ -71,22 +167,22 @@ export function validateCanonicalAdvisoryLinks(relativePath, markdown) {
 }
 
 function extractLevelTwoSection(markdown, heading) {
+  const lines = markdownOutsideCode(markdown).split("\n");
   const marker = `## ${heading}`;
-  const headingStart = markdown.indexOf(marker);
-  if (headingStart === -1) {
+  const headingIndex = lines.findIndex((line) => line.trim() === marker);
+  if (headingIndex === -1) {
     return undefined;
   }
 
-  const contentStart = markdown.indexOf("\n", headingStart + marker.length);
-  if (contentStart === -1) {
-    return "";
-  }
+  const nextHeadingOffset = lines
+    .slice(headingIndex + 1)
+    .findIndex((line) => /^ {0,3}##(?:\s|$)/.test(line));
+  const sectionEnd =
+    nextHeadingOffset === -1
+      ? lines.length
+      : headingIndex + 1 + nextHeadingOffset;
 
-  const nextHeading = markdown.indexOf("\n## ", contentStart + 1);
-  return markdown.slice(
-    contentStart + 1,
-    nextHeading === -1 ? markdown.length : nextHeading,
-  );
+  return lines.slice(headingIndex + 1, sectionEnd).join("\n");
 }
 
 async function readRepositoryFile(relativePath) {
@@ -105,7 +201,7 @@ async function readYaml(relativePath) {
   }
 }
 
-function validateIssueForm(relativePath, source, form, configuredLabels) {
+function validateIssueForm(relativePath, form, configuredLabels) {
   assert(
     form && typeof form === "object" && !Array.isArray(form),
     `${relativePath} must contain a YAML object`,
@@ -142,7 +238,7 @@ function validateIssueForm(relativePath, source, form, configuredLabels) {
           item.attributes.value.length > 0,
         `${relativePath} markdown item ${index + 1} must define content`,
       );
-      markdown.push(item.attributes.value);
+      markdown.push(markdownOutsideCode(item.attributes.value));
       continue;
     }
 
@@ -224,12 +320,7 @@ async function main() {
   for (const templateName of templateNames) {
     const relativePath = `.github/ISSUE_TEMPLATE/${templateName}`;
     const document = await readYaml(relativePath);
-    validateIssueForm(
-      relativePath,
-      document.source,
-      document.value,
-      configuredLabels,
-    );
+    validateIssueForm(relativePath, document.value, configuredLabels);
   }
 
   const configPath = ".github/ISSUE_TEMPLATE/config.yml";
@@ -265,12 +356,13 @@ async function main() {
 
   const securityPath = "SECURITY.md";
   const securityPolicy = await readRepositoryFile(securityPath);
+  const renderedSecurityPolicy = markdownOutsideCode(securityPolicy);
   assert(
-    /do not open a public GitHub issue/i.test(securityPolicy),
+    /do not open a public GitHub issue/i.test(renderedSecurityPolicy),
     `${securityPath} must prohibit public vulnerability reports`,
   );
   const reportingSection = extractLevelTwoSection(
-    securityPolicy,
+    renderedSecurityPolicy,
     "Report A Vulnerability",
   );
   assert(
@@ -278,7 +370,7 @@ async function main() {
     `${securityPath} must define the vulnerability-reporting section`,
   );
   validateCanonicalAdvisoryLinks(securityPath, reportingSection);
-  const normalizedPolicy = securityPolicy.toLowerCase();
+  const normalizedPolicy = renderedSecurityPolicy.toLowerCase();
   for (const marker of SENSITIVE_DATA_MARKERS) {
     assert(
       normalizedPolicy.includes(marker),

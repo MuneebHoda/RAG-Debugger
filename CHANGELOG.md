@@ -18,7 +18,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
-- Repository governance baseline with exact-link issue-policy validation, private security-reporting and containment guidance, actionable bug and feature forms, explicit CODEOWNERS coverage, and clean-worktree exact-commit release verification.
+- Repository governance baseline with rendered-Markdown exact-link issue-policy validation, private security-reporting and containment guidance, actionable bug and feature forms, explicit CODEOWNERS coverage, and clean-worktree exact-commit release verification.
 - Advisory CodeRabbit reviews for ready pull requests with repository-owned settings, high-level summaries, nonblocking status, disabled code-generation finishing touches, and a documented external engineering-data boundary.
 - Informational Codecov project and changed-line coverage reporting for the complete Rust workspace and all production frontend TypeScript, with separate OIDC-authenticated Rust and web uploads and no merge-blocking percentage threshold.
 - Workspace-isolation contracts for MemoryStore, migrated Postgres, authenticated two-workspace APIs, runtime retrieval/trace/embedding paths, and legacy ownership backfill/quarantine behavior.

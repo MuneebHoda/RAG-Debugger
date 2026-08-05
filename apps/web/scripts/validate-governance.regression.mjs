@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   PRIVATE_ADVISORY_URL,
   extractMarkdownLinkDestinations,
+  markdownOutsideCode,
   validateCanonicalAdvisoryLinks,
 } from "./validate-governance.mjs";
 
@@ -19,6 +20,17 @@ test("accepts the exact private advisory link destination", () => {
   ]);
   assert.doesNotThrow(() =>
     validateCanonicalAdvisoryLinks("valid.md", markdown),
+  );
+});
+
+test("accepts the canonical angle-bracket link destination", () => {
+  const markdown = reportingLink(`<${PRIVATE_ADVISORY_URL}>`);
+
+  assert.deepEqual(extractMarkdownLinkDestinations(markdown), [
+    PRIVATE_ADVISORY_URL,
+  ]);
+  assert.doesNotThrow(() =>
+    validateCanonicalAdvisoryLinks("angle-bracket.md", markdown),
   );
 });
 
@@ -71,6 +83,32 @@ test("rejects a plain-text URL that is not a Markdown destination", () => {
         "plain-text.md",
         `Report privately at ${PRIVATE_ADVISORY_URL}.`,
       ),
+    /must link to the private advisory URL/,
+  );
+});
+
+test("ignores policy guidance and links inside fenced code", () => {
+  const markdown = [
+    "```markdown",
+    "## Report A Vulnerability",
+    "Do not open a public GitHub issue with secrets or sensitive data.",
+    reportingLink(PRIVATE_ADVISORY_URL),
+    "```",
+  ].join("\n");
+
+  assert.equal(markdownOutsideCode(markdown).trim(), "");
+  assert.throws(
+    () => validateCanonicalAdvisoryLinks("fenced-code.md", markdown),
+    /must link to the private advisory URL/,
+  );
+});
+
+test("ignores policy guidance and links inside inline code", () => {
+  const markdown = `Use \`${reportingLink(PRIVATE_ADVISORY_URL)}\` as an example.`;
+
+  assert.equal(markdownOutsideCode(markdown), "Use   as an example.");
+  assert.throws(
+    () => validateCanonicalAdvisoryLinks("inline-code.md", markdown),
     /must link to the private advisory URL/,
   );
 });
