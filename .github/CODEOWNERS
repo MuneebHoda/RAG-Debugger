@@ -1,0 +1,10 @@
+# Default ownership for the public repository.
+* @MuneebHoda
+
+# Governance, automation, and security-sensitive paths.
+/.github/** @MuneebHoda
+/.coderabbit.yaml @MuneebHoda
+/AGENTS.md @MuneebHoda
+/SECURITY.md @MuneebHoda
+/migrations/** @MuneebHoda
+/docs/adr/** @MuneebHoda

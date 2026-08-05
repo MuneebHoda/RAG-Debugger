@@ -1,0 +1,79 @@
+name: Feature request
+description: Propose a focused CorpusLab product capability.
+title: "feat: "
+labels: ["type/feature"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the workflow without including secrets, customer corpus content, private queries, traces, or credentials. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new), not this public form.
+
+  - type: textarea
+    id: user_problem
+    attributes:
+      label: User problem
+      description: Who is affected, what are they trying to accomplish, and what blocks them today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired_outcome
+    attributes:
+      label: Desired product outcome
+      description: What should a user be able to understand or do after this ships?
+    validations:
+      required: true
+
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Proposed workflow
+      description: Describe the end-to-end user flow and important states.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List concrete, testable conditions that define completion.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Explicit non-goals
+      description: What should remain outside this change?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What existing workflow, workaround, or smaller approach did you evaluate?
+    validations:
+      required: true
+
+  - type: textarea
+    id: rag_value
+    attributes:
+      label: RAG-debugging value
+      description: How does this improve retrieval inspection, diagnosis, evaluation, evidence quality, or regression detection?
+    validations:
+      required: true
+
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, security, and data-movement impact
+      description: Identify any data that crosses a local or workspace boundary, external provider, credential, retention, export, or access-control change. Write "None" when there is no impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add sanitized diagrams, public examples, related issues, or implementation constraints.

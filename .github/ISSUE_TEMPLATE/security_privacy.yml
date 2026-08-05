@@ -3,6 +3,10 @@ description: Track privacy posture, sensitive data handling, auth, retention, or
 title: "security: "
 labels: ["type/security"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this public form for non-sensitive security hardening and privacy-design work only. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new). Never include secrets, credentials, customer corpus/query content, traces, or other sensitive data.
   - type: textarea
     id: concern
     attributes:

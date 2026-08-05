@@ -1,0 +1,101 @@
+name: Bug report
+description: Report reproducible incorrect behavior or a regression.
+title: "fix: "
+labels: ["type/bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve CorpusLab. Do not paste secrets, credentials, customer corpus content, queries, traces, or other sensitive data. Report suspected vulnerabilities through [GitHub private vulnerability reporting](https://github.com/MuneebHoda/RAG-Debugger/security/advisories/new), not this public form.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem summary
+      description: Briefly describe the incorrect behavior and its user impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest deterministic sequence that reproduces the problem using synthetic or public data.
+      placeholder: |
+        1. Start CorpusLab with ...
+        2. Open ...
+        3. Run ...
+        4. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Provide the Git tag, commit SHA, or branch where the problem occurs.
+      placeholder: v0.2.0-rc.1 or abc1234
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, browser, Node/Rust runtime versions, and MemoryStore or Postgres storage backend as applicable.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant sanitized logs
+      description: Include only minimal redacted output. Never include secrets, headers, cookies, private queries, traces, documents, or corpus content.
+      render: shell
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Regression status
+      description: Did this work in an earlier version?
+      options:
+        - "Yes"
+        - "No"
+        - Unknown
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy and security confirmation
+      options:
+        - label: I removed secrets, credentials, customer corpus/query content, traces, and other sensitive data, and this is not a vulnerability report.
+          required: true
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Willingness to contribute a fix
+      options:
+        - I can open a pull request
+        - I can help investigate or test
+        - I am unable to contribute a fix
+    validations:
+      required: true
