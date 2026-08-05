@@ -8,6 +8,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  rm,
   symlink,
   writeFile,
 } from "node:fs/promises";
@@ -83,7 +84,7 @@ function builderOutput(filesChanged) {
   };
 }
 
-async function buildSealedFixture() {
+async function buildSealedFixture({ deleteOnly = false } = {}) {
   const root = await initializeRepository();
   const baseSha = git(root, ["rev-parse", "HEAD"]).trim();
   const control = await mkdtemp(
@@ -112,14 +113,15 @@ async function buildSealedFixture() {
     issueNumber: 99,
     contextSha256: sha256(contextBytes),
   };
-  await mkdir(path.join(root, "docs"), { recursive: true });
-  await writeFile(path.join(root, "docs/example.md"), "validated bytes\n");
+  const changedPath = deleteOnly ? "README.md" : "docs/example.md";
+  if (deleteOnly) await rm(path.join(root, changedPath));
+  else {
+    await mkdir(path.join(root, "docs"), { recursive: true });
+    await writeFile(path.join(root, changedPath), "validated bytes\n");
+  }
   const outputPath = path.join(control, "builder-output.json");
   const contextPath = path.join(control, "builder-context.json");
-  await writeFile(
-    outputPath,
-    JSON.stringify(builderOutput(["docs/example.md"])),
-  );
+  await writeFile(outputPath, JSON.stringify(builderOutput([changedPath])));
   await writeFile(contextPath, contextBytes);
   const candidate = path.join(control, "candidate");
   await captureCandidate({
@@ -317,6 +319,20 @@ test("quality mutations cannot alter the immutable publisher artifact", async ()
   assert.equal(
     await readFile(path.join(publisherRepository, "docs/example.md"), "utf8"),
     "validated bytes\n",
+  );
+});
+
+test("delete-only candidates seal the four required control files", async () => {
+  const fixture = await buildSealedFixture({ deleteOnly: true });
+  const sealed = JSON.parse(await readFile(fixture.sealedPath, "utf8"));
+  assert.deepEqual(
+    sealed.entries.map((entry) => entry.path),
+    [
+      "attestation.json",
+      "builder-output.json",
+      "context.json",
+      "manifest.json",
+    ],
   );
 });
 

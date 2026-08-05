@@ -7,7 +7,7 @@
     "version": { "type": "integer", "const": 1 },
     "entries": {
       "type": "array",
-      "minItems": 5,
+      "minItems": 4,
       "maxItems": 105,
       "items": {
         "type": "object",

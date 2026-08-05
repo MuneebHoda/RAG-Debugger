@@ -22,6 +22,8 @@ const workflowPaths = [
   ".github/workflows/autonomy-builder.yml",
 ];
 const immutableAction = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/u;
+const checkoutAction =
+  "actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803";
 const appTokenAction =
   "actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1";
 const uploadArtifactAction =
@@ -29,6 +31,71 @@ const uploadArtifactAction =
 const downloadArtifactAction =
   "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const exactRepository = "MuneebHoda/RAG-Debugger";
+const preserveTrustedAutomation =
+  'mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"\n' +
+  'cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"\n' +
+  'cp -R scripts/autonomy "$RUNNER_TEMP/trusted/scripts/autonomy"\n';
+
+const trustedValidationSteps = [
+  {
+    name: "Checkout exact trusted base",
+    uses: checkoutAction,
+  },
+  { name: "Preserve trusted automation", run: preserveTrustedAutomation },
+  { name: "Download candidate", uses: downloadArtifactAction },
+  {
+    name: "Recheck pause before validation",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" assert-unpaused validation',
+  },
+  {
+    name: "Apply candidate safely",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" apply-candidate "$RUNNER_TEMP/candidate"',
+  },
+  {
+    name: "Validate and seal candidate before code execution",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" seal-candidate "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/candidate/attestation.json" "$RUNNER_TEMP/builder-sealed.json"',
+  },
+  {
+    name: "Upload immutable validated candidate",
+    uses: uploadArtifactAction,
+  },
+  {
+    name: "Verify immutable upload digest",
+    run: 'test "$LOCAL_DIGEST" = "$UPLOAD_DIGEST"',
+  },
+];
+
+const trustedPublisherSteps = [
+  {
+    name: "Checkout exact trusted base",
+    uses: checkoutAction,
+  },
+  { name: "Preserve trusted automation", run: preserveTrustedAutomation },
+  {
+    name: "Download original immutable candidate by artifact ID",
+    uses: downloadArtifactAction,
+  },
+  {
+    name: "Recheck pause before publisher validation",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" assert-unpaused validation',
+  },
+  {
+    name: "Revalidate and apply candidate without executing it",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" revalidate-sealed-candidate "$RUNNER_TEMP/sealed/builder-sealed.json" "$RUNNER_TEMP/publisher-candidate"',
+  },
+  {
+    name: "Recheck pause before publication",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" assert-unpaused publication',
+  },
+  {
+    name: "Create publication-only GitHub App token",
+    uses: appTokenAction,
+  },
+  {
+    name: "Publish validated draft",
+    run: 'node "$RUNNER_TEMP/trusted/scripts/autonomy/autonomy.mjs" publish-builder "$RUNNER_TEMP/publisher-candidate" "$RUNNER_TEMP/publisher-candidate/attestation.json"',
+  },
+];
 
 async function readRepositoryFile(relativePath) {
   return readFile(path.join(repositoryRoot, relativePath), "utf8");
@@ -69,9 +136,10 @@ function actionSteps(workflow) {
 }
 
 export function validateAppTokenSteps(relativePath, workflow) {
-  for (const { jobName, step } of actionSteps(workflow).filter(({ step }) =>
-    step.uses.startsWith("actions/create-github-app-token@"),
-  )) {
+  for (const { jobName, step } of actionSteps(workflow).filter(({ step }) => {
+    const actionName = step.uses.split("@", 1)[0].toLocaleLowerCase("en-US");
+    return actionName === "actions/create-github-app-token";
+  })) {
     invariant(
       step.uses === appTokenAction,
       `${relativePath} ${jobName} uses an unapproved App-token action pin`,
@@ -97,6 +165,22 @@ export function validateAppTokenSteps(relativePath, workflow) {
       `${relativePath} ${jobName} App token target must be one static repository`,
     );
   }
+}
+
+function executableStep(step) {
+  return {
+    name: step?.name,
+    ...(step?.uses === undefined ? {} : { uses: step.uses }),
+    ...(step?.run === undefined ? {} : { run: step.run }),
+  };
+}
+
+function validateTrustedStepAllowlist(jobName, steps, expected) {
+  const actual = (steps ?? []).map(executableStep);
+  invariant(
+    JSON.stringify(actual) === JSON.stringify(expected),
+    `${jobName} must match the exact trusted step allowlist`,
+  );
 }
 
 function serialized(value) {
@@ -252,6 +336,16 @@ export function validateBuilder(workflow) {
       publish.includes('permission-pull-requests":"write'),
     "builder publisher permissions are incomplete",
   );
+  validateTrustedStepAllowlist(
+    "builder validation",
+    workflow.jobs.validate?.steps,
+    trustedValidationSteps,
+  );
+  validateTrustedStepAllowlist(
+    "builder publisher",
+    workflow.jobs.publish?.steps,
+    trustedPublisherSteps,
+  );
   invariant(
     validate.includes("seal-candidate") &&
       validate.includes(uploadArtifactAction) &&
@@ -282,25 +376,6 @@ export function validateBuilder(workflow) {
       !publish.includes(uploadArtifactAction) &&
       publish.includes('"persist-credentials":false'),
     "draft publication must use the original artifact after validation and quality",
-  );
-  const publishSteps = workflow.jobs.publish.steps;
-  const publisherValidationIndex = publishSteps.findIndex((step) =>
-    String(step.run ?? "").includes("revalidate-sealed-candidate"),
-  );
-  const publisherTokenIndex = publishSteps.findIndex(
-    (step) => step.uses === appTokenAction,
-  );
-  invariant(
-    publisherValidationIndex >= 0 &&
-      publisherTokenIndex > publisherValidationIndex &&
-      !publishSteps
-        .slice(publisherTokenIndex + 1)
-        .some((step) =>
-          /(?:cargo|npm|playwright|run-quality|\.\/)/u.test(
-            String(step.run ?? ""),
-          ),
-        ),
-    "publisher token must be minted after revalidation and before trusted publication only",
   );
   invariant(
     serialized(workflow.jobs.block).includes(

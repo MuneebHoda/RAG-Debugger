@@ -237,6 +237,10 @@ test("each GitHub App token step must target the one approved repository", () =>
   );
   const unsafeSteps = [
     { ...validStep, uses: "actions/create-github-app-token@" + "f".repeat(40) },
+    {
+      ...validStep,
+      uses: "Actions/Create-GitHub-App-Token@" + "f".repeat(40),
+    },
     { ...validStep, with: { repositories: "MuneebHoda/RAG-Debugger" } },
     { ...validStep, with: { owner: "MuneebHoda" } },
     {
@@ -318,7 +322,10 @@ test("builder workflow isolates immutable validation, quality, and publication",
   );
   const [token] = steps.splice(tokenIndex, 1);
   steps.splice(1, 0, token);
-  assert.throws(() => validateBuilder(earlyToken), /after revalidation/u);
+  assert.throws(
+    () => validateBuilder(earlyToken),
+    /builder publisher must match the exact trusted step allowlist/u,
+  );
 
   const executingValidator = cloneFixture(workflow);
   executingValidator.jobs.validate.steps.splice(-1, 0, {
@@ -326,8 +333,31 @@ test("builder workflow isolates immutable validation, quality, and publication",
   });
   assert.throws(
     () => validateBuilder(executingValidator),
-    /before candidate execution/u,
+    /exact trusted step allowlist/u,
   );
+
+  for (const untrustedStep of [
+    { run: "node candidate-script.mjs" },
+    { run: "bash candidate-script.sh" },
+    { run: "python candidate-script.py" },
+    {
+      uses: "actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd",
+    },
+  ]) {
+    const validationBypass = cloneFixture(workflow);
+    validationBypass.jobs.validate.steps.splice(-1, 0, untrustedStep);
+    assert.throws(
+      () => validateBuilder(validationBypass),
+      /builder validation must match the exact trusted step allowlist/u,
+    );
+
+    const publisherBypass = cloneFixture(workflow);
+    publisherBypass.jobs.publish.steps.push(untrustedStep);
+    assert.throws(
+      () => validateBuilder(publisherBypass),
+      /builder publisher must match the exact trusted step allowlist/u,
+    );
+  }
 });
 
 test("planner rejects duplicate, external, and unapproved proposals", () => {
