@@ -8,6 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  builderPullRequestBody,
   chooseEligibleIssue,
   classifyPaths,
   containsSecretLikeValue,
@@ -26,6 +27,7 @@ import {
   captureCandidate,
 } from "../../../scripts/autonomy/candidate.mjs";
 import { repositoryParts } from "../../../scripts/autonomy/github.mjs";
+import { validateWorkflow } from "./validate-autonomy.mjs";
 
 const repositoryRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -97,6 +99,15 @@ test("model policy fixes planner to xhigh and builder to high", () => {
     effort: "high",
     mode: "standard",
   });
+});
+
+test("workflow validation rejects absent and malformed trigger maps", () => {
+  for (const triggers of [undefined, null, false, "push", []]) {
+    assert.throws(
+      () => validateWorkflow("fixture.yml", { on: triggers }),
+      /object-shaped workflow triggers/u,
+    );
+  }
 });
 
 test("sanitization removes external and hidden instructions", () => {
@@ -254,7 +265,7 @@ test("reviewed bootstrap is authorized only on the policy-introducing main push"
     eventName: "push",
     ref: "refs/heads/main",
     beforePolicyPresent: false,
-    authorizationMarker: "issue-99-reviewed-bootstrap-v1",
+    authorizationMarker: policy.authorization_marker,
   };
   assert.equal(isReviewedBootstrap(valid), true);
   assert.equal(
@@ -394,6 +405,31 @@ test("builder output must name the approved issue and exact changed paths", () =
       ),
     /issue-closing directive/,
   );
+});
+
+test("builder output permits package scopes but neutralizes active mentions", () => {
+  const output = {
+    issue_number: 27,
+    plan: ["Update @vitest/coverage-v8 without notifying @maintainer."],
+    summary: "Keep @types/node aligned with the approved change.",
+    files_changed: ["apps/web/package.json"],
+    tests_added: ["Verified @testing-library/react behavior."],
+    validation_commands: ["npm test -- --run @scope/example"],
+    documentation_updated: [],
+    risks: ["A scoped package can drift."],
+    rollback: "Revert @scope/example without notifying @maintainer.",
+    follow_ups: [],
+    atomicity: { justification: "", testing: "", rollback: "" },
+    generated_or_mechanical_paths: [],
+    test_exception: "",
+  };
+  validateBuilderOutput(output, builderSchema, { issue: { number: 27 } }, [
+    "apps/web/package.json",
+  ]);
+  const body = builderPullRequestBody(output, { issue: { number: 27 } });
+  assert.match(body, /&#64;vitest\/coverage-v8/u);
+  assert.match(body, /&#64;maintainer/u);
+  assert.doesNotMatch(body, /@(?:vitest|maintainer|types|testing-library)/u);
 });
 
 test("candidate application verifies hashes and rejects traversal", async () => {

@@ -93,7 +93,7 @@ jobs:
           app-id: ${{ secrets.AUTONOMY_APP_ID }}
           private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
+          repositories: ${{ github.repository }}
           permission-contents: read
           permission-issues: write
           permission-pull-requests: read
@@ -275,7 +275,7 @@ jobs:
           app-id: ${{ secrets.AUTONOMY_APP_ID }}
           private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
+          repositories: ${{ github.repository }}
           permission-contents: write
           permission-issues: write
           permission-pull-requests: write
@@ -316,7 +316,7 @@ jobs:
           app-id: ${{ secrets.AUTONOMY_APP_ID }}
           private-key: ${{ secrets.AUTONOMY_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ github.event.repository.name }}
+          repositories: ${{ github.repository }}
           permission-contents: read
           permission-issues: write
       - name: Mark attempt blocked without retry

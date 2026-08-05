@@ -4,6 +4,22 @@ const apiVersion = "2022-11-28";
 const canonicalApiOrigin = "https://api.github.com";
 const allowedMethods = new Set(["GET", "POST", "PATCH", "DELETE"]);
 
+function issuePath(number) {
+  invariant(
+    Number.isInteger(number) && number > 0,
+    "GitHub issue number must be a positive integer",
+  );
+  return String(number);
+}
+
+function commitPath(sha) {
+  invariant(
+    typeof sha === "string" && /^[0-9a-f]{40}$/u.test(sha),
+    "GitHub commit SHA must be 40 lowercase hexadecimal characters",
+  );
+  return encodeURIComponent(sha);
+}
+
 export function buildGitHubApiUrl(endpoint) {
   invariant(
     typeof endpoint === "string" &&
@@ -120,7 +136,7 @@ export class GitHubClient {
   }
 
   getIssue(number) {
-    return this.request("GET", `${this.repoPath}/issues/${number}`);
+    return this.request("GET", `${this.repoPath}/issues/${issuePath(number)}`);
   }
 
   listIssues(state = "open", labels = []) {
@@ -134,7 +150,9 @@ export class GitHubClient {
   }
 
   getTimeline(number) {
-    return this.paginate(`${this.repoPath}/issues/${number}/timeline?`);
+    return this.paginate(
+      `${this.repoPath}/issues/${issuePath(number)}/timeline?`,
+    );
   }
 
   async collaboratorPermission(login) {
@@ -158,9 +176,11 @@ export class GitHubClient {
   }
 
   addLabels(number, labels) {
-    return this.request("POST", `${this.repoPath}/issues/${number}/labels`, {
-      labels,
-    });
+    return this.request(
+      "POST",
+      `${this.repoPath}/issues/${issuePath(number)}/labels`,
+      { labels },
+    );
   }
 
   async removeLabel(number, label) {
@@ -168,7 +188,7 @@ export class GitHubClient {
     try {
       await this.request(
         "DELETE",
-        `${this.repoPath}/issues/${number}/labels/${encoded}`,
+        `${this.repoPath}/issues/${issuePath(number)}/labels/${encoded}`,
       );
     } catch (error) {
       if (!String(error.message).includes("failed with 404")) throw error;
@@ -176,9 +196,11 @@ export class GitHubClient {
   }
 
   addComment(number, body) {
-    return this.request("POST", `${this.repoPath}/issues/${number}/comments`, {
-      body,
-    });
+    return this.request(
+      "POST",
+      `${this.repoPath}/issues/${issuePath(number)}/comments`,
+      { body },
+    );
   }
 
   createIssue({ title, body, labels }) {
@@ -209,7 +231,10 @@ export class GitHubClient {
   }
 
   getGitCommit(sha) {
-    return this.request("GET", `${this.repoPath}/git/commits/${sha}`);
+    return this.request(
+      "GET",
+      `${this.repoPath}/git/commits/${commitPath(sha)}`,
+    );
   }
 
   getRef(branch) {

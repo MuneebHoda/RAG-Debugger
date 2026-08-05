@@ -31,6 +31,8 @@ Codex runs with the workspace-write sandbox and `drop-sudo`. Generation receives
 
 Validation receives no repository write credential. It rejects protected paths, unauthorized sensitive paths, unsafe paths, symlinks, generated artifacts, secret-like content, stale base commits, malformed structured output, missing tests, and changes above policy limits. It runs the complete Rust, web, Playwright, documentation, migration, Postgres contract, and Cargo Deny gates from a trusted script preserved before candidate application.
 
+The repository validator uses the exact-pinned, development-only `yaml` parser to inspect workflow structure through a supported API. This replaces an internal Prettier parser that was not a stable contract. It adds no production bundle or runtime code, performs no network access, and does not change CorpusLab's local-first data boundary; maintaining a second partial YAML parser was rejected as less reliable and harder to secure.
+
 Only the publisher receives a short-lived repository GitHub App token. It never executes candidate code. It verifies the attestation and file hashes, creates Git objects through the canonical GitHub API, opens a draft pull request, and applies bounded labels. Candidate and artifact files are opened without following symlinks, read through bounded handles, and compared with their post-read handle and pathname metadata. Size checks, secret scanning, hashing, validation, copying, and publication all use the same immutable bytes. Replaced files, symlinked ancestors, in-place mutation, and hash mismatches fail closed.
 
 The GitHub client constructs destinations from the trusted `https://api.github.com` origin, requires HTTPS with no credentials or fragments, rejects authority-style and unsafe endpoints, and disables redirects. Issue, candidate, and generated content can affect bounded request fields but cannot select an outbound host. The publication client has no retry or fallback transport.
@@ -71,7 +73,7 @@ Protected paths always require manual development. They include GitHub configura
 
 The one-time Issue #27 bootstrap has one narrower exception, because the reviewed trial itself covers CI API-key onboarding, Settings, failed-gate reports, and their privacy documentation. Trusted policy grants that exact issue a capability containing a fixed list of exact files in those areas. The sanitized context records the policy marker, capability ID, introducing `main` event, before/base SHAs, and exact paths; claim, capture, validation, and publication revalidate it against protected repository policy. It is not an approval label, cannot be requested by issue text or model output, and cannot authorize authentication/session internals, dependencies, environment files, migrations, storage, workflows, governance, deployment, or unrelated privacy boundaries. Every ordinary issue still requires an authorized `agent/sensitive-approved` label.
 
-More than 30 files or 2,000 meaningful non-generated lines requires written atomicity, testing, and rollback justification. More than 50 files or 4,000 lines requires `agent/large-approved`. The absolute limit is 100 files or 10,000 lines. Only deterministic paths listed in policy, currently the versioned handbook PDF, receive generated-file treatment.
+More than 30 files or 2,000 meaningful non-generated lines requires written justification for atomicity, testing, and rollback. More than 50 files or 4,000 lines requires `agent/large-approved`. The absolute limit is 100 files or 10,000 lines. Only deterministic paths listed in policy, currently the versioned handbook PDF, receive generated-file treatment.
 
 ## Bootstrap And Enablement
 
@@ -93,4 +95,4 @@ Rotate `OPENAI_API_KEY` in the OpenAI project and replace the GitHub repository 
 
 ## Rollback
 
-Pause first. Cancel active runs, remove the GitHub App installation, delete the three secrets, and disable both schedule variables. Revert the autonomous-engineering commit through a reviewed pull request. Generated draft branches and pull requests can be closed or deleted manually. No CorpusLab application data, migration, API, branch protection, deployment, or release rollback is required.
+Pause first and cancel active runs. If credential exposure is possible, revoke or delete the OpenAI project key and GitHub App private key at their providers before removing the App installation or repository secrets. Then delete the three repository secrets, disable both schedule variables, and revert the autonomous-engineering commit through a reviewed pull request. Generated draft branches and pull requests can be closed or deleted manually. No CorpusLab application data, migration, API, branch protection, deployment, or release rollback is required.

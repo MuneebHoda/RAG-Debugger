@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import console from "node:console";
 
-import { __parsePrettierYamlConfig as parseYaml } from "prettier/plugins/yaml";
+import { parse as parseYaml } from "yaml";
 
 import {
   createTrustedBootstrapAuthorization,
@@ -56,11 +56,21 @@ function serialized(value) {
   return JSON.stringify(value);
 }
 
-function validateWorkflow(relativePath, workflow) {
+function workflowTriggers(relativePath, workflow) {
+  const triggers = workflow?.on;
+  invariant(
+    triggers && typeof triggers === "object" && !Array.isArray(triggers),
+    `${relativePath} must define object-shaped workflow triggers`,
+  );
+  return triggers;
+}
+
+export function validateWorkflow(relativePath, workflow) {
   invariant(
     workflow && typeof workflow === "object",
     `${relativePath} must contain an object`,
   );
+  const triggers = workflowTriggers(relativePath, workflow);
   invariant(
     workflow.permissions?.contents === "read",
     `${relativePath} must default to read-only contents`,
@@ -70,7 +80,7 @@ function validateWorkflow(relativePath, workflow) {
     `${relativePath} must not cancel an active autonomous run`,
   );
   invariant(
-    !workflow.on?.pull_request_target && !workflow.on?.issue_comment,
+    !triggers.pull_request_target && !triggers.issue_comment,
     `${relativePath} contains an untrusted trigger`,
   );
   for (const action of collectUses(workflow))
@@ -79,6 +89,13 @@ function validateWorkflow(relativePath, workflow) {
       `${relativePath} action is not pinned to a full SHA: ${action}`,
     );
   const text = serialized(workflow);
+  if (text.includes("create-github-app-token")) {
+    invariant(
+      text.includes("github.repository") &&
+        !text.includes("github.event.repository.name"),
+      `${relativePath} GitHub App tokens must target the current repository`,
+    );
+  }
   for (const forbidden of [
     "gh pr merge",
     "gh pr ready",
@@ -103,7 +120,7 @@ function validateWorkflow(relativePath, workflow) {
     text.includes("HAS_OPENAI_KEY") && text.includes("HAS_AUTONOMY_APP"),
     `${relativePath} preflight must verify model and publisher configuration`,
   );
-  if (workflow.on?.workflow_dispatch) {
+  if (triggers.workflow_dispatch) {
     invariant(
       text.includes("Diagnostic mode"),
       `${relativePath} dispatch must be diagnostic-only`,
@@ -123,8 +140,9 @@ function validateWorkflow(relativePath, workflow) {
 }
 
 function validatePlanner(workflow) {
+  const triggers = workflowTriggers(workflowPaths[0], workflow);
   invariant(
-    workflow.on?.schedule?.length === 1,
+    triggers.schedule?.length === 1,
     "planner must define one weekly schedule",
   );
   invariant(workflow.jobs.generate?.steps, "planner generate job is missing");
@@ -149,16 +167,17 @@ function validatePlanner(workflow) {
 }
 
 function validateBuilder(workflow) {
+  const triggers = workflowTriggers(workflowPaths[1], workflow);
   invariant(
-    workflow.on?.issues?.types?.includes("labeled"),
+    triggers.issues?.types?.includes("labeled"),
     "builder must listen for label events",
   );
   invariant(
-    workflow.on?.push?.branches?.includes("main"),
+    triggers.push?.branches?.includes("main"),
     "builder must support the reviewed main bootstrap",
   );
   invariant(
-    workflow.on?.schedule?.length === 1,
+    triggers.schedule?.length === 1,
     "builder must define one reconciliation schedule",
   );
   invariant(
@@ -265,6 +284,9 @@ async function validatePolicyAndSchemas() {
     "SECURITY.md",
     "justfile",
     "scripts/autonomy/",
+    "apps/web/scripts/autonomy.bootstrap.regression.mjs",
+    "apps/web/scripts/autonomy.security.regression.mjs",
+    "apps/web/scripts/fixtures/autonomy/",
   ]) {
     invariant(
       policy.protected_paths.includes(required),

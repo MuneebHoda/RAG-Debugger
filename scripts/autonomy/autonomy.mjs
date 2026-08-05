@@ -14,8 +14,8 @@ import {
   createBuilderPublicationPlan,
   createTrustedBootstrapAuthorization,
   invariant,
-  isReviewedBootstrap,
   normalizeTitle,
+  policyIntroducedByRepositoryPush,
   proposalBody,
   readJson,
   sanitizeInventoryIssue,
@@ -176,27 +176,13 @@ async function assertNoGeneratedPullRequest(client, policy) {
 }
 
 function policyIntroducedByPush(policy) {
-  const before = env("GITHUB_EVENT_BEFORE");
-  if (!before || /^0+$/u.test(before)) return false;
-  try {
-    execFileSync("git", ["show", `${before}:.github/autonomy/policy.json`], {
-      cwd: repositoryRoot,
-      stdio: "ignore",
-    });
-    return isReviewedBootstrap({
-      eventName: env("GITHUB_EVENT_NAME"),
-      ref: env("GITHUB_REF"),
-      beforePolicyPresent: true,
-      authorizationMarker: policy.authorization_marker,
-    });
-  } catch {
-    return isReviewedBootstrap({
-      eventName: env("GITHUB_EVENT_NAME"),
-      ref: env("GITHUB_REF"),
-      beforePolicyPresent: false,
-      authorizationMarker: policy.authorization_marker,
-    });
-  }
+  return policyIntroducedByRepositoryPush({
+    policy,
+    beforeSha: env("GITHUB_EVENT_BEFORE"),
+    eventName: env("GITHUB_EVENT_NAME"),
+    ref: env("GITHUB_REF"),
+    repositoryRoot,
+  });
 }
 
 async function plannerPreflight(outputDirectory) {

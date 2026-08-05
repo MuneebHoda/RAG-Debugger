@@ -169,6 +169,27 @@ test("GitHub client fixes the HTTPS origin and disables redirects", async () => 
   assert.equal(calls[0].url.password, "");
 });
 
+test("GitHub client rejects untyped issue and commit path segments", async () => {
+  let calls = 0;
+  const client = new GitHubClient({
+    repository: "MuneebHoda/RAG-Debugger",
+    token: "synthetic-test-token",
+    transport: async () => {
+      calls += 1;
+      return { ok: true, status: 200, json: async () => ({}) };
+    },
+  });
+  assert.throws(() => client.getIssue("27/../outside"), /positive integer/u);
+  assert.throws(() => client.getTimeline(0), /positive integer/u);
+  assert.throws(
+    () => client.getGitCommit("a".repeat(39) + "/"),
+    /40 lowercase hexadecimal/u,
+  );
+  assert.equal(calls, 0);
+  await client.getGitCommit("a".repeat(40));
+  assert.equal(calls, 1);
+});
+
 test("redirect responses fail without a second outbound request", async () => {
   let calls = 0;
   const client = new GitHubClient({

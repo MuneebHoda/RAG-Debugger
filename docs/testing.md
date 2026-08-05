@@ -80,7 +80,6 @@ Run the deterministic automation suite without an OpenAI key or GitHub write tok
 
 ```sh
 cd apps/web
-npm run autonomy:test
 npm run autonomy:check
 ```
 

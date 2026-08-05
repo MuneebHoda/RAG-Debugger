@@ -12,6 +12,7 @@ import {
   createBuilderContext,
   createBuilderPublicationPlan,
   isReviewedBootstrap,
+  policyIntroducedByRepositoryPush,
   validateSensitivePathAuthorization,
 } from "../../../scripts/autonomy/core.mjs";
 import {
@@ -56,7 +57,19 @@ async function initializeRepository() {
   await writeFile(path.join(root, "README.md"), "bootstrap fixture\n");
   git(root, ["add", "README.md"]);
   git(root, ["commit", "-qm", "test: create bootstrap base"]);
-  return { root, baseSha: git(root, ["rev-parse", "HEAD"]).trim() };
+  const beforeSha = git(root, ["rev-parse", "HEAD"]).trim();
+  await mkdir(path.join(root, ".github/autonomy"), { recursive: true });
+  await writeFile(
+    path.join(root, ".github/autonomy/policy.json"),
+    `${JSON.stringify(policy, null, 2)}\n`,
+  );
+  git(root, ["add", ".github/autonomy/policy.json"]);
+  git(root, ["commit", "-qm", "chore: introduce reviewed policy"]);
+  return {
+    root,
+    beforeSha,
+    baseSha: git(root, ["rev-parse", "HEAD"]).trim(),
+  };
 }
 
 function builderOutput(paths) {
@@ -96,17 +109,26 @@ async function writeCandidate(root) {
 }
 
 test("Issue 27 reviewed bootstrap reaches deterministic publication eligibility", async () => {
-  const { root, baseSha } = await initializeRepository();
+  const { root, beforeSha, baseSha } = await initializeRepository();
   const control = await mkdtemp(
     path.join(os.tmpdir(), "corpuslab-bootstrap-control-"),
   );
-  const beforeSha = "b".repeat(40);
   const bootstrapEvent = {
     eventName: "push",
     ref: "refs/heads/main",
     beforeSha,
     beforePolicyPresent: false,
   };
+  assert.equal(
+    policyIntroducedByRepositoryPush({
+      policy,
+      beforeSha,
+      eventName: bootstrapEvent.eventName,
+      ref: bootstrapEvent.ref,
+      repositoryRoot: root,
+    }),
+    true,
+  );
   assert.equal(
     isReviewedBootstrap({
       ...bootstrapEvent,
@@ -197,6 +219,20 @@ test("Issue 27 reviewed bootstrap reaches deterministic publication eligibility"
       policy,
     ),
     true,
+  );
+});
+
+test("bootstrap authorization rejects unreadable commit history", async () => {
+  const { root } = await initializeRepository();
+  assert.equal(
+    policyIntroducedByRepositoryPush({
+      policy,
+      beforeSha: "f".repeat(40),
+      eventName: "push",
+      ref: "refs/heads/main",
+      repositoryRoot: root,
+    }),
+    false,
   );
 });
 
