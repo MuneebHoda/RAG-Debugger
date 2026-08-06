@@ -31,6 +31,13 @@ const uploadArtifactAction =
 const downloadArtifactAction =
   "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c";
 const exactRepository = "MuneebHoda/RAG-Debugger";
+const trustedWorkflowPermissions = { contents: "read" };
+const trustedPreflightPermissions = {
+  contents: "read",
+  issues: "read",
+  "pull-requests": "read",
+};
+const trustedPublisherPermissions = { contents: "read" };
 const preserveTrustedAutomation =
   'mkdir -p "$RUNNER_TEMP/trusted/.github" "$RUNNER_TEMP/trusted/scripts"\n' +
   'cp -R .github/autonomy "$RUNNER_TEMP/trusted/.github/autonomy"\n' +
@@ -226,16 +233,18 @@ function collectUses(workflow) {
 function actionSteps(workflow) {
   return Object.entries(workflow.jobs ?? {}).flatMap(([jobName, job]) =>
     (job.steps ?? [])
-      .map((step, index) => ({ jobName, index, step }))
+      .map((step, index) => ({ job, jobName, index, step }))
       .filter(({ step }) => typeof step?.uses === "string"),
   );
 }
 
 export function validateAppTokenSteps(relativePath, workflow) {
-  for (const { jobName, step } of actionSteps(workflow).filter(({ step }) => {
-    const actionName = step.uses.split("@", 1)[0].toLocaleLowerCase("en-US");
-    return actionName === "actions/create-github-app-token";
-  })) {
+  for (const { job, jobName, step } of actionSteps(workflow).filter(
+    ({ step }) => {
+      const actionName = step.uses.split("@", 1)[0].toLocaleLowerCase("en-US");
+      return actionName === "actions/create-github-app-token";
+    },
+  )) {
     invariant(
       step.uses === appTokenAction,
       `${relativePath} ${jobName} uses an unapproved App-token action pin`,
@@ -252,13 +261,21 @@ export function validateAppTokenSteps(relativePath, workflow) {
       `${relativePath} ${jobName} App token must use the dedicated repository secrets`,
     );
     invariant(
+      step.with?.["skip-token-revoke"] === undefined,
+      `${relativePath} ${jobName} App token must preserve automatic token revocation`,
+    );
+    invariant(
       step.with?.enterprise === undefined &&
         step.with?.["github-api-url"] === undefined &&
-        step.with?.["skip-token-revoke"] !== true &&
         !String(step.with.owner).includes("${{") &&
         !String(step.with.repositories).includes("${{") &&
         !/[\r\n,]/u.test(step.with.repositories),
       `${relativePath} ${jobName} App token target must be one static repository`,
+    );
+    validateExactPermissions(
+      `${relativePath} ${jobName} ordinary GITHUB_TOKEN`,
+      job.permissions,
+      trustedPublisherPermissions,
     );
   }
 }
@@ -282,6 +299,14 @@ function validateTrustedStepAllowlist(jobName, steps, expected) {
   );
 }
 
+function validateExactPermissions(scope, actual, expected) {
+  invariant(
+    JSON.stringify(canonicalValue(actual)) ===
+      JSON.stringify(canonicalValue(expected)),
+    `${scope} permissions must match the exact least-privilege map`,
+  );
+}
+
 function serialized(value) {
   return JSON.stringify(value);
 }
@@ -301,9 +326,20 @@ export function validateWorkflow(relativePath, workflow) {
     `${relativePath} must contain an object`,
   );
   const triggers = workflowTriggers(relativePath, workflow);
-  invariant(
-    workflow.permissions?.contents === "read",
-    `${relativePath} must default to read-only contents`,
+  validateExactPermissions(
+    `${relativePath} workflow`,
+    workflow.permissions,
+    trustedWorkflowPermissions,
+  );
+  validateExactPermissions(
+    `${relativePath} preflight`,
+    workflow.jobs?.preflight?.permissions,
+    trustedPreflightPermissions,
+  );
+  validateExactPermissions(
+    `${relativePath} publisher`,
+    workflow.jobs?.publish?.permissions,
+    trustedPublisherPermissions,
   );
   invariant(
     workflow.concurrency?.["cancel-in-progress"] === false,

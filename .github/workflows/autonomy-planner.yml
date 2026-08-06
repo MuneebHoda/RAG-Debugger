@@ -16,8 +16,6 @@ on:
 
 permissions:
   contents: read
-  issues: read
-  pull-requests: read
 
 concurrency:
   group: bounded-autonomous-planner
@@ -31,6 +29,10 @@ env:
 jobs:
   preflight:
     name: Planner preflight
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -164,6 +166,8 @@ jobs:
   publish:
     name: Publish proposed issues
     needs: validate
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

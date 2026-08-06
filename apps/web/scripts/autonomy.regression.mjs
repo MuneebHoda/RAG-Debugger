@@ -232,9 +232,45 @@ test("each GitHub App token step must target the one approved repository", () =>
   };
   assert.doesNotThrow(() =>
     validateAppTokenSteps("fixture.yml", {
-      jobs: { publish: { steps: [validStep] } },
+      permissions: { contents: "read" },
+      jobs: {
+        publish: { permissions: { contents: "read" }, steps: [validStep] },
+      },
     }),
   );
+  for (const value of [
+    false,
+    "false",
+    true,
+    "true",
+    "TrUe",
+    "${{ inputs.skip_token_revoke }}",
+    1,
+    "yes",
+    null,
+  ]) {
+    assert.throws(
+      () =>
+        validateAppTokenSteps("fixture.yml", {
+          permissions: { contents: "read" },
+          jobs: {
+            publish: {
+              permissions: { contents: "read" },
+              steps: [
+                {
+                  ...validStep,
+                  with: {
+                    ...validStep.with,
+                    "skip-token-revoke": value,
+                  },
+                },
+              ],
+            },
+          },
+        }),
+      /preserve automatic token revocation/u,
+    );
+  }
   const unsafeSteps = [
     { ...validStep, uses: "actions/create-github-app-token@" + "f".repeat(40) },
     {
@@ -269,20 +305,85 @@ test("each GitHub App token step must target the one approved repository", () =>
         enterprise: "all",
       },
     },
-    {
-      ...validStep,
-      with: { ...validStep.with, "skip-token-revoke": true },
-    },
   ];
   for (const step of unsafeSteps)
     assert.throws(
       () =>
         validateAppTokenSteps("fixture.yml", {
+          permissions: { contents: "read" },
           env: { UNRELATED: "${{ github.repository }}" },
-          jobs: { publish: { steps: [step] } },
+          jobs: {
+            publish: {
+              permissions: { contents: "read" },
+              steps: [step],
+            },
+          },
         }),
       /App-token action pin|target|dedicated repository secrets/u,
     );
+});
+
+test("every App-token job declares its ordinary token permissions", async () => {
+  for (const workflowPath of [
+    ".github/workflows/autonomy-planner.yml",
+    ".github/workflows/autonomy-builder.yml",
+  ]) {
+    const workflow = parseYaml(
+      await readFile(path.join(repositoryRoot, workflowPath), "utf8"),
+    );
+    for (const [jobName, job] of Object.entries(workflow.jobs)) {
+      if (
+        !(job.steps ?? []).some((step) =>
+          String(step.uses ?? "").startsWith(
+            "actions/create-github-app-token@",
+          ),
+        )
+      )
+        continue;
+
+      const unsafe = cloneFixture(workflow);
+      delete unsafe.jobs[jobName].permissions;
+      assert.throws(
+        () => validateAppTokenSteps(workflowPath, unsafe),
+        /ordinary GITHUB_TOKEN permissions must match/u,
+      );
+    }
+  }
+});
+
+test("publisher jobs use an explicit least-privilege ordinary token", async () => {
+  for (const workflowPath of [
+    ".github/workflows/autonomy-planner.yml",
+    ".github/workflows/autonomy-builder.yml",
+  ]) {
+    const workflow = parseYaml(
+      await readFile(path.join(repositoryRoot, workflowPath), "utf8"),
+    );
+    assert.doesNotThrow(() => validateWorkflow(workflowPath, workflow));
+
+    for (const permissions of [
+      undefined,
+      { contents: "read", issues: "read" },
+      { contents: "write" },
+      "write-all",
+      "${{ inputs.permissions }}",
+    ]) {
+      const unsafe = cloneFixture(workflow);
+      if (permissions === undefined) delete unsafe.jobs.publish.permissions;
+      else unsafe.jobs.publish.permissions = permissions;
+      assert.throws(
+        () => validateWorkflow(workflowPath, unsafe),
+        /publisher permissions must match the exact least-privilege map/u,
+      );
+    }
+
+    const broadWorkflowDefault = cloneFixture(workflow);
+    broadWorkflowDefault.permissions.issues = "read";
+    assert.throws(
+      () => validateWorkflow(workflowPath, broadWorkflowDefault),
+      /workflow permissions must match the exact least-privilege map/u,
+    );
+  }
 });
 
 test("builder workflow isolates immutable validation, quality, and publication", async () => {

@@ -22,8 +22,6 @@ on:
 
 permissions:
   contents: read
-  issues: read
-  pull-requests: read
 
 concurrency:
   group: bounded-autonomous-builder
@@ -37,6 +35,10 @@ env:
 jobs:
   preflight:
     name: Builder preflight
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
@@ -75,6 +77,8 @@ jobs:
     name: Claim approved issue
     needs: preflight
     if: needs.preflight.outputs.execute_model == 'true'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -345,6 +349,8 @@ jobs:
       - preflight
       - validate
       - quality
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -434,6 +440,8 @@ jobs:
       - quality
       - publish
     if: ${{ always() && needs.preflight.outputs.execute_model == 'true' && needs.claim.result == 'success' && needs.publish.result != 'success' }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
