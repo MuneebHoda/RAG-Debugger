@@ -170,6 +170,65 @@ describe("guided run workflow", () => {
     expect(screen.getByText("Evidence is too weak")).toBeInTheDocument();
   });
 
+  it("shows insufficient support with its primary issue", () => {
+    const primaryIssue = {
+      code: "answerability_gap" as const,
+      severity: "critical" as const,
+      title: "Retrieved candidates cannot support an answer",
+      summary: "No candidate contains enough direct body support.",
+      evidence_refs: ["E1"],
+    };
+    const diagnosis: EvidenceDiagnosisSummary = {
+      outcome: "failing",
+      summary: "This run cannot support an answer.",
+      primary_issue: primaryIssue,
+      failures: [primaryIssue],
+      score_explanations: [],
+      recommendations: [],
+    };
+
+    render(
+      <MemoryRouter>
+        <TraceDiagnosisPanel
+          answerStatus="insufficient_evidence"
+          diagnosis={diagnosis}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText(/answer support: insufficient/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: primaryIssue.title }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows unknown support for a legacy diagnosis without failures", () => {
+    const diagnosis: EvidenceDiagnosisSummary = {
+      outcome: "strong",
+      summary: "No deterministic failure signal was found.",
+      primary_issue: null,
+      failures: [],
+      score_explanations: [],
+      recommendations: [],
+    };
+
+    render(
+      <MemoryRouter>
+        <TraceDiagnosisPanel diagnosis={diagnosis} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/answer support: unknown/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /no failure signal detected/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/no deterministic failure labels/i),
+    ).toBeInTheDocument();
+  });
+
   it("requires an explicit dataset and evidence selection for Quality", async () => {
     renderWithClient(
       <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>

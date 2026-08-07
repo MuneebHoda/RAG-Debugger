@@ -617,7 +617,10 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("link", { name: /gpu embedding workers/i }).click();
   await expect(page).toHaveURL(new RegExp(`/app/traces/${traceId}$`));
-  await expect(page.getByText("Primary diagnosis")).toBeVisible();
+  await expect(
+    page.getByText("Answer support: Supported", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Retrieval quality: /)).toBeVisible();
 
   await page.getByRole("tab", { name: "Evidence" }).click();
   await expect(
