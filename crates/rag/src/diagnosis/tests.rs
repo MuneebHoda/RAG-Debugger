@@ -1,8 +1,8 @@
 use rag_debugger_core::{
     AnswerSupportAssessment, AnswerSupportReason, AnswerSupportStatus, ByteRange, ChunkPreview,
-    ChunkSplitReason, ChunkingStrategy, DiagnosisOutcome, DiagnosisRemediationArea, Document,
-    DocumentId, DocumentProfile, EmbeddingModelInfo, EvidenceStrength, ExtractionQuality,
-    ExtractiveAnswer, ExtractiveAnswerStatus, ProjectId, RetrievalCitation,
+    ChunkSplitReason, ChunkingStrategy, DiagnosisOutcome, DiagnosisRemediationArea,
+    DiagnosisSeverity, Document, DocumentId, DocumentProfile, EmbeddingModelInfo, EvidenceStrength,
+    ExtractionQuality, ExtractiveAnswer, ExtractiveAnswerStatus, ProjectId, RetrievalCitation,
     RetrievalEmbeddingReadiness, RetrievalEmbeddingStatus, RetrievalMode, RetrievalQualityFlag,
     RetrievalQueryHit, RetrievalQueryRun, RetrievalQueryRunId, RetrievalScoreBreakdown, Source,
     SourceId, SourceKind, SourceSyncPolicy,
@@ -186,6 +186,73 @@ fn answerability_gap_is_primary_and_maps_deterministic_recommendations() {
         first.recommendations[0].code,
         "restore_direct_answer_support"
     );
+}
+
+#[test]
+fn supported_answer_keeps_candidate_quality_failures_secondary() {
+    let mut direct = hit(1, 1.0, 0.6, 0.4, EvidenceStrength::Strong, Vec::new());
+    direct.answer_support = supported();
+    let mut weak = hit(2, 0.7, 0.3, 0.2, EvidenceStrength::Weak, Vec::new());
+    weak.answer_support = unsupported(AnswerSupportReason::WeakEvidence);
+    let mut heading = hit(
+        3,
+        0.5,
+        0.2,
+        0.1,
+        EvidenceStrength::Medium,
+        vec![RetrievalQualityFlag::HeadingOnly],
+    );
+    heading.answer_support = unsupported(AnswerSupportReason::HeadingOnlyEvidence);
+    let mut semantic = hit(4, 0.3, 0.1, 0.05, EvidenceStrength::Medium, Vec::new());
+    semantic.answer_support = unsupported(AnswerSupportReason::SemanticOnlyMatch);
+    let mut metadata = hit(5, 0.1, 0.05, 0.01, EvidenceStrength::Medium, Vec::new());
+    metadata.answer_support = unsupported(AnswerSupportReason::MetadataOnlyMatch);
+
+    let diagnosis = diagnose_retrieval(
+        &response(vec![direct, weak, heading, semantic, metadata]),
+        &DebuggerConfig::default(),
+        None,
+    );
+
+    assert_eq!(diagnosis.outcome, DiagnosisOutcome::Mixed);
+    assert_eq!(diagnosis.primary_issue, None);
+    assert!(diagnosis.summary.contains("answer is supported"));
+    for code in [
+        DiagnosisFailureCode::WeakEvidence,
+        DiagnosisFailureCode::HeadingOnlyEvidence,
+        DiagnosisFailureCode::SemanticOnlyMatch,
+        DiagnosisFailureCode::MetadataOnlyMatch,
+    ] {
+        assert!(diagnosis
+            .failures
+            .iter()
+            .any(|failure| failure.code == code && failure.severity == DiagnosisSeverity::Warning));
+    }
+}
+
+#[test]
+fn later_strong_supported_citation_keeps_weak_candidates_secondary() {
+    let mut earlier = hit(1, 1.0, 0.6, 0.4, EvidenceStrength::Medium, Vec::new());
+    earlier.answer_support = supported();
+    let mut later = hit(2, 0.7, 0.4, 0.3, EvidenceStrength::Strong, Vec::new());
+    later.answer_support = supported();
+    let mut weak = hit(3, 0.3, 0.2, 0.1, EvidenceStrength::Weak, Vec::new());
+    weak.answer_support = unsupported(AnswerSupportReason::WeakEvidence);
+    let mut response = response(vec![earlier, later, weak]);
+    response.answer.citations = vec![
+        response.hits[0].citation.clone(),
+        response.hits[1].citation.clone(),
+    ];
+
+    let diagnosis = diagnose_retrieval(&response, &DebuggerConfig::default(), None);
+
+    assert_eq!(diagnosis.outcome, DiagnosisOutcome::Mixed);
+    assert_eq!(diagnosis.primary_issue, None);
+    assert!(diagnosis.summary.contains("answer is supported"));
+    assert!(diagnosis.failures.iter().any(|failure| {
+        failure.code == DiagnosisFailureCode::WeakEvidence
+            && failure.severity == DiagnosisSeverity::Warning
+    }));
 }
 
 #[test]

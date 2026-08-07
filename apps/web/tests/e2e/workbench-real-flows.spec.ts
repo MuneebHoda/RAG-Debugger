@@ -43,7 +43,10 @@ test("completes the real guided workflow against the memory API", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Debug this run" }).click();
   await expect(page).toHaveURL(/\/app\/traces\/[0-9a-f-]+$/);
-  await expect(page.getByText("Primary diagnosis")).toBeVisible();
+  await expect(
+    page.getByText("Answer support: Supported", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Retrieval quality: /)).toBeVisible();
 
   await page.getByRole("tab", { name: "Compare" }).click();
   await page.getByLabel("Retrieval mode").selectOption("lexical");

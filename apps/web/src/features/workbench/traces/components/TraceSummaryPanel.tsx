@@ -9,7 +9,10 @@ export function TraceSummaryPanel({ trace }: { trace: Trace }) {
   return (
     <div className={styles.stack}>
       {trace.diagnosis ? (
-        <TraceDiagnosisPanel diagnosis={trace.diagnosis} />
+        <TraceDiagnosisPanel
+          answerStatus={trace.retrieval?.answer.status}
+          diagnosis={trace.diagnosis}
+        />
       ) : (
         <section className={styles.diagnosis}>
           <span className={styles.diagnosisLabel}>Legacy diagnosis</span>

@@ -321,6 +321,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   const sourceId = "018f7a2a-6e2e-7000-a000-000000000302";
   const documentId = "018f7a2a-6e2e-7000-a000-000000000303";
   const chunkId = "018f7a2a-6e2e-7000-a000-000000000304";
+  const weakChunkId = "018f7a2a-6e2e-7000-a000-000000000311";
   const source = {
     id: sourceId,
     project_id: "018f7a2a-6e2e-7000-a000-000000000305",
@@ -339,7 +340,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     path: "platform-guide.md",
     mime_type: "text/markdown",
     checksum: "abcdef",
-    byte_size: 64,
+    byte_size: 100,
     profile: "technical_docs",
     extraction_quality: "high",
     warnings: [],
@@ -360,6 +361,27 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     text_density: 0.9,
     evidence_score_hint: 0.8,
   };
+  const citation = {
+    label: "[1]",
+    chunk_id: chunkId,
+    document_id: documentId,
+    document_path: "platform-guide.md",
+    chunk_ordinal: 0,
+    section_title: "Indexing",
+    checksum_prefix: "1234567890ab",
+    snippet: "GPU workers speed up embedding refreshes.",
+  };
+  const weakChunk = {
+    ...chunk,
+    id: weakChunkId,
+    ordinal: 1,
+    text: "GPU worker overview without direct implementation detail.",
+    token_count: 7,
+    byte_range: { start: 43, end: 100 },
+    checksum: "fedcba0987654321",
+    quality_flags: [],
+    evidence_score_hint: 0.2,
+  };
   const retrieval = {
     run: {
       id: "018f7a2a-6e2e-7000-a000-000000000306",
@@ -372,7 +394,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     answer: {
       status: "answered",
       text: "GPU workers speed up embedding refreshes [1]",
-      citations: [],
+      citations: [citation],
     },
     hits: [
       {
@@ -399,18 +421,45 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
           metadata: 0.05,
         },
         snippet: "GPU workers speed up embedding refreshes.",
-        citation: {
-          label: "[1]",
-          chunk_id: chunkId,
-          document_id: documentId,
-          document_path: "platform-guide.md",
-          chunk_ordinal: 0,
-          section_title: "Indexing",
-          checksum_prefix: "1234567890ab",
-          snippet: "GPU workers speed up embedding refreshes.",
-        },
+        citation,
         quality_flags: ["semantic_match"],
         evidence_strength: "strong",
+        duplicate_count: 1,
+      },
+      {
+        rank: 2,
+        score: 0.4,
+        chunk: weakChunk,
+        document,
+        source,
+        matched_terms: [{ term: "gpu", count: 1 }],
+        score_breakdown: {
+          semantic: 0.2,
+          lexical: 0.2,
+          phrase: 0,
+          section: 0,
+          path: 0,
+          metadata: 0,
+        },
+        normalized_score_breakdown: {
+          semantic: 0.1,
+          lexical: 0.1,
+          phrase: 0,
+          section: 0,
+          path: 0,
+          metadata: 0,
+        },
+        snippet: weakChunk.text,
+        citation: {
+          ...citation,
+          label: "[2]",
+          chunk_id: weakChunkId,
+          chunk_ordinal: 1,
+          checksum_prefix: "fedcba098765",
+          snippet: weakChunk.text,
+        },
+        quality_flags: [],
+        evidence_strength: "weak",
         duplicate_count: 1,
       },
     ],
@@ -422,28 +471,23 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
         model_name: "local-hash-v1",
         dimension: 384,
       },
-      total_chunks: 1,
-      indexed_chunks: 1,
+      total_chunks: 2,
+      indexed_chunks: 2,
       missing_chunks: 0,
       stale_chunks: 0,
     },
     diagnosis: {
       outcome: "mixed",
-      summary: "This run looks mixed. Primary issue: Evidence needs review",
-      primary_issue: {
-        code: "weak_evidence",
-        severity: "warning",
-        title: "Evidence needs review",
-        summary: "The saved run contains a retrieval quality signal.",
-        evidence_refs: ["E1"],
-      },
+      summary:
+        "The answer is supported by direct body evidence. Retrieval quality is mixed because some candidates have diagnostic warnings.",
+      primary_issue: null,
       failures: [
         {
           code: "weak_evidence",
           severity: "warning",
           title: "Evidence needs review",
           summary: "The saved run contains a retrieval quality signal.",
-          evidence_refs: ["E1"],
+          evidence_refs: ["E2"],
         },
       ],
       score_explanations: [],
@@ -456,7 +500,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
           rationale: "Evidence needs review.",
           action: "Increase top_k and compare the resulting evidence.",
           failure_codes: ["weak_evidence"],
-          evidence_refs: ["E1"],
+          evidence_refs: ["E2"],
         },
       ],
     },
@@ -470,7 +514,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     completed_at: "2026-06-23T00:00:01Z",
     failure_labels: ["weak_evidence"],
     source_run_id: retrieval.run.id,
-    summary: "Retrieved one chunk, but CorpusLab found one quality signal.",
+    summary: "Retrieved two chunks, but CorpusLab found one quality signal.",
     status: "warning",
     evidence_strength: "strong",
     spans: [
@@ -502,7 +546,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
         status: "succeeded",
         detail: {
           type: "retrieval",
-          hit_count: 1,
+          hit_count: 2,
           top_score: 3.4,
           embedding_readiness: "ready",
         },
@@ -617,11 +661,21 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   ).toBeVisible();
   await page.getByRole("link", { name: /gpu embedding workers/i }).click();
   await expect(page).toHaveURL(new RegExp(`/app/traces/${traceId}$`));
-  await expect(page.getByText("Primary diagnosis")).toBeVisible();
+  await expect(
+    page.getByText("Answer support: Supported", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/^Retrieval quality: Mixed$/i)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Candidate warnings detected" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Primary issue/i)).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Evidence" }).click();
   await expect(
     page.getByText("GPU workers speed up embedding refreshes."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("GPU worker overview without direct implementation detail."),
   ).toBeVisible();
 
   await page.getByRole("tab", { name: "Timeline" }).click();

@@ -43,6 +43,8 @@ The structured diagnosis is the source of truth. Legacy trace labels are derived
 
 Answerability diagnosis adds `answerability_gap`, `semantic_only_match`, and `metadata_only_match`. Per-hit assessments distinguish path-only, section-only, weak, heading-only, and insufficient body overlap. Existing traces without assessments are evaluated from their stored query and chunk bodies when read; this does not migrate or rewrite the stored trace.
 
+When a strong cited hit passes direct body support, candidate-only weak, heading-only, semantic-only, and metadata-only findings remain diagnostic warnings but do not become the primary issue. The diagnosis keeps a `mixed` retrieval-quality outcome while reporting the answer as supported.
+
 ## Eval Lab
 
 Every eval case must preserve its query, `top_k`, expected chunk IDs, expected document IDs, notes, and dataset membership. An experiment must preserve the dataset version, selected modes, retrieval configuration snapshot, embedding metadata, per-case results, aggregate metrics, failures, and gate outcome.
