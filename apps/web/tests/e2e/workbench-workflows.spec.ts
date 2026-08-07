@@ -430,14 +430,9 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     },
     diagnosis: {
       outcome: "mixed",
-      summary: "This run looks mixed. Primary issue: Evidence needs review",
-      primary_issue: {
-        code: "weak_evidence",
-        severity: "warning",
-        title: "Evidence needs review",
-        summary: "The saved run contains a retrieval quality signal.",
-        evidence_refs: ["E1"],
-      },
+      summary:
+        "The answer is supported by direct body evidence. Retrieval quality is mixed because some candidates have diagnostic warnings.",
+      primary_issue: null,
       failures: [
         {
           code: "weak_evidence",
@@ -622,6 +617,10 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     page.getByText("Answer support: Supported", { exact: true }),
   ).toBeVisible();
   await expect(page.getByText(/^Retrieval quality: /)).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Candidate warnings detected" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Primary issue/i)).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Evidence" }).click();
   await expect(
