@@ -340,7 +340,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     path: "platform-guide.md",
     mime_type: "text/markdown",
     checksum: "abcdef",
-    byte_size: 64,
+    byte_size: 100,
     profile: "technical_docs",
     extraction_quality: "high",
     warnings: [],
