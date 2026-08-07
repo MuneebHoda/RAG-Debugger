@@ -231,6 +231,31 @@ fn supported_answer_keeps_candidate_quality_failures_secondary() {
 }
 
 #[test]
+fn later_strong_supported_citation_keeps_weak_candidates_secondary() {
+    let mut earlier = hit(1, 1.0, 0.6, 0.4, EvidenceStrength::Medium, Vec::new());
+    earlier.answer_support = supported();
+    let mut later = hit(2, 0.7, 0.4, 0.3, EvidenceStrength::Strong, Vec::new());
+    later.answer_support = supported();
+    let mut weak = hit(3, 0.3, 0.2, 0.1, EvidenceStrength::Weak, Vec::new());
+    weak.answer_support = unsupported(AnswerSupportReason::WeakEvidence);
+    let mut response = response(vec![earlier, later, weak]);
+    response.answer.citations = vec![
+        response.hits[0].citation.clone(),
+        response.hits[1].citation.clone(),
+    ];
+
+    let diagnosis = diagnose_retrieval(&response, &DebuggerConfig::default(), None);
+
+    assert_eq!(diagnosis.outcome, DiagnosisOutcome::Mixed);
+    assert_eq!(diagnosis.primary_issue, None);
+    assert!(diagnosis.summary.contains("answer is supported"));
+    assert!(diagnosis.failures.iter().any(|failure| {
+        failure.code == DiagnosisFailureCode::WeakEvidence
+            && failure.severity == DiagnosisSeverity::Warning
+    }));
+}
+
+#[test]
 fn metadata_support_reasons_share_one_diagnosis_label() {
     for reason in [
         AnswerSupportReason::MetadataOnlyMatch,

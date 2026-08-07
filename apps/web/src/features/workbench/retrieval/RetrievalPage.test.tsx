@@ -385,8 +385,8 @@ describe("RetrievalPage", () => {
     expect(screen.getByLabelText(/score breakdown/i)).toBeInTheDocument();
   });
 
-  it("makes an answerability abstention explicit without citations", () => {
-    const response = {
+  it("distinguishes an abstention from an answered response without citations", () => {
+    const response: RetrievalQueryResponse = {
       run: {
         id: "run-unsupported",
         query: "unsupported question",
@@ -415,9 +415,9 @@ describe("RetrievalPage", () => {
         stale_chunks: 0,
       },
       diagnosis: null,
-    } satisfies RetrievalQueryResponse;
+    };
 
-    render(
+    const { rerender } = render(
       <AnswerPanel
         isQuerying={false}
         isSavingTrace={false}
@@ -431,6 +431,25 @@ describe("RetrievalPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/none can be cited/i)).toBeInTheDocument();
     expect(screen.queryByText(/^\[1\]/)).not.toBeInTheDocument();
+
+    response.answer.status = "answered";
+    response.answer.text = "An answer without supporting citations.";
+    rerender(
+      <AnswerPanel
+        isQuerying={false}
+        isSavingTrace={false}
+        response={response}
+        onSaveTrace={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/answer support: unverified/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/no verifiable citation support/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/answer support: supported/i),
+    ).not.toBeInTheDocument();
   });
 
   it("saves the latest retrieval response and opens its debugger", async () => {

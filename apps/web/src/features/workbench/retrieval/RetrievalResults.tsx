@@ -47,6 +47,10 @@ export function AnswerPanel({
   isSavingTrace: boolean;
   onSaveTrace: () => void;
 }) {
+  const hasCitationSupport =
+    response?.answer.status === "answered" &&
+    response.answer.citations.length > 0;
+
   return (
     <WorkbenchPanel
       actions={
@@ -92,20 +96,24 @@ export function AnswerPanel({
           ) : null}
           <div
             className={`${styles.answerState} ${
-              response.answer.status === "answered"
+              hasCitationSupport
                 ? styles.answerStateAnswered
                 : styles.answerStateInsufficient
             }`}
           >
             <strong>
-              {response.answer.status === "answered"
+              {hasCitationSupport
                 ? "Answer support: Supported"
-                : "Answer support: Insufficient"}
+                : response.answer.status === "answered"
+                  ? "Answer support: Unverified"
+                  : "Answer support: Insufficient"}
             </strong>
             <span>
-              {response.answer.status === "answered"
+              {hasCitationSupport
                 ? "Every citation below passed the direct body-support gate."
-                : "Candidates may still appear below for debugging, but none can be cited as direct support."}
+                : response.answer.status === "answered"
+                  ? "This answer has no verifiable citation support."
+                  : "Candidates may still appear below for debugging, but none can be cited as direct support."}
             </span>
           </div>
           <p className={styles.answerText}>{response.answer.text}</p>

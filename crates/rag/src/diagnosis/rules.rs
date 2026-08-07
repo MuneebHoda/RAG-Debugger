@@ -154,8 +154,7 @@ fn has_strong_supported_citation(response: &RetrievalQueryResponse) -> bool {
                     .iter()
                     .any(|citation| citation.chunk_id == hit.chunk.id)
             })
-            .min_by_key(|hit| hit.rank)
-            .is_some_and(|hit| {
+            .any(|hit| {
                 hit.evidence_strength == EvidenceStrength::Strong
                     && hit.answer_support.status == AnswerSupportStatus::Supported
                     && hit.answer_support.reason == AnswerSupportReason::DirectBodySupport

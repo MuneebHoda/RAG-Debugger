@@ -360,6 +360,16 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     text_density: 0.9,
     evidence_score_hint: 0.8,
   };
+  const citation = {
+    label: "[1]",
+    chunk_id: chunkId,
+    document_id: documentId,
+    document_path: "platform-guide.md",
+    chunk_ordinal: 0,
+    section_title: "Indexing",
+    checksum_prefix: "1234567890ab",
+    snippet: "GPU workers speed up embedding refreshes.",
+  };
   const retrieval = {
     run: {
       id: "018f7a2a-6e2e-7000-a000-000000000306",
@@ -372,7 +382,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     answer: {
       status: "answered",
       text: "GPU workers speed up embedding refreshes [1]",
-      citations: [],
+      citations: [citation],
     },
     hits: [
       {
@@ -399,16 +409,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
           metadata: 0.05,
         },
         snippet: "GPU workers speed up embedding refreshes.",
-        citation: {
-          label: "[1]",
-          chunk_id: chunkId,
-          document_id: documentId,
-          document_path: "platform-guide.md",
-          chunk_ordinal: 0,
-          section_title: "Indexing",
-          checksum_prefix: "1234567890ab",
-          snippet: "GPU workers speed up embedding refreshes.",
-        },
+        citation,
         quality_flags: ["semantic_match"],
         evidence_strength: "strong",
         duplicate_count: 1,
