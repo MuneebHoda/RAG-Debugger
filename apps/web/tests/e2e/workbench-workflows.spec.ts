@@ -321,6 +321,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   const sourceId = "018f7a2a-6e2e-7000-a000-000000000302";
   const documentId = "018f7a2a-6e2e-7000-a000-000000000303";
   const chunkId = "018f7a2a-6e2e-7000-a000-000000000304";
+  const weakChunkId = "018f7a2a-6e2e-7000-a000-000000000311";
   const source = {
     id: sourceId,
     project_id: "018f7a2a-6e2e-7000-a000-000000000305",
@@ -370,6 +371,15 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     checksum_prefix: "1234567890ab",
     snippet: "GPU workers speed up embedding refreshes.",
   };
+  const weakChunk = {
+    ...chunk,
+    id: weakChunkId,
+    ordinal: 1,
+    text: "GPU worker overview without direct implementation detail.",
+    checksum: "fedcba0987654321",
+    quality_flags: [],
+    evidence_score_hint: 0.2,
+  };
   const retrieval = {
     run: {
       id: "018f7a2a-6e2e-7000-a000-000000000306",
@@ -414,6 +424,42 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
         evidence_strength: "strong",
         duplicate_count: 1,
       },
+      {
+        rank: 2,
+        score: 0.4,
+        chunk: weakChunk,
+        document,
+        source,
+        matched_terms: [{ term: "gpu", count: 1 }],
+        score_breakdown: {
+          semantic: 0.2,
+          lexical: 0.2,
+          phrase: 0,
+          section: 0,
+          path: 0,
+          metadata: 0,
+        },
+        normalized_score_breakdown: {
+          semantic: 0.1,
+          lexical: 0.1,
+          phrase: 0,
+          section: 0,
+          path: 0,
+          metadata: 0,
+        },
+        snippet: weakChunk.text,
+        citation: {
+          ...citation,
+          label: "[2]",
+          chunk_id: weakChunkId,
+          chunk_ordinal: 1,
+          checksum_prefix: "fedcba098765",
+          snippet: weakChunk.text,
+        },
+        quality_flags: [],
+        evidence_strength: "weak",
+        duplicate_count: 1,
+      },
     ],
     embedding_status: {
       readiness: "ready",
@@ -423,8 +469,8 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
         model_name: "local-hash-v1",
         dimension: 384,
       },
-      total_chunks: 1,
-      indexed_chunks: 1,
+      total_chunks: 2,
+      indexed_chunks: 2,
       missing_chunks: 0,
       stale_chunks: 0,
     },
@@ -439,7 +485,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
           severity: "warning",
           title: "Evidence needs review",
           summary: "The saved run contains a retrieval quality signal.",
-          evidence_refs: ["E1"],
+          evidence_refs: ["E2"],
         },
       ],
       score_explanations: [],
@@ -452,7 +498,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
           rationale: "Evidence needs review.",
           action: "Increase top_k and compare the resulting evidence.",
           failure_codes: ["weak_evidence"],
-          evidence_refs: ["E1"],
+          evidence_refs: ["E2"],
         },
       ],
     },
@@ -466,7 +512,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     completed_at: "2026-06-23T00:00:01Z",
     failure_labels: ["weak_evidence"],
     source_run_id: retrieval.run.id,
-    summary: "Retrieved one chunk, but CorpusLab found one quality signal.",
+    summary: "Retrieved two chunks, but CorpusLab found one quality signal.",
     status: "warning",
     evidence_strength: "strong",
     spans: [
@@ -498,7 +544,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
         status: "succeeded",
         detail: {
           type: "retrieval",
-          hit_count: 1,
+          hit_count: 2,
           top_score: 3.4,
           embedding_readiness: "ready",
         },
@@ -625,6 +671,9 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   await page.getByRole("tab", { name: "Evidence" }).click();
   await expect(
     page.getByText("GPU workers speed up embedding refreshes."),
+  ).toBeVisible();
+  await expect(
+    page.getByText("GPU worker overview without direct implementation detail."),
   ).toBeVisible();
 
   await page.getByRole("tab", { name: "Timeline" }).click();
