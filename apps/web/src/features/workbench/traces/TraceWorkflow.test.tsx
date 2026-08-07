@@ -10,10 +10,12 @@ import {
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { EvidenceDiagnosisSummary } from "../../../lib/api/retrieval";
 import type { Trace } from "../../../lib/api/traces";
 import { RunsPage } from "./RunsPage";
 import { TraceDetailPage } from "./TraceDetailPage";
 import { SaveToQualityPanel } from "./components/SaveToQualityPanel";
+import { TraceDiagnosisPanel } from "./components/TraceDiagnosisPanel";
 
 const traceId = "018f7a2a-6e2e-7000-a000-000000000201";
 const secondTraceId = "018f7a2a-6e2e-7000-a000-000000000202";
@@ -104,7 +106,9 @@ describe("guided run workflow", () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByText(/primary diagnosis/i)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/answer support: supported/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/run detail explains what happened/i),
     ).toBeInTheDocument();
@@ -133,6 +137,39 @@ describe("guided run workflow", () => {
     ).toBeInTheDocument();
   });
 
+  it("separates supported answers from mixed candidate quality", () => {
+    const diagnosis: EvidenceDiagnosisSummary = {
+      outcome: "mixed",
+      summary:
+        "The answer is supported by direct body evidence. Retrieval quality is mixed because some candidates have diagnostic warnings.",
+      primary_issue: null,
+      failures: [
+        {
+          code: "weak_evidence",
+          severity: "warning",
+          title: "Evidence is too weak",
+          summary: "A lower-ranked candidate is weak.",
+          evidence_refs: ["E2"],
+        },
+      ],
+      score_explanations: [],
+      recommendations: [],
+    };
+
+    render(
+      <MemoryRouter>
+        <TraceDiagnosisPanel answerStatus="answered" diagnosis={diagnosis} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/answer support: supported/i)).toBeInTheDocument();
+    expect(screen.getByText(/retrieval quality: mixed/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /candidate warnings detected/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Evidence is too weak")).toBeInTheDocument();
+  });
+
   it("requires an explicit dataset and evidence selection for Quality", async () => {
     renderWithClient(
       <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>
@@ -142,7 +179,7 @@ describe("guided run workflow", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText(/primary diagnosis/i);
+    await screen.findByText(/answer support: supported/i);
     fireEvent.click(screen.getByRole("button", { name: /choose evidence/i }));
     const datasetSelect = await screen.findByLabelText(/quality dataset/i);
     await screen.findByRole("option", { name: "Critical questions" });
@@ -198,7 +235,7 @@ describe("guided run workflow", () => {
       </MemoryRouter>,
     );
 
-    await screen.findByText(/primary diagnosis/i);
+    await screen.findByText(/answer support: supported/i);
     fireEvent.click(screen.getByRole("link", { name: /open second run/i }));
     expect(
       await screen.findByText(/loading run diagnosis/i),

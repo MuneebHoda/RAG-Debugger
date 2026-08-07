@@ -293,6 +293,23 @@ describe("RetrievalPage", () => {
             missing_chunks: 0,
             stale_chunks: 0,
           },
+          diagnosis: {
+            outcome: "mixed",
+            summary:
+              "The answer is supported by direct body evidence. Retrieval quality is mixed because some candidates have diagnostic warnings.",
+            primary_issue: null,
+            failures: [
+              {
+                code: "weak_evidence",
+                severity: "warning",
+                title: "Evidence is too weak",
+                summary: "A lower-ranked candidate is weak.",
+                evidence_refs: ["E2"],
+              },
+            ],
+            score_explanations: [],
+            recommendations: [],
+          },
         });
       }),
     );
@@ -362,9 +379,8 @@ describe("RetrievalPage", () => {
     expect(screen.getByText(/gpu × 1/i)).toBeInTheDocument();
     expect(screen.getByText(/Strong · 3\.20/i)).toBeInTheDocument();
     expect(screen.getByText(/Exact term/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(/answered from chunk body evidence/i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/answer support: supported/i)).toBeInTheDocument();
+    expect(screen.getByText(/retrieval quality: mixed/i)).toBeInTheDocument();
     expect(screen.getByText(/supports answer/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/score breakdown/i)).toBeInTheDocument();
   });
@@ -410,7 +426,9 @@ describe("RetrievalPage", () => {
       />,
     );
 
-    expect(screen.getByText(/^insufficient evidence$/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/answer support: insufficient/i),
+    ).toBeInTheDocument();
     expect(screen.getByText(/none can be cited/i)).toBeInTheDocument();
     expect(screen.queryByText(/^\[1\]/)).not.toBeInTheDocument();
   });

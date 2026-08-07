@@ -110,6 +110,8 @@ Retrieval, answerability, and answer construction are separate stages. Retrieval
 
 The Evidence tab preserves rejected candidates and shows whether each chunk supports the answer or is diagnostic only. `answerability_gap` is critical when candidates exist but none passes. `semantic_only_match` and `metadata_only_match` explain why apparently relevant candidates were rejected. Path-only and section-only causes remain available in each hit's support assessment.
 
+Retrieval and Trace Detail display answer support separately from retrieval quality. When a strong direct citation supports the answer, weaker lower-ranked candidates remain visible as warnings without implying that the answer itself is unsupported.
+
 ## Legacy Failure Labels
 
 The trace builder assigns labels from the saved retrieval response:

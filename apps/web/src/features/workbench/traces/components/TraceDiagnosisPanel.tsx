@@ -4,23 +4,33 @@ import { Link } from "react-router-dom";
 import type {
   DiagnosisRecommendation,
   EvidenceDiagnosisSummary,
+  ExtractiveAnswerStatus,
 } from "../../../../lib/api/retrieval";
 import styles from "../TraceDetailPage.module.css";
 
 export function TraceDiagnosisPanel({
+  answerStatus,
   diagnosis,
 }: {
+  answerStatus?: ExtractiveAnswerStatus;
   diagnosis: EvidenceDiagnosisSummary;
 }) {
   return (
     <div className={styles.summaryGrid}>
       <section className={styles.diagnosis}>
         <div className={styles.diagnosisHeading}>
-          <span className={styles.diagnosisLabel}>Primary diagnosis</span>
-          <span className={styles[diagnosis.outcome]}>{diagnosis.outcome}</span>
+          <span className={styles.diagnosisLabel}>
+            Answer support: {answerSupportLabel(answerStatus)}
+          </span>
+          <span className={styles[diagnosis.outcome]}>
+            Retrieval quality: {diagnosis.outcome}
+          </span>
         </div>
         <h2>
-          {diagnosis.primary_issue?.title ?? "No failure signal detected"}
+          {diagnosis.primary_issue?.title ??
+            (diagnosis.failures.length > 0
+              ? "Candidate warnings detected"
+              : "No failure signal detected")}
         </h2>
         <p>{diagnosis.summary}</p>
         <ul className={styles.signalList} aria-label="Failure labels">
@@ -65,6 +75,12 @@ export function TraceDiagnosisPanel({
       </section>
     </div>
   );
+}
+
+function answerSupportLabel(status?: ExtractiveAnswerStatus): string {
+  if (status === "answered") return "Supported";
+  if (status === "insufficient_evidence") return "Insufficient";
+  return "Unknown";
 }
 
 function RecommendationItem({

@@ -86,7 +86,7 @@ export function AnswerPanel({
           <EmbeddingQueryStatus response={response} />
           {response.diagnosis ? (
             <div className={styles.diagnosisNotice}>
-              <strong>{response.diagnosis.outcome}</strong>
+              <strong>Retrieval quality: {response.diagnosis.outcome}</strong>
               <span>{response.diagnosis.summary}</span>
             </div>
           ) : null}
@@ -99,8 +99,8 @@ export function AnswerPanel({
           >
             <strong>
               {response.answer.status === "answered"
-                ? "Answered from chunk body evidence"
-                : "Insufficient evidence"}
+                ? "Answer support: Supported"
+                : "Answer support: Insufficient"}
             </strong>
             <span>
               {response.answer.status === "answered"

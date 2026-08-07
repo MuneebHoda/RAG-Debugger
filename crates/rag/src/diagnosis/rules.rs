@@ -91,11 +91,44 @@ pub(super) fn diagnosis_outcome(
     DiagnosisOutcome::Strong
 }
 
+pub(super) fn primary_issue(
+    response: &RetrievalQueryResponse,
+    failures: &[DiagnosisFailure],
+) -> Option<DiagnosisFailure> {
+    failures
+        .iter()
+        .find(|failure| {
+            !has_strong_supported_citation(response)
+                || !matches!(
+                    failure.code,
+                    DiagnosisFailureCode::WeakEvidence
+                        | DiagnosisFailureCode::HeadingOnlyEvidence
+                        | DiagnosisFailureCode::SemanticOnlyMatch
+                        | DiagnosisFailureCode::MetadataOnlyMatch
+                )
+        })
+        .cloned()
+}
+
 pub(super) fn diagnosis_summary(
+    response: &RetrievalQueryResponse,
     outcome: DiagnosisOutcome,
     primary_issue: Option<&DiagnosisFailure>,
-    hit_count: usize,
 ) -> String {
+    if has_strong_supported_citation(response) && outcome != DiagnosisOutcome::Strong {
+        return match primary_issue {
+            Some(issue) => format!(
+                "The answer is supported by direct body evidence. Retrieval quality is {}. Primary retrieval issue: {}",
+                outcome.as_str(),
+                issue.title
+            ),
+            None => format!(
+                "The answer is supported by direct body evidence. Retrieval quality is {} because some candidates have diagnostic warnings.",
+                outcome.as_str()
+            ),
+        };
+    }
+
     match primary_issue {
         Some(issue) => format!(
             "This run looks {}. Primary issue: {}",
@@ -103,9 +136,30 @@ pub(super) fn diagnosis_summary(
             issue.title
         ),
         None => format!(
-            "This run looks strong. CorpusLab found {hit_count} ranked evidence item(s) without a deterministic failure signal."
+            "This run looks strong. CorpusLab found {} ranked evidence item(s) without a deterministic failure signal.",
+            response.hits.len()
         ),
     }
+}
+
+fn has_strong_supported_citation(response: &RetrievalQueryResponse) -> bool {
+    response.answer.status == ExtractiveAnswerStatus::Answered
+        && response
+            .hits
+            .iter()
+            .filter(|hit| {
+                response
+                    .answer
+                    .citations
+                    .iter()
+                    .any(|citation| citation.chunk_id == hit.chunk.id)
+            })
+            .min_by_key(|hit| hit.rank)
+            .is_some_and(|hit| {
+                hit.evidence_strength == EvidenceStrength::Strong
+                    && hit.answer_support.status == AnswerSupportStatus::Supported
+                    && hit.answer_support.reason == AnswerSupportReason::DirectBodySupport
+            })
 }
 
 fn diagnose_availability(response: &RetrievalQueryResponse, failures: &mut Vec<DiagnosisFailure>) {

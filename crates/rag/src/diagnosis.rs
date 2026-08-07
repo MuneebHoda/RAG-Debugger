@@ -30,8 +30,8 @@ pub fn diagnose_retrieval(
     let failures = rules::collect_failures(response, config, expected);
     let outcome = rules::diagnosis_outcome(response, &failures);
     let recommendations = recommendations::recommendations_for(&failures);
-    let primary_issue = failures.first().cloned();
-    let summary = rules::diagnosis_summary(outcome, primary_issue.as_ref(), response.hits.len());
+    let primary_issue = rules::primary_issue(response, &failures);
+    let summary = rules::diagnosis_summary(response, outcome, primary_issue.as_ref());
 
     EvidenceDiagnosisSummary {
         outcome,
