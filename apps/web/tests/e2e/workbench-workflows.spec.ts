@@ -376,6 +376,8 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
     id: weakChunkId,
     ordinal: 1,
     text: "GPU worker overview without direct implementation detail.",
+    token_count: 7,
+    byte_range: { start: 43, end: 100 },
     checksum: "fedcba0987654321",
     quality_flags: [],
     evidence_score_hint: 0.2,
@@ -662,7 +664,7 @@ test("opens trace debugger and reruns a saved trace", async ({ page }) => {
   await expect(
     page.getByText("Answer support: Supported", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByText(/^Retrieval quality: /)).toBeVisible();
+  await expect(page.getByText(/^Retrieval quality: Mixed$/i)).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Candidate warnings detected" }),
   ).toBeVisible();
