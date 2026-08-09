@@ -21,6 +21,7 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
       createApiKey({ name: name.trim(), scopes: ["ci_eval_runs"] }),
     onSuccess: (created) => {
       setCreatedSecret(created.secret);
+      setCopied(false);
       void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     },
   });
@@ -38,15 +39,33 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
       title="API keys"
       titleId="api-keys-title"
     >
+      <div className={styles.keyGuidance}>
+        <strong>GitHub Actions setup</strong>
+        <p>
+          Create a key for automated Eval Lab gates, then save the one-time
+          secret in GitHub Actions as <code>CORPUSLAB_API_KEY</code>.
+        </p>
+        <p>
+          CorpusLab stores only a one-way hash. The full secret cannot be shown
+          again after you leave this page.
+        </p>
+      </div>
+
       {createdSecret ? (
-        <div className={styles.secretBox} aria-label="Created API key secret">
+        <div
+          aria-label="Created API key secret"
+          aria-live="polite"
+          className={styles.secretBox}
+        >
           <span>This secret is shown once</span>
           <code>{createdSecret}</code>
           <button
             type="button"
             onClick={() => {
-              void navigator.clipboard.writeText(createdSecret);
-              setCopied(true);
+              void navigator.clipboard
+                .writeText(createdSecret)
+                .then(() => setCopied(true))
+                .catch(() => setCopied(false));
             }}
           >
             {copied ? (
@@ -77,18 +96,32 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
         </button>
       </div>
 
+      {createMutation.isError || revokeMutation.isError ? (
+        <p className={styles.error} role="alert">
+          {createMutation.error instanceof Error
+            ? createMutation.error.message
+            : revokeMutation.error instanceof Error
+              ? revokeMutation.error.message
+              : "The API key change could not be saved."}
+        </p>
+      ) : null}
+
       <div className={styles.keyList}>
         {apiKeys.map((apiKey) => (
           <article className={styles.keyRow} key={apiKey.id}>
             <span>
               <strong>{apiKey.name}</strong>
               <small>
-                {apiKey.prefix}… ·{" "}
+                {apiKey.prefix}… · scope{" "}
+                {apiKey.scopes.join(", ").replaceAll("_", " ")}
+              </small>
+              <small>Created {formatDateTime(apiKey.created_at)}</small>
+              <small>
                 {apiKey.revoked_at
-                  ? "revoked"
+                  ? `Revoked ${formatDateTime(apiKey.revoked_at)}`
                   : apiKey.last_used_at
-                    ? `last used ${formatDateTime(apiKey.last_used_at)}`
-                    : "not used yet"}
+                    ? `Last used ${formatDateTime(apiKey.last_used_at)}`
+                    : "Not used yet"}
               </small>
             </span>
             {!apiKey.revoked_at ? (

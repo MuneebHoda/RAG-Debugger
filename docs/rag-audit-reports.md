@@ -70,7 +70,7 @@ Configuration context uses an ordered map so Markdown and API output remain stab
 
 `crates/rag/src/reports` separates source builders, privacy filtering, and recommendation mapping. Callers supply `DebugReportBuildContext` with fixed ownership, ID, privacy mode, and timestamp so tests and later storage/API layers control non-deterministic values.
 
-Trace builders require a saved retrieval response and include ranked evidence plus the latest rerun comparison. Eval builders include gate outcomes, mode metrics, expected/retrieved/missing evidence IDs, failed cases, and the previous comparable experiment when one exists. CI builders add branch, commit, config label, regression deltas, and newly failing case counts.
+Trace builders require a saved retrieval response and include ranked evidence plus the latest rerun comparison. Eval builders include gate outcomes, mode metrics, expected/retrieved/missing evidence IDs, failed cases, and the previous comparable experiment when one exists. CI builders add branch, commit, base/head refs, config label, gate metrics, failure labels, recommendations, and the full Eval Lab v2 regression comparison when available, including newly failed and recovered cases. Legacy stored CI runs without the additive comparison field still use their aggregate regression summary.
 
 Eval regression context is metadata-first. Metadata-only reports may include experiment IDs, baseline IDs, gate transitions, metric deltas, failure-label codes, and newly failed or recovered case counts. They must not include raw queries, document paths, section titles, snippets, or corpus text unless a stronger privacy mode explicitly allows that content.
 
@@ -140,7 +140,7 @@ Fixture changes require review as public report-format changes, not routine test
 
 Frontend ownership lives in `apps/web/src/features/workbench/reports`; route files under `apps/web/src/pages` remain thin compatibility exports. The typed API boundary is `apps/web/src/lib/api/reports.ts`, and TanStack Query hooks own report loading, creation, caching, and mutation invalidation.
 
-Trace Detail, Eval experiment detail, and failed CI gate rows expose the same Reports-owned `Create audit report` action. The action always opens a confirmation panel, defaults to `metadata_only`, and requires an explicit privacy selection before generation. Successful creation opens the new report directly. Submission is synchronously guarded so rapid repeated clicks cannot create duplicate snapshots.
+Trace Detail, Eval experiment detail, failed CI gate rows, and `/app/evals/ci-runs/:runId` expose the same Reports-owned `Create audit report` action. The action always opens a confirmation panel, defaults to `metadata_only`, and requires an explicit privacy selection before generation. Successful creation opens the new report directly. Submission is synchronously guarded so rapid repeated clicks cannot create duplicate snapshots.
 
 ## Delivery Stack
 

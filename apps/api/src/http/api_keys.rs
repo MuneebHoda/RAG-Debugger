@@ -32,6 +32,11 @@ pub async fn create_api_key(
             "API key name must not be empty".to_owned(),
         ));
     }
+    if name.chars().count() > 100 || name.chars().any(char::is_control) {
+        return Err(ApiError::BadRequest(
+            "API key name must contain at most 100 characters and no control characters".to_owned(),
+        ));
+    }
     Ok(Json(
         auth::create_api_key(repository.as_ref(), &user, name.to_owned(), request.scopes).await?,
     ))
@@ -43,9 +48,10 @@ pub async fn revoke_api_key(
     Path(api_key_id): Path<Uuid>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
-    auth::authenticate_session(repository.as_ref(), &headers, &state.config().auth).await?;
+    let user =
+        auth::authenticate_session(repository.as_ref(), &headers, &state.config().auth).await?;
     repository
-        .revoke_api_key(ApiKeyId(api_key_id))
+        .revoke_api_key(user.workspace.id, ApiKeyId(api_key_id))
         .await
         .map_err(not_found_to_api("API key"))?;
     Ok(Json(serde_json::json!({ "revoked": true })))

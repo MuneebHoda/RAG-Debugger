@@ -135,9 +135,16 @@ export function isWorkbenchNavItemActive(
     case "traces":
       return pathname.startsWith("/app/traces");
     case "eval_lab":
-      return pathname.startsWith("/app/evals") && view !== "ci-runs";
+      return (
+        pathname.startsWith("/app/evals") &&
+        !pathname.startsWith("/app/evals/ci-runs/") &&
+        view !== "ci-runs"
+      );
     case "ci_runs":
-      return pathname === "/app/evals" && view === "ci-runs";
+      return (
+        (pathname === "/app/evals" && view === "ci-runs") ||
+        pathname.startsWith("/app/evals/ci-runs/")
+      );
     case "reports":
       return pathname.startsWith("/app/reports");
     case "settings":
@@ -172,6 +179,14 @@ export function resolveWorkbenchBreadcrumbs(
       : [home, { label: "Trace Debugger" }];
   }
   if (area === "evals") {
+    if (detailId === "ci-runs") {
+      return [
+        home,
+        { label: "Eval Lab", to: "/app/evals" },
+        { label: "CI Runs", to: "/app/evals?view=ci-runs" },
+        { label: "Run detail" },
+      ];
+    }
     if (new URLSearchParams(search).get("view") === "ci-runs") {
       return [
         home,

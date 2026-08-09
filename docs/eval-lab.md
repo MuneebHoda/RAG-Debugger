@@ -134,6 +134,8 @@ Quality starts at `/app/evals` and uses focused detail routes.
 7. Use failed cases to improve documents, chunking, indexing, or retrieval config.
 8. Create a privacy-classified audit report from the experiment detail when the gate decision is ready for review.
 
+Automation history lives at `/app/evals?view=ci-runs`. Each run links to `/app/evals/ci-runs/:runId`, where reviewers can inspect branch and commit metadata, config and dataset, thresholds, failed metrics, newly failing and recovered cases, failure labels, and frozen per-mode metrics. Failed runs offer metadata-only audit-report creation without requiring the CI response body to be copied from Actions logs.
+
 The Trace Debugger saves evidence into Quality with a note pointing back to the run. The user must choose both the target dataset and expected evidence. This prevents accidental labels and turns observed behavior into deliberate regression coverage.
 
 Retrieval and Trace Debugger use the same shared save-to-Quality workflow. The panel shows retrieved chunks, lets the user choose the dataset, warns about duplicate normalized questions, shows readable document/chunk names, and submits only authenticated evidence IDs. It never asks users to manually paste UUIDs, and it never broadens an exact chunk expectation into a whole-document expectation.

@@ -112,7 +112,12 @@ export function CiRunsView({
         <div className={styles.list}>
           {isLoading ? <p className={styles.empty}>Loading CI runs…</p> : null}
           {runs.map((run) => (
-            <article className={styles.experimentCard} key={run.id}>
+            <Link
+              aria-label={`Open CI run for ${run.dataset_name}`}
+              className={styles.experimentCard}
+              key={run.id}
+              to={`/app/evals/ci-runs/${run.id}`}
+            >
               <div className={styles.cardHeader}>
                 <strong>{run.dataset_name}</strong>
                 <WorkbenchStatusPill tone={gateTone(run.gate_status)}>
@@ -123,7 +128,10 @@ export function CiRunsView({
                 {run.branch ?? "manual"} ·{" "}
                 {run.commit_sha?.slice(0, 8) ?? "no commit"}
               </p>
-            </article>
+              <small>
+                Config {run.config_label} · {formatDateTime(run.created_at)}
+              </small>
+            </Link>
           ))}
           {!isLoading && runs.length === 0 ? (
             <WorkbenchEmptyState

@@ -16,12 +16,13 @@ RAG systems regress quietly. A chunking change, embedding refresh, scoring tweak
 
 1. Start the API and web app.
 2. Sign in to `/app/settings`.
-3. Create a `CI API Keys` key.
+3. Open the `API keys` tab and create a key for GitHub Actions.
 4. Copy the one-time `clab_...` secret.
-5. Store it in GitHub Actions as `CORPUSLAB_API_KEY`.
-6. Copy `docs/examples/github-actions-corpuslab-evals.yml` into `.github/workflows/corpuslab-evals.yml`.
+5. In the target repository, open **Settings → Secrets and variables → Actions** and store it as the `CORPUSLAB_API_KEY` repository secret.
+6. Add the Eval Lab dataset UUID as the `CORPUSLAB_DATASET_ID` repository variable. Optionally add `CORPUSLAB_API_URL` and `CORPUSLAB_CONFIG_LABEL` variables.
+7. Copy `docs/examples/github-actions-corpuslab-evals.yml` into `.github/workflows/corpuslab-evals.yml`.
 
-For hosted deployments, set `CORPUSLAB_API_URL` to the deployed API base URL.
+The Actions runner must be able to reach the CorpusLab API. Set `CORPUSLAB_API_URL` to that reachable base URL. If CorpusLab is only available on a private local network, use a self-hosted runner and set the variable to the address reachable from that runner.
 
 ## Run Request
 
@@ -62,14 +63,17 @@ The response includes:
 - linked Eval Lab experiment
 - gate status
 - branch and commit metadata
-- regression summary versus the latest matching dataset/config run
+- complete Eval Lab v2 regression details, including newly failed and recovered cases, versus the latest matching dataset/config run
 - report JSON
+
+The example writes only gate status, aggregate recall, failed-case count, opaque run/experiment IDs, and the configured label to logs and the Actions job summary. It deliberately never prints the response body because it may contain case queries and report content.
 
 ## Workbench Views
 
 CI run history appears in:
 
-- `/app/evals` under CI Gates.
+- `/app/evals?view=ci-runs` under CI Runs.
+- `/app/evals/ci-runs/:runId` as a focused detail view with revision metadata, thresholds, failed metrics, newly failing and recovered cases, failure labels, per-mode metrics, and report creation.
 - Mission Control as latest gate status and recommended action.
 - `/app/reports` as failed-gate report candidates with native CI audit-report creation.
 

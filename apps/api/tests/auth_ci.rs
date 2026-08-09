@@ -172,7 +172,7 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     )
     .await;
     let dataset_id = dataset["id"].as_str().expect("dataset id");
-    post_json_with_cookie(
+    let eval_case = post_json_with_cookie(
         &app,
         &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
         json!({
@@ -184,6 +184,7 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
         StatusCode::OK,
     )
     .await;
+    let case_id = eval_case["id"].as_str().expect("case id");
 
     let created_key = post_json_with_cookie(
         &app,
@@ -203,6 +204,9 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
             "dataset_id": dataset_id,
             "branch": "feature/evals",
             "commit_sha": "abc123",
+            "base_ref": "main",
+            "head_ref": "feature/evals",
+            "modes": ["lexical"],
             "config_label": "default",
             "fail_on_gate": true
         }),
@@ -212,6 +216,93 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     .await;
     assert_eq!(ci_run["gate_status"], "passed");
     assert_eq!(ci_run["branch"], "feature/evals");
+    assert!(ci_run["eval_regression"]["baseline_experiment_id"].is_null());
+
+    request_json_with_cookie(
+        &app,
+        Method::PATCH,
+        &format!("/api/v1/eval-lab/cases/{case_id}"),
+        json!({ "query": "qxzv blorp" }),
+        &cookie,
+        StatusCode::OK,
+    )
+    .await;
+    let failed_run = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({
+            "dataset_id": dataset_id,
+            "branch": "feature/evals",
+            "commit_sha": "def456",
+            "base_ref": "main",
+            "head_ref": "feature/evals",
+            "modes": ["lexical"],
+            "config_label": "default",
+            "fail_on_gate": true
+        }),
+        secret,
+        StatusCode::UNPROCESSABLE_ENTITY,
+    )
+    .await;
+    assert_eq!(failed_run["status"], "failed");
+    assert_eq!(failed_run["gate_status"], "failed");
+    assert_eq!(failed_run["eval_regression"]["classification"], "regressed");
+    assert_eq!(
+        failed_run["eval_regression"]["newly_failed_cases"]
+            .as_array()
+            .expect("newly failed cases")
+            .len(),
+        1
+    );
+    assert_eq!(failed_run["regression"]["newly_failed_case_count"], 1);
+    assert!(!failed_run["report"]["failed_cases"]
+        .as_array()
+        .expect("failed cases")
+        .is_empty());
+
+    let failed_run_id = failed_run["id"].as_str().expect("failed run id");
+    let persisted = get_json_with_cookie(
+        &app,
+        &format!("/api/v1/eval-lab/ci/runs/{failed_run_id}"),
+        &cookie,
+        StatusCode::OK,
+    )
+    .await;
+    assert_eq!(persisted["id"], failed_run["id"]);
+
+    let report = post_json_with_cookie(
+        &app,
+        "/api/v1/reports/from-ci-run",
+        json!({ "run_id": failed_run_id }),
+        &cookie,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(report["privacy_mode"], "metadata_only");
+    assert_eq!(report["context"]["regression_classification"], "regressed");
+    assert_eq!(report["context"]["recovered_cases"], "0");
+    assert!(!report.to_string().contains("qxzv blorp"));
+
+    let nonblocking_failure = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({
+            "dataset_id": dataset_id,
+            "modes": ["lexical"],
+            "config_label": "default",
+            "fail_on_gate": false
+        }),
+        secret,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(nonblocking_failure["status"], "failed");
+
+    let keys = get_json_with_cookie(&app, "/api/v1/api-keys", &cookie, StatusCode::OK).await;
+    assert_eq!(keys[0]["scopes"][0], "ci_eval_runs");
+    assert!(keys[0]["last_used_at"].is_string());
+    assert!(keys[0].get("secret").is_none());
+    assert!(keys[0].get("secret_hash").is_none());
 
     let api_key_id = created_key["api_key"]["id"].as_str().expect("key id");
     let response = app
@@ -238,6 +329,115 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
         .await
         .expect("rejected response");
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn api_key_management_and_ci_dataset_access_are_workspace_scoped() {
+    let app = test_app(RuntimeEnvironment::Local).await;
+    let (alpha_cookie, _) = login(&app).await;
+    let alpha_key = post_json_with_cookie(
+        &app,
+        "/api/v1/api-keys",
+        json!({ "name": "Alpha CI" }),
+        &alpha_cookie,
+        StatusCode::OK,
+    )
+    .await;
+    let alpha_key_id = alpha_key["api_key"]["id"].as_str().expect("key id");
+    let alpha_secret = alpha_key["secret"].as_str().expect("key secret");
+
+    let invalid_name = post_json_with_cookie(
+        &app,
+        "/api/v1/api-keys",
+        json!({ "name": "x".repeat(101) }),
+        &alpha_cookie,
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
+    assert_eq!(invalid_name["error"]["code"], "bad_request");
+
+    let beta_cookie = signup(&app, "beta-ci@example.test", "Beta CI Workspace").await;
+    let beta_dataset = post_json_with_cookie(
+        &app,
+        "/api/v1/eval-lab/datasets",
+        json!({ "name": "Beta private gate" }),
+        &beta_cookie,
+        StatusCode::OK,
+    )
+    .await;
+
+    let inaccessible = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({ "dataset_id": beta_dataset["id"] }),
+        alpha_secret,
+        StatusCode::NOT_FOUND,
+    )
+    .await;
+    assert_eq!(inaccessible["error"]["code"], "not_found");
+    assert!(inaccessible["error"]["message"]
+        .as_str()
+        .expect("not-found message")
+        .contains("eval dataset not found"));
+
+    let invalid_metadata = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({
+            "dataset_id": beta_dataset["id"],
+            "branch": "invalid\nbranch"
+        }),
+        alpha_secret,
+        StatusCode::BAD_REQUEST,
+    )
+    .await;
+    assert_eq!(invalid_metadata["error"]["code"], "bad_request");
+
+    let cross_workspace_revoke = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/v1/api-keys/{alpha_key_id}"))
+                .header(header::COOKIE, beta_cookie)
+                .body(Body::empty())
+                .expect("cross-workspace revoke request"),
+        )
+        .await
+        .expect("cross-workspace revoke response");
+    assert_eq!(cross_workspace_revoke.status(), StatusCode::NOT_FOUND);
+
+    let alpha_keys =
+        get_json_with_cookie(&app, "/api/v1/api-keys", &alpha_cookie, StatusCode::OK).await;
+    assert!(alpha_keys[0]["revoked_at"].is_null());
+}
+
+async fn signup(app: &axum::Router, email: &str, workspace_name: &str) -> String {
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/auth/signup",
+            json!({
+                "email": email,
+                "password": "VeryStrong#2026",
+                "name": "CI workspace owner",
+                "workspace_name": workspace_name
+            }),
+        ))
+        .await
+        .expect("signup response");
+    assert_eq!(response.status(), StatusCode::OK);
+    response
+        .headers()
+        .get(header::SET_COOKIE)
+        .expect("signup set-cookie")
+        .to_str()
+        .expect("signup cookie")
+        .split(';')
+        .next()
+        .expect("signup cookie pair")
+        .to_owned()
 }
 
 async fn login(app: &axum::Router) -> (String, Value) {
@@ -298,6 +498,53 @@ async fn post_json_with_cookie(
                 .header(header::CONTENT_TYPE, "application/json")
                 .header(header::COOKIE, cookie)
                 .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), expected_status);
+    json_body(response).await
+}
+
+async fn request_json_with_cookie(
+    app: &axum::Router,
+    method: Method,
+    uri: &str,
+    body: Value,
+    cookie: &str,
+    expected_status: StatusCode,
+) -> Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::COOKIE, cookie)
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), expected_status);
+    json_body(response).await
+}
+
+async fn get_json_with_cookie(
+    app: &axum::Router,
+    uri: &str,
+    cookie: &str,
+    expected_status: StatusCode,
+) -> Value {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(uri)
+                .header(header::COOKIE, cookie)
+                .body(Body::empty())
                 .expect("request"),
         )
         .await

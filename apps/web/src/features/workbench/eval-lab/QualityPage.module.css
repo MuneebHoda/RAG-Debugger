@@ -112,11 +112,31 @@
 .cardHeader span,
 .caseCard small,
 .datasetCard p,
-.experimentCard p {
+.experimentCard p,
+.experimentCard small {
   margin: 0;
   color: var(--color-ink-600);
   font-size: 0.77rem;
   line-height: 1.45;
+}
+
+.metadataList {
+  margin: 0;
+}
+
+.metadataList div {
+  min-width: 0;
+}
+
+.metadataList dt,
+.metadataList dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.metadataList dt {
+  color: var(--color-ink-500);
+  font-weight: 800;
 }
 
 .form,

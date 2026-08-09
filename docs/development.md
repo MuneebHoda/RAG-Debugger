@@ -160,12 +160,12 @@ Eval Lab APIs live under `/api/v1/eval-lab`. Existing retrieval eval cases are b
 ## CI Gate Flow
 
 1. Sign in to `/app/settings`.
-2. Create a `CI API Keys` key and copy the one-time `clab_...` secret.
+2. Open the `API keys` tab, create a GitHub Actions key, and copy the one-time `clab_...` secret.
 3. Store the key in GitHub Actions as `CORPUSLAB_API_KEY`.
 4. Use `docs/examples/github-actions-corpuslab-evals.yml` as the starting workflow.
 5. POST to `/api/v1/eval-lab/ci/runs` with `fail_on_gate=true` to fail the CI job when the Eval Lab gate fails.
 
-CI runs are saved as Eval Lab experiments and appear in `/app/evals`, Mission Control, and Reports. API key secrets are stored only as hashes.
+CI runs are saved as Eval Lab experiments and appear in `/app/evals?view=ci-runs`, focused `/app/evals/ci-runs/:runId` details, Mission Control, and Reports. Failed details expose the saved revision/config metadata, gate reasons, full Eval Lab v2 regression, failed cases, and metadata-only report action. API key secrets are stored only as hashes.
 
 ## Auth And Workspace Flow
 

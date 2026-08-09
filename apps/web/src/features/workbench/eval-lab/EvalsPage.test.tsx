@@ -10,6 +10,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RetrievalEvalCase } from "../../../lib/api/evalLab";
+import { CiRunDetailPage } from "./CiRunDetailPage";
 import { DatasetDetailPage } from "./DatasetDetailPage";
 import { ExperimentDetailPage } from "./ExperimentDetailPage";
 import { EvalsPage } from "./EvalsPage";
@@ -27,15 +28,25 @@ const newerExperimentId = "018f7a2a-6e2e-7000-a000-000000000309";
 const firstExperimentId = "018f7a2a-6e2e-7000-a000-000000000310";
 const staleDocumentId = "018f7a2a-6e2e-7000-a000-000000000312";
 const staleChunkId = "018f7a2a-6e2e-7000-a000-000000000313";
+const ciRunId = "018f7a2a-6e2e-7000-a000-000000000314";
 let historyShouldFail = false;
 let regressionShouldFail = false;
+let ciRunShouldFail = false;
 let experimentResponse: ReturnType<typeof experiment> | null = null;
+type CiRunFixtureBase = ReturnType<typeof ciRun>;
+type CiRunFixture = Omit<CiRunFixtureBase, "regression" | "eval_regression"> & {
+  regression: CiRunFixtureBase["regression"] | null;
+  eval_regression: CiRunFixtureBase["eval_regression"] | null;
+};
+let ciRunResponse: CiRunFixture | null = null;
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
     historyShouldFail = false;
     regressionShouldFail = false;
+    ciRunShouldFail = false;
     experimentResponse = null;
+    ciRunResponse = null;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -82,6 +93,11 @@ describe("guided Eval Lab workflow", () => {
         }
         if (url.endsWith("/api/v1/eval-lab/experiments")) {
           return responseJson([experiment()]);
+        }
+        if (url.endsWith(`/api/v1/eval-lab/ci/runs/${ciRunId}`)) {
+          return ciRunShouldFail
+            ? responseError(404, "CI eval run not found")
+            : responseJson(ciRunResponse ?? ciRun());
         }
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
           return responseJson([]);
@@ -139,6 +155,107 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByRole("link", { name: /Open API key setup/ }),
     ).toHaveAttribute("href", "/app/settings?tab=api-keys");
+  });
+
+  it("shows a failed CI gate with metadata, regressions, cases, and report action", async () => {
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Production corpus gate" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Gate failed" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("feature/ci-polish")).not.toHaveLength(0);
+    expect(screen.getByText("abc123def456")).toBeInTheDocument();
+    expect(screen.getByText("release-v2")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Failed metrics" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/recall at k changed from 100% to 50%/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Regression summary" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Newly failing cases" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No recovered cases.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Failed cases" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Expected evidence was not retrieved."),
+    ).not.toHaveLength(0);
+    expect(
+      screen.getByRole("heading", { name: "Metrics summary" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create audit report" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps inaccessible CI runs inside a recoverable route error", async () => {
+    ciRunShouldFail = true;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This CI run could not be opened.",
+    );
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Back to CI Runs" }),
+    ).toHaveAttribute("href", "/app/evals?view=ci-runs");
+  });
+
+  it("keeps legacy aggregate regression summaries readable", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.eval_regression = null;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByText("One case newly failed."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a passing run without failure-only actions or a false baseline", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.status = "passed";
+    ciRunResponse.gate_status = "passed";
+    ciRunResponse.regression = null;
+    ciRunResponse.eval_regression = null;
+    ciRunResponse.report.gate = gate("passed");
+    ciRunResponse.report.failed_cases = [];
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Gate passed" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No comparable CI baseline is available."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Failed metrics" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Failed cases" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create audit report" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens a focused dataset with cases and experiment controls", async () => {
@@ -1089,6 +1206,42 @@ function experiment() {
       },
     ],
     created_at: "2026-06-25T00:00:00Z",
+  };
+}
+
+function ciRun() {
+  const experimentValue = experiment();
+  return {
+    id: ciRunId,
+    workspace_id: "018f7a2a-6e2e-7000-a000-000000000320",
+    dataset_id: datasetId,
+    dataset_name: experimentValue.dataset_name,
+    experiment_id: experimentId,
+    status: "failed",
+    gate_status: "failed",
+    branch: "feature/ci-polish",
+    commit_sha: "abc123def456",
+    base_ref: "main",
+    head_ref: "feature/ci-polish",
+    config_label: "release-v2",
+    regression: {
+      baseline_run_id: "018f7a2a-6e2e-7000-a000-000000000321",
+      recall_delta: -0.5,
+      precision_delta: -0.6,
+      mrr_delta: -0.5,
+      latency_delta_ms: 5,
+      newly_failed_case_count: 1,
+      summary: "One case newly failed.",
+    },
+    eval_regression: regression(),
+    report: {
+      title: "Production corpus gate CI eval report",
+      summary: "CI retrieval gate failed with one failure signal.",
+      gate: experimentValue.gate,
+      experiment: experimentValue,
+      failed_cases: experimentValue.failures,
+    },
+    created_at: "2026-08-09T10:00:00Z",
   };
 }
 

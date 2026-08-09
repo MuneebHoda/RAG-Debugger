@@ -41,6 +41,12 @@ describe("workbench navigation", () => {
     expect(
       isWorkbenchNavItemActive("eval_lab", "/app/evals", "?view=ci-runs"),
     ).toBe(false);
+    expect(
+      isWorkbenchNavItemActive("ci_runs", "/app/evals/ci-runs/run-1", ""),
+    ).toBe(true);
+    expect(
+      isWorkbenchNavItemActive("eval_lab", "/app/evals/ci-runs/run-1", ""),
+    ).toBe(false);
   });
 
   it("builds stable breadcrumbs for list and detail routes", () => {
@@ -54,5 +60,13 @@ describe("workbench navigation", () => {
       { label: "Eval Lab", to: "/app/evals" },
       { label: "CI Runs" },
     ]);
+    expect(resolveWorkbenchBreadcrumbs("/app/evals/ci-runs/run-1", "")).toEqual(
+      [
+        { label: "Home", to: "/app" },
+        { label: "Eval Lab", to: "/app/evals" },
+        { label: "CI Runs", to: "/app/evals?view=ci-runs" },
+        { label: "Run detail" },
+      ],
+    );
   });
 });
