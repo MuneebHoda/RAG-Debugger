@@ -7,25 +7,31 @@ on:
 jobs:
   corpuslab-evals:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
-      CORPUSLAB_API_URL: ${{ vars.CORPUSLAB_API_URL || 'http://127.0.0.1:8080' }}
+      # Repository Settings → Secrets and variables → Actions.
+      CORPUSLAB_API_KEY: ${{ secrets.CORPUSLAB_API_KEY }}
+      CORPUSLAB_API_URL: ${{ vars.CORPUSLAB_API_URL }}
+      CORPUSLAB_CONFIG_LABEL: ${{ vars.CORPUSLAB_CONFIG_LABEL || 'default' }}
       CORPUSLAB_DATASET_ID: ${{ vars.CORPUSLAB_DATASET_ID }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Run CorpusLab Eval Gate
         shell: bash
         run: |
           set -euo pipefail
 
+          : "${CORPUSLAB_API_KEY:?Set the CORPUSLAB_API_KEY Actions secret}"
+          : "${CORPUSLAB_API_URL:?Set the reachable CORPUSLAB_API_URL Actions variable}"
+          : "${CORPUSLAB_DATASET_ID:?Set the CORPUSLAB_DATASET_ID Actions variable}"
+
           response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
           status="$(
             curl --silent --show-error \
               --output "$response_file" \
               --write-out "%{http_code}" \
               --request POST "$CORPUSLAB_API_URL/api/v1/eval-lab/ci/runs" \
-              --header "Authorization: Bearer ${{ secrets.CORPUSLAB_API_KEY }}" \
+              --header "Authorization: Bearer $CORPUSLAB_API_KEY" \
               --header "Content-Type: application/json" \
               --data "$(jq -n \
                 --arg dataset_id "$CORPUSLAB_DATASET_ID" \
@@ -33,6 +39,7 @@ jobs:
                 --arg commit_sha "$GITHUB_SHA" \
                 --arg base_ref "${GITHUB_BASE_REF:-main}" \
                 --arg head_ref "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}" \
+                --arg config_label "$CORPUSLAB_CONFIG_LABEL" \
                 '{
                   dataset_id: $dataset_id,
                   name: "GitHub Actions retrieval gate",
@@ -42,14 +49,39 @@ jobs:
                   head_ref: $head_ref,
                   top_k: 5,
                   modes: ["hybrid", "vector", "lexical"],
-                  config_label: "default",
+                  config_label: $config_label,
                   fail_on_gate: true
                 }')"
           )"
 
-          cat "$response_file"
+          if ! jq -e 'type == "object"' "$response_file" >/dev/null; then
+            echo "CorpusLab returned an unreadable response (HTTP $status)."
+            exit 1
+          fi
 
-          if [[ "$status" -lt 200 || "$status" -ge 300 ]]; then
-            echo "CorpusLab gate failed with HTTP $status"
+          if [[ "$status" == "201" || "$status" == "422" ]]; then
+            gate_status="$(jq -r '.gate_status // "unknown"' "$response_file")"
+            run_id="$(jq -r '.id // "unknown"' "$response_file")"
+            experiment_id="$(jq -r '.experiment_id // "unknown"' "$response_file")"
+            failed_cases="$(jq -r '(.report.failed_cases // []) | length' "$response_file")"
+            recall="$(jq -r '.report.gate.average_recall_at_k // "n/a"' "$response_file")"
+
+            {
+              echo "### CorpusLab Eval Gate"
+              echo "- Gate status: $gate_status"
+              echo "- Recall@k: $recall"
+              echo "- Failed cases: $failed_cases"
+              echo "- Run ID: $run_id"
+              echo "- Experiment ID: $experiment_id"
+              echo "- Config: $CORPUSLAB_CONFIG_LABEL"
+            } >>"$GITHUB_STEP_SUMMARY"
+            echo "CorpusLab gate: $gate_status ($failed_cases failed cases, run $run_id)."
+          else
+            echo "CorpusLab request failed with HTTP $status. Inspect the service without printing the response body."
+            exit 1
+          fi
+
+          if [[ "$status" == "422" ]]; then
+            echo "CorpusLab blocked this change because the retrieval gate failed."
             exit 1
           fi

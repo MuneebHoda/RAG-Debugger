@@ -18,6 +18,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Complete CI release-gate workflow with explicit hashed-key onboarding, privacy-safe GitHub Actions summaries, persisted Eval Lab v2 regression context, focused failed-run diagnosis, and metadata-only audit-report creation.
 - Repository governance baseline with rendered-Markdown exact-link issue-policy validation, private security-reporting and containment guidance, actionable bug and feature forms, explicit CODEOWNERS coverage, and clean-worktree exact-commit release verification.
 - Advisory CodeRabbit reviews for ready pull requests with repository-owned settings, high-level summaries, nonblocking status, disabled code-generation finishing touches, and a documented external engineering-data boundary.
 - Informational Codecov project and changed-line coverage reporting for the complete Rust workspace and all production frontend TypeScript, with separate OIDC-authenticated Rust and web uploads and no merge-blocking percentage threshold.

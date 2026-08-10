@@ -929,11 +929,16 @@ impl AuthRepository for MemoryStore {
         Ok(())
     }
 
-    async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
+    async fn revoke_api_key(
+        &self,
+        workspace_id: WorkspaceId,
+        api_key_id: ApiKeyId,
+    ) -> Result<(), StorageError> {
         let mut inner = self.lock()?;
         let record = inner
             .api_keys
             .get_mut(&api_key_id)
+            .filter(|record| record.api_key.workspace_id == workspace_id)
             .ok_or(StorageError::NotFound)?;
         record.api_key.revoked_at = Some(OffsetDateTime::now_utc());
         Ok(())

@@ -5,7 +5,7 @@ use rag_debugger_core::{
 };
 
 use super::{
-    experiment::{build_eval_experiment_debug_report, gate_status_label},
+    experiment::{build_eval_experiment_debug_report_with_regression, gate_status_label},
     privacy::permits_content,
     DebugReportBuildContext,
 };
@@ -14,7 +14,11 @@ pub fn build_ci_eval_debug_report(
     context: DebugReportBuildContext,
     run: &CiEvalRun,
 ) -> DebugReport {
-    let mut report = build_eval_experiment_debug_report(context, &run.report.experiment);
+    let mut report = build_eval_experiment_debug_report_with_regression(
+        context,
+        &run.report.experiment,
+        run.eval_regression.as_ref(),
+    );
     report.title = "RAG CI gate audit".to_owned();
     report.subject = if permits_content(context.privacy_mode) {
         run.branch
@@ -28,6 +32,8 @@ pub fn build_ci_eval_debug_report(
         .context
         .insert("ci_config_label".to_owned(), run.config_label.clone());
     insert_optional(&mut report.context, "ci_branch", run.branch.as_deref());
+    insert_optional(&mut report.context, "ci_base_ref", run.base_ref.as_deref());
+    insert_optional(&mut report.context, "ci_head_ref", run.head_ref.as_deref());
     insert_optional(
         &mut report.context,
         "ci_commit_sha",

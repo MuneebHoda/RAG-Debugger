@@ -7,6 +7,7 @@ use crate::{
     eval::{
         RetrievalEvalDatasetId, RetrievalEvalExperiment, RetrievalEvalExperimentId,
         RetrievalEvalFailure, RetrievalEvalGate, RetrievalEvalGateStatus,
+        RetrievalEvalRegressionComparison,
     },
     retrieval::RetrievalMode,
 };
@@ -45,6 +46,8 @@ pub struct CiEvalRun {
     pub head_ref: Option<String>,
     pub config_label: String,
     pub regression: Option<CiEvalRegressionSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub eval_regression: Option<RetrievalEvalRegressionComparison>,
     pub report: CiEvalReport,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,

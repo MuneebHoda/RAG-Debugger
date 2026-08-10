@@ -9,7 +9,11 @@ import {
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RetrievalEvalCase } from "../../../lib/api/evalLab";
+import type {
+  RetrievalEvalCase,
+  RetrievalEvalRegressionComparison,
+} from "../../../lib/api/evalLab";
+import { CiRunDetailPage } from "./CiRunDetailPage";
 import { DatasetDetailPage } from "./DatasetDetailPage";
 import { ExperimentDetailPage } from "./ExperimentDetailPage";
 import { EvalsPage } from "./EvalsPage";
@@ -27,15 +31,39 @@ const newerExperimentId = "018f7a2a-6e2e-7000-a000-000000000309";
 const firstExperimentId = "018f7a2a-6e2e-7000-a000-000000000310";
 const staleDocumentId = "018f7a2a-6e2e-7000-a000-000000000312";
 const staleChunkId = "018f7a2a-6e2e-7000-a000-000000000313";
+const ciRunId = "018f7a2a-6e2e-7000-a000-000000000314";
 let historyShouldFail = false;
 let regressionShouldFail = false;
+let ciRunShouldFail = false;
 let experimentResponse: ReturnType<typeof experiment> | null = null;
+type CiRunFixtureBase = ReturnType<typeof ciRun>;
+type CiRunFixture = Omit<
+  CiRunFixtureBase,
+  | "branch"
+  | "commit_sha"
+  | "base_ref"
+  | "head_ref"
+  | "regression"
+  | "eval_regression"
+> & {
+  branch: string | null;
+  commit_sha: string | null;
+  base_ref: string | null;
+  head_ref: string | null;
+  regression: CiRunFixtureBase["regression"] | null;
+  eval_regression: RetrievalEvalRegressionComparison | null;
+};
+let ciRunResponse: CiRunFixture | null = null;
+let ciRunsResponse: CiRunFixture[] = [];
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
     historyShouldFail = false;
     regressionShouldFail = false;
+    ciRunShouldFail = false;
     experimentResponse = null;
+    ciRunResponse = null;
+    ciRunsResponse = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -83,8 +111,13 @@ describe("guided Eval Lab workflow", () => {
         if (url.endsWith("/api/v1/eval-lab/experiments")) {
           return responseJson([experiment()]);
         }
+        if (url.endsWith(`/api/v1/eval-lab/ci/runs/${ciRunId}`)) {
+          return ciRunShouldFail
+            ? responseError(404, "CI eval run not found")
+            : responseJson(ciRunResponse ?? ciRun());
+        }
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
-          return responseJson([]);
+          return responseJson(ciRunsResponse);
         }
         if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
           return responseJson(evidenceLookup());
@@ -139,6 +172,237 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByRole("link", { name: /Open API key setup/ }),
     ).toHaveAttribute("href", "/app/settings?tab=api-keys");
+  });
+
+  it("links saved CI runs to their accessible detail route", async () => {
+    ciRunsResponse = [ciRun()];
+    renderRoute(
+      "/app/evals?view=ci-runs",
+      <Route path="/app/evals" element={<EvalsPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("link", {
+        name: "Open CI run for Production corpus gate",
+      }),
+    ).toHaveAttribute("href", `/app/evals/ci-runs/${ciRunId}`);
+    expect(screen.getByText(/feature\/ci-polish · abc123de/i)).toBeVisible();
+    expect(screen.getByText(/Config release-v2/i)).toBeVisible();
+  });
+
+  it("shows a failed CI gate with metadata, regressions, cases, and report action", async () => {
+    const response = ciRun();
+    response.eval_regression.metric_deltas.push(
+      {
+        metric: "latency_p95_ms",
+        current: 45,
+        baseline: 20,
+        delta: 25,
+        classification: "regressed",
+      },
+      {
+        metric: "missing_embedding_failures",
+        current: 2,
+        baseline: 0,
+        delta: 2,
+        classification: "regressed",
+      },
+    );
+    ciRunResponse = response;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Production corpus gate" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Gate failed" }),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText("feature/ci-polish")).not.toHaveLength(0);
+    expect(screen.getByText("abc123def456")).toBeInTheDocument();
+    expect(screen.getByText("release-v2")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Failed metrics" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/recall at k changed from 100% to 50%/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/latency p95 ms changed from 20 ms to 45 ms/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/missing embedding failures changed from 0 to 2/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Regression summary" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Newly failing cases" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("No recovered cases.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Changed top evidence" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Changed failure labels" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Which evidence changed rank?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Which failure label changed?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Failed cases" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Expected evidence was not retrieved."),
+    ).not.toHaveLength(0);
+    expect(
+      screen.getByRole("heading", { name: "Metrics summary" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create audit report" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps inaccessible CI runs inside a recoverable route error", async () => {
+    ciRunShouldFail = true;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This CI run could not be opened.",
+    );
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Back to CI Runs" }),
+    ).toHaveAttribute("href", "/app/evals?view=ci-runs");
+    ciRunShouldFail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("heading", { name: "Production corpus gate" }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains a failed metric-only gate without inventing case failures", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.report.failed_cases = [];
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByText(
+        "No case-level failures were recorded; review the failed metrics above.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps legacy aggregate regression summaries readable", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.eval_regression = null;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByText("One case newly failed."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a passing run without failure-only actions or a false baseline", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.status = "passed";
+    ciRunResponse.gate_status = "passed";
+    ciRunResponse.regression = null;
+    ciRunResponse.eval_regression = null;
+    ciRunResponse.report.gate = gate("passed");
+    ciRunResponse.report.failed_cases = [];
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { name: "Gate passed" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("No comparable CI baseline is available."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Failed metrics" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Failed cases" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Create audit report" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("shows a full no-baseline comparison and missing revision metadata", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.status = "passed";
+    ciRunResponse.gate_status = "passed";
+    ciRunResponse.branch = null;
+    ciRunResponse.commit_sha = null;
+    ciRunResponse.base_ref = null;
+    ciRunResponse.head_ref = null;
+    ciRunResponse.regression = null;
+    ciRunResponse.eval_regression = noBaselineRegression();
+    ciRunResponse.report.gate = gate("passed");
+    ciRunResponse.report.failed_cases = [];
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(await screen.findByText("No baseline")).toBeInTheDocument();
+    expect(screen.getByText("No comparable baseline exists.")).toBeVisible();
+    expect(screen.getAllByText("Not provided")).toHaveLength(4);
+  });
+
+  it("shows recovered cases when a comparable CI run improved", async () => {
+    ciRunResponse = ciRun();
+    const comparison = regression();
+    comparison.classification = "improved";
+    comparison.current_gate_status = "passed";
+    comparison.baseline_gate_status = "failed";
+    comparison.newly_failed_cases = [];
+    comparison.recovered_cases = [
+      {
+        case_id: caseId,
+        retrieval_mode: "hybrid",
+        query: "Recovered release evidence",
+        classification: "improved",
+        current_passed: true,
+        baseline_passed: false,
+        current_top_hit_rank: 1,
+        baseline_top_hit_rank: null,
+        current_retrieved_chunk_ids: [chunkId],
+        baseline_retrieved_chunk_ids: [],
+        current_failure_labels: [],
+        baseline_failure_labels: ["expected_evidence_missing"],
+      },
+    ];
+    comparison.summary = "The release evidence recovered.";
+    ciRunResponse.eval_regression = comparison;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(await screen.findByText("improved")).toBeInTheDocument();
+    expect(screen.getByText("The release evidence recovered.")).toBeVisible();
+    expect(screen.getByText("Recovered release evidence")).toBeVisible();
+    expect(screen.getByText(/hybrid · recovered/i)).toBeVisible();
   });
 
   it("opens a focused dataset with cases and experiment controls", async () => {
@@ -824,7 +1088,7 @@ function trendSummary() {
   };
 }
 
-function regression() {
+function regression(): RetrievalEvalRegressionComparison {
   return {
     current_experiment_id: experimentId,
     baseline_experiment_id: baselineId,
@@ -868,7 +1132,7 @@ function regression() {
       {
         case_id: caseId,
         retrieval_mode: "hybrid",
-        query: "Which evidence explains GPU indexing workers?",
+        query: "Which evidence changed rank?",
         classification: "regressed",
         current_passed: false,
         baseline_passed: true,
@@ -884,7 +1148,7 @@ function regression() {
       {
         case_id: caseId,
         retrieval_mode: "hybrid",
-        query: "Which evidence explains GPU indexing workers?",
+        query: "Which failure label changed?",
         classification: "regressed",
         current_passed: false,
         baseline_passed: true,
@@ -1092,6 +1356,42 @@ function experiment() {
   };
 }
 
+function ciRun() {
+  const experimentValue = experiment();
+  return {
+    id: ciRunId,
+    workspace_id: "018f7a2a-6e2e-7000-a000-000000000320",
+    dataset_id: datasetId,
+    dataset_name: experimentValue.dataset_name,
+    experiment_id: experimentId,
+    status: "failed",
+    gate_status: "failed",
+    branch: "feature/ci-polish",
+    commit_sha: "abc123def456",
+    base_ref: "main",
+    head_ref: "feature/ci-polish",
+    config_label: "release-v2",
+    regression: {
+      baseline_run_id: "018f7a2a-6e2e-7000-a000-000000000321",
+      recall_delta: -0.5,
+      precision_delta: -0.6,
+      mrr_delta: -0.5,
+      latency_delta_ms: 5,
+      newly_failed_case_count: 1,
+      summary: "One case newly failed.",
+    },
+    eval_regression: regression(),
+    report: {
+      title: "Production corpus gate CI eval report",
+      summary: "CI retrieval gate failed with one failure signal.",
+      gate: experimentValue.gate,
+      experiment: experimentValue,
+      failed_cases: experimentValue.failures,
+    },
+    created_at: "2026-08-09T10:00:00Z",
+  };
+}
+
 function experimentWithRetrievedChunks(retrievedChunkIds: string[]) {
   const value = experiment();
   value.mode_results[0].case_results = [caseEvaluation(retrievedChunkIds)];
@@ -1189,8 +1489,8 @@ function modeResult(
 function gate(status: "passed" | "failed") {
   return {
     status,
-    average_recall_at_k: 0.5,
-    weak_evidence_rate: 1,
+    average_recall_at_k: status === "passed" ? 1 : 0.5,
+    weak_evidence_rate: status === "passed" ? 0 : 1,
     critical_failure_count: status === "failed" ? 1 : 0,
     recall_threshold: 0.8,
     weak_evidence_limit: 0.2,
@@ -1201,7 +1501,7 @@ function gate(status: "passed" | "failed") {
   };
 }
 
-function noBaselineRegression() {
+function noBaselineRegression(): RetrievalEvalRegressionComparison {
   return {
     current_experiment_id: firstExperimentId,
     baseline_experiment_id: null,

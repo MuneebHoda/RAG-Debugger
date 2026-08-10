@@ -14,8 +14,9 @@ use rag_debugger_core::{
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
     evals::{
-        compare_mode_results, evaluate_gate, evaluate_retrieval_eval_case_with_context,
-        expected_chunk_parent_document_ids, summarize_mode_result,
+        compare_experiment_regression, compare_mode_results, evaluate_gate,
+        evaluate_retrieval_eval_case_with_context, expected_chunk_parent_document_ids,
+        summarize_mode_result,
     },
     retrieval::LocalHybridRetriever,
     RagError,
@@ -33,6 +34,7 @@ pub async fn run_ci_eval(
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let api_key =
         auth::authenticate_api_key(repository.as_ref(), &headers, ApiKeyScope::CiEvalRuns).await?;
+    let request = validate_ci_request(request)?;
     let workspace_id = api_key.workspace_id;
     let dataset = repository
         .get_retrieval_eval_dataset(workspace_id, request.dataset_id)
@@ -58,7 +60,8 @@ pub async fn run_ci_eval(
         .unwrap_or_else(|| "default".to_owned());
     let baseline = repository
         .latest_ci_eval_run_for_dataset(workspace_id, dataset.id, &config_label)
-        .await?;
+        .await?
+        .filter(|run| compatible_ci_baseline(run, top_k, &modes));
     let experiment = run_experiment_for_dataset(
         &state,
         workspace_id,
@@ -77,6 +80,12 @@ pub async fn run_ci_eval(
     let regression = baseline
         .as_ref()
         .and_then(|baseline| regression_summary(baseline, &saved_experiment));
+    let eval_regression = Some(compare_experiment_regression(
+        &saved_experiment,
+        baseline
+            .as_ref()
+            .map(|baseline| &baseline.report.experiment),
+    ));
     let status = if saved_experiment.gate.status == RetrievalEvalGateStatus::Passed {
         CiEvalRunStatus::Passed
     } else {
@@ -96,6 +105,7 @@ pub async fn run_ci_eval(
         head_ref: request.head_ref,
         config_label,
         regression,
+        eval_regression,
         report,
         created_at: OffsetDateTime::now_utc(),
     };
@@ -378,6 +388,41 @@ fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
     });
     normalized.dedup();
     normalized
+}
+
+fn compatible_ci_baseline(run: &CiEvalRun, top_k: u32, modes: &[RetrievalMode]) -> bool {
+    run.report.experiment.top_k == top_k
+        && normalized_modes(run.report.experiment.modes.clone()) == modes
+}
+
+fn validate_ci_request(mut request: RunCiEvalRequest) -> Result<RunCiEvalRequest, ApiError> {
+    request.name = normalized_metadata(request.name, "name", 200)?;
+    request.branch = normalized_metadata(request.branch, "branch", 255)?;
+    request.commit_sha = normalized_metadata(request.commit_sha, "commit_sha", 128)?;
+    request.base_ref = normalized_metadata(request.base_ref, "base_ref", 255)?;
+    request.head_ref = normalized_metadata(request.head_ref, "head_ref", 255)?;
+    request.config_label = normalized_metadata(request.config_label, "config_label", 100)?;
+    Ok(request)
+}
+
+fn normalized_metadata(
+    value: Option<String>,
+    field: &'static str,
+    max_characters: usize,
+) -> Result<Option<String>, ApiError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let value = value.trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    if value.chars().count() > max_characters || value.chars().any(char::is_control) {
+        return Err(ApiError::BadRequest(format!(
+            "{field} must contain at most {max_characters} characters and no control characters"
+        )));
+    }
+    Ok(Some(value.to_owned()))
 }
 
 fn rag_error_to_api_error(error: RagError) -> ApiError {

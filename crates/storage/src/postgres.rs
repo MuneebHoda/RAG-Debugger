@@ -516,8 +516,12 @@ impl AuthRepository for PostgresStore {
         PostgresStore::touch_api_key(self, api_key_id).await
     }
 
-    async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
-        PostgresStore::revoke_api_key(self, api_key_id).await
+    async fn revoke_api_key(
+        &self,
+        workspace_id: WorkspaceId,
+        api_key_id: ApiKeyId,
+    ) -> Result<(), StorageError> {
+        PostgresStore::revoke_api_key(self, workspace_id, api_key_id).await
     }
 }
 

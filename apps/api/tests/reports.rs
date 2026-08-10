@@ -93,6 +93,7 @@ async fn reports_are_created_listed_opened_and_exported() {
         head_ref: Some("feature/audit-reports".to_owned()),
         config_label: "report-api-test".to_owned(),
         regression: None,
+        eval_regression: None,
         report: CiEvalReport {
             title: "CI audit fixture".to_owned(),
             summary: "CI gate fixture".to_owned(),

@@ -279,7 +279,11 @@ pub trait AuthRepository: Send + Sync {
     async fn list_api_keys(&self, workspace_id: WorkspaceId) -> Result<Vec<ApiKey>, StorageError>;
     async fn find_api_key(&self, secret_hash: &str) -> Result<Option<ApiKeyRecord>, StorageError>;
     async fn touch_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError>;
-    async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError>;
+    async fn revoke_api_key(
+        &self,
+        workspace_id: WorkspaceId,
+        api_key_id: ApiKeyId,
+    ) -> Result<(), StorageError>;
 }
 
 #[async_trait]

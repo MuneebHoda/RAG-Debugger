@@ -373,6 +373,7 @@ export interface CiEvalRun {
   head_ref: string | null;
   config_label: string;
   regression: CiEvalRegressionSummary | null;
+  eval_regression?: RetrievalEvalRegressionComparison | null;
   report: CiEvalReport;
   created_at: string;
 }
@@ -525,6 +526,15 @@ export function compareEvalLabExperiment(
 
 export function listCiEvalRuns(signal?: AbortSignal): Promise<CiEvalRun[]> {
   return requestJson<CiEvalRun[]>("/api/v1/eval-lab/ci/runs", { signal });
+}
+
+export function getCiEvalRun(
+  runId: string,
+  signal?: AbortSignal,
+): Promise<CiEvalRun> {
+  return requestJson<CiEvalRun>(`/api/v1/eval-lab/ci/runs/${runId}`, {
+    signal,
+  });
 }
 
 export function getCiEvalReport(

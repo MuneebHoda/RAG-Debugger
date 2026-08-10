@@ -41,7 +41,7 @@ The web app lives in `apps/web/src`.
 - `features/workbench/sources` owns Corpus upload, the document library, and focused document/chunk inspection at `/app/sources/:documentId`.
 - `features/workbench/retrieval` owns the question-first retrieval test. A domain hook coordinates source, embedding, query, and trace mutations; focused panels own query, filter, and embedding controls; result components own evidence summaries, citations, and ranking details.
 - `features/workbench/traces` owns the searchable Trace Debugger and focused `/app/traces/:traceId` debugger. A domain hook owns trace loading and tab state; separate components own summary, failure labels, evidence metrics, timeline spans, reruns, and Eval Lab case creation.
-- `features/workbench/eval-lab` owns Eval Lab datasets, experiments, gates, and the focused `/app/evals?view=ci-runs` quality-automation view.
+- `features/workbench/eval-lab` owns Eval Lab datasets, experiments, gates, the focused `/app/evals?view=ci-runs` quality-automation view, and `/app/evals/ci-runs/:runId` persisted gate diagnosis.
 - `features/workbench/reports` owns audit report creation, generated report lists, focused `/app/reports/:reportId` detail, privacy classification, and Markdown copy. Existing CI failures, run diagnoses, and corpus findings remain visible as report candidates.
 - `features/workbench/settings` owns Workspace, API keys, Runtime, and Privacy tabs.
 
@@ -102,6 +102,8 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `GET /api/v1/eval-lab/ci/runs`: list CI eval runs.
 - `GET /api/v1/eval-lab/ci/runs/:run_id`: load one CI eval run.
 - `GET /api/v1/eval-lab/ci/runs/:run_id/report`: load the export-ready CI gate report.
+
+CI creation stores both the compatibility aggregate and the additive full Eval Lab v2 regression comparison. Older JSON records remain readable when the new field is absent. API-key and CI repository operations always receive a workspace ID; key revocation includes it in the Postgres predicate.
 
 ## Database Schema And Migrations
 
@@ -285,7 +287,7 @@ Report privacy is distinct from project privacy. `metadata_only` excludes query 
 
 The legacy `RetrievalReport`, `RetrievalDiagnosis`, and `EvidenceIssue` contracts remain available for compatibility. Audit reports are additive and do not replace existing retrieval, trace, Eval Lab, CI, or diagnostic-queue contracts.
 
-`crates/rag/src/reports` builds deterministic reports from traces, Eval Lab experiments, and CI eval runs. Build context supplies IDs, ownership, privacy mode, and timestamp. Source builders freeze configuration and comparison metadata, map failure labels to stable findings and remediation categories, deduplicate recommendations, and apply report privacy before evidence enters the report.
+`crates/rag/src/reports` builds deterministic reports from traces, Eval Lab experiments, and CI eval runs. Build context supplies IDs, ownership, privacy mode, and timestamp. Source builders freeze configuration and comparison metadata, map failure labels to stable findings and remediation categories, deduplicate recommendations, and apply report privacy before evidence enters the report. CI reports reuse the Eval Lab v2 report builder so gate metadata, regressed metrics, newly failing and recovered cases, and recommendations stay consistent with experiment reports.
 
 `ReportRepository` provides workspace-scoped save, list, and detail operations with MemoryStore/Postgres parity. Postgres stores one append-only `debug_reports` row per snapshot, including indexed workspace/project/source/privacy columns and canonical report JSON. Duplicate report IDs fail; multiple snapshots from the same source are allowed.
 

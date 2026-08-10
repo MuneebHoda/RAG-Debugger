@@ -14,6 +14,7 @@ import { WorkbenchLayout } from "./layouts/WorkbenchLayout";
 import { EvalsPage } from "./pages/EvalsPage";
 import { DocumentDetailPage } from "./pages/DocumentDetailPage";
 import { DatasetDetailPage } from "./pages/DatasetDetailPage";
+import { CiRunDetailPage } from "./pages/CiRunDetailPage";
 import { ExperimentDetailPage } from "./pages/ExperimentDetailPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReportsPage } from "./pages/ReportsPage";
@@ -64,6 +65,7 @@ export function App() {
             <Route path="traces" element={<TracesPage />} />
             <Route path="traces/:traceId" element={<TraceDetailPage />} />
             <Route path="evals" element={<EvalsPage />} />
+            <Route path="evals/ci-runs/:runId" element={<CiRunDetailPage />} />
             <Route
               path="evals/datasets/:datasetId"
               element={<DatasetDetailPage />}

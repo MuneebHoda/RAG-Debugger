@@ -9,19 +9,29 @@ RAG systems regress quietly. A chunking change, embedding refresh, scoring tweak
 - Run expected-evidence questions on every branch.
 - Compare lexical, vector, and hybrid behavior.
 - Record recall, precision, MRR, citation coverage, and latency.
-- Detect newly failing cases against the latest run for the same dataset/config label.
+- Detect newly failing cases when the latest run for the same dataset/config label also has the same top-k and retrieval-mode set; otherwise record that no comparable baseline exists.
 - Preserve an export-ready report for engineering review.
 
 ## Setup
 
 1. Start the API and web app.
 2. Sign in to `/app/settings`.
-3. Create a `CI API Keys` key.
+3. Open the `API keys` tab and create a key for GitHub Actions.
 4. Copy the one-time `clab_...` secret.
-5. Store it in GitHub Actions as `CORPUSLAB_API_KEY`.
-6. Copy `docs/examples/github-actions-corpuslab-evals.yml` into `.github/workflows/corpuslab-evals.yml`.
+5. In the target repository, open **Settings → Secrets and variables → Actions** and store it as the `CORPUSLAB_API_KEY` repository secret.
+6. In the same **Actions** settings, add `CORPUSLAB_API_URL` as a required repository variable containing the CorpusLab API base URL reachable from the runner.
+7. Add the Eval Lab dataset UUID as the required `CORPUSLAB_DATASET_ID` repository variable. `CORPUSLAB_CONFIG_LABEL` is optional and defaults to `default`.
+8. Copy `docs/examples/github-actions-corpuslab-evals.yml` into `.github/workflows/corpuslab-evals.yml`.
 
-For hosted deployments, set `CORPUSLAB_API_URL` to the deployed API base URL.
+The Actions runner must be able to reach the CorpusLab API. Set `CORPUSLAB_API_URL` to that reachable base URL. If CorpusLab is only available on a private local network, use a self-hosted runner and set the variable to the address reachable from that runner.
+
+## What The Example Evaluates
+
+The example does not check out, execute, deploy, or otherwise evaluate the pull request's modified RAG application code. It requests an evaluation from the existing CorpusLab instance at `CORPUSLAB_API_URL`, using the configured Eval Lab dataset and that instance's current corpus, index, and retrieval configuration.
+
+Branch, commit SHA, base/head refs, and configuration label are recorded as run metadata. The configuration label groups comparable runs; it does not apply a retrieval configuration by itself. If multiple pull requests target the same unchanged CorpusLab instance and dataset configuration, they may evaluate the same underlying system state.
+
+To evaluate candidate-specific behavior, connect the workflow to a candidate-specific CorpusLab deployment, corpus/index, or retrieval configuration, then set `CORPUSLAB_API_URL`, `CORPUSLAB_DATASET_ID`, and `CORPUSLAB_CONFIG_LABEL` to identify that target.
 
 ## Run Request
 
@@ -62,14 +72,17 @@ The response includes:
 - linked Eval Lab experiment
 - gate status
 - branch and commit metadata
-- regression summary versus the latest matching dataset/config run
+- complete Eval Lab v2 regression details, including newly failed, recovered, changed-top-evidence, and changed-failure-label cases, when the latest dataset/config run has matching top-k and modes; otherwise a no-baseline comparison
 - report JSON
+
+The example writes only gate status, aggregate recall, failed-case count, opaque run/experiment IDs, and the configured label to logs and the Actions job summary. It deliberately never prints the response body because it may contain case queries and report content.
 
 ## Workbench Views
 
 CI run history appears in:
 
-- `/app/evals` under CI Gates.
+- `/app/evals?view=ci-runs` under CI Runs.
+- `/app/evals/ci-runs/:runId` as a focused detail view with revision metadata, thresholds, failed metrics, newly failing and recovered cases, failure labels, per-mode metrics, and report creation.
 - Mission Control as latest gate status and recommended action.
 - `/app/reports` as failed-gate report candidates with native CI audit-report creation.
 

@@ -1,14 +1,16 @@
 use rag_debugger_core::{
-    EmbeddingModelInfo, Organization, OrganizationId, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalComparison, RetrievalEvalConfigSnapshot, RetrievalEvalDataset,
-    RetrievalEvalDatasetId, RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalGate,
-    RetrievalEvalGateStatus, RetrievalEvalRun, RetrievalEvalRunId, RetrievalMode, RetrievalWeights,
-    User, UserId, Workspace, WorkspaceId, WorkspaceRole,
+    ApiKey, ApiKeyId, ApiKeyRecord, ApiKeyScope, CiEvalReport, CiEvalRun, CiEvalRunId,
+    CiEvalRunStatus, EmbeddingModelInfo, Organization, OrganizationId, RetrievalEvalCase,
+    RetrievalEvalCaseId, RetrievalEvalComparison, RetrievalEvalConfigSnapshot,
+    RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalExperiment,
+    RetrievalEvalExperimentId, RetrievalEvalGate, RetrievalEvalGateStatus, RetrievalEvalRun,
+    RetrievalEvalRunId, RetrievalMode, RetrievalWeights, User, UserId, Workspace, WorkspaceId,
+    WorkspaceRole,
 };
 use rag_debugger_storage::{
     memory::MemoryStore,
     postgres::PostgresStore,
-    repository::{AuthRepository, EvalRepository, SubmittedExpectedEvidence},
+    repository::{AuthRepository, CiEvalRepository, EvalRepository, SubmittedExpectedEvidence},
     StorageError,
 };
 use time::OffsetDateTime;
@@ -31,7 +33,7 @@ async fn postgres_eval_repository_enforces_workspace_ownership() {
 
 async fn run_eval_workspace_contract<R>(repository: &R)
 where
-    R: AuthRepository + EvalRepository,
+    R: AuthRepository + CiEvalRepository + EvalRepository,
 {
     let workspace_a = create_workspace(repository, "alpha").await;
     let workspace_b = create_workspace(repository, "beta").await;
@@ -113,6 +115,68 @@ where
         .expect("list alpha experiments")
         .iter()
         .all(|experiment| experiment.id != experiment_b.id));
+
+    let ci_run_b = ci_run(workspace_b, &dataset_b, &experiment_b);
+    repository
+        .save_ci_eval_run(ci_run_b.clone())
+        .await
+        .expect("save beta CI run");
+    assert!(matches!(
+        repository.get_ci_eval_run(workspace_a, ci_run_b.id).await,
+        Err(StorageError::NotFound)
+    ));
+    assert!(repository
+        .list_ci_eval_runs(workspace_a)
+        .await
+        .expect("list alpha CI runs")
+        .is_empty());
+    assert!(repository
+        .latest_ci_eval_run_for_dataset(workspace_a, dataset_b.id, &ci_run_b.config_label)
+        .await
+        .expect("read alpha CI baseline")
+        .is_none());
+    assert_eq!(
+        repository
+            .get_ci_eval_run(workspace_b, ci_run_b.id)
+            .await
+            .expect("read beta CI run")
+            .id,
+        ci_run_b.id
+    );
+    assert!(matches!(
+        repository
+            .save_ci_eval_run(CiEvalRun {
+                id: CiEvalRunId(Uuid::now_v7()),
+                workspace_id: workspace_a,
+                ..ci_run_b.clone()
+            })
+            .await,
+        Err(StorageError::NotFound)
+    ));
+
+    let beta_key = api_key_record(workspace_b);
+    repository
+        .create_api_key(beta_key.clone())
+        .await
+        .expect("create beta API key");
+    assert!(matches!(
+        repository
+            .revoke_api_key(workspace_a, beta_key.api_key.id)
+            .await,
+        Err(StorageError::NotFound)
+    ));
+    assert!(repository
+        .find_api_key(&beta_key.secret_hash)
+        .await
+        .expect("read beta API key")
+        .expect("beta API key exists")
+        .api_key
+        .revoked_at
+        .is_none());
+    repository
+        .revoke_api_key(workspace_b, beta_key.api_key.id)
+        .await
+        .expect("revoke owned beta API key");
 
     let run_b = RetrievalEvalRun {
         id: RetrievalEvalRunId(Uuid::now_v7()),
@@ -248,5 +312,53 @@ fn experiment(dataset_id: RetrievalEvalDatasetId, dataset_name: &str) -> Retriev
         },
         failures: Vec::new(),
         created_at: OffsetDateTime::now_utc(),
+    }
+}
+
+fn ci_run(
+    workspace_id: WorkspaceId,
+    dataset: &RetrievalEvalDataset,
+    experiment: &RetrievalEvalExperiment,
+) -> CiEvalRun {
+    CiEvalRun {
+        id: CiEvalRunId(Uuid::now_v7()),
+        workspace_id,
+        dataset_id: dataset.id,
+        dataset_name: dataset.name.clone(),
+        experiment_id: experiment.id,
+        status: CiEvalRunStatus::Failed,
+        gate_status: RetrievalEvalGateStatus::Failed,
+        branch: Some("feature/workspace-contract".to_owned()),
+        commit_sha: Some("0123456789abcdef".to_owned()),
+        base_ref: Some("main".to_owned()),
+        head_ref: Some("feature/workspace-contract".to_owned()),
+        config_label: "workspace-contract".to_owned(),
+        regression: None,
+        eval_regression: None,
+        report: CiEvalReport {
+            title: "CI workspace contract".to_owned(),
+            summary: "The gate failed.".to_owned(),
+            gate: experiment.gate.clone(),
+            experiment: experiment.clone(),
+            failed_cases: experiment.failures.clone(),
+        },
+        created_at: OffsetDateTime::now_utc(),
+    }
+}
+
+fn api_key_record(workspace_id: WorkspaceId) -> ApiKeyRecord {
+    let id = ApiKeyId(Uuid::now_v7());
+    ApiKeyRecord {
+        api_key: ApiKey {
+            id,
+            workspace_id,
+            name: "Workspace contract key".to_owned(),
+            prefix: format!("clab_{}", &id.0.simple().to_string()[..8]),
+            scopes: vec![ApiKeyScope::CiEvalRuns],
+            created_at: OffsetDateTime::now_utc(),
+            last_used_at: None,
+            revoked_at: None,
+        },
+        secret_hash: format!("workspace-contract-secret-{}", id.0),
     }
 }

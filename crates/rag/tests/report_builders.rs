@@ -129,11 +129,35 @@ fn ci_report_preserves_regression_context() {
 
     assert_eq!(report.subject, format!("CI eval run {}", run.id.0));
     assert_eq!(report.context["ci_branch"], "feature/indexing");
+    assert_eq!(report.context["ci_base_ref"], "main");
+    assert_eq!(report.context["ci_head_ref"], "feature/indexing");
     assert_eq!(report.context["ci_newly_failed_case_count"], "1");
+    assert_eq!(report.context["regression_classification"], "regressed");
+    assert_eq!(report.context["recovered_cases"], "1");
+    assert!(report
+        .findings
+        .iter()
+        .any(|finding| finding.code.starts_with("newly_failed_case:")));
     assert!(report
         .recommendations
         .iter()
         .any(|recommendation| recommendation.code == "review_ci_regression"));
+    let serialized = serde_json::to_string(&report).expect("serialize CI report");
+    assert!(!serialized.contains("Private newly failed question"));
+    assert!(!serialized.contains("Private recovered question"));
+}
+
+#[test]
+fn legacy_ci_runs_without_eval_lab_v2_regression_remain_readable() {
+    let mut value = serde_json::to_value(ci_run_fixture()).expect("serialize CI run");
+    value
+        .as_object_mut()
+        .expect("CI run object")
+        .remove("eval_regression");
+
+    let run: CiEvalRun = serde_json::from_value(value).expect("read legacy CI run");
+
+    assert_eq!(run.eval_regression, None);
 }
 
 fn context(privacy_mode: DebugReportPrivacyMode) -> DebugReportBuildContext {
@@ -376,6 +400,51 @@ fn ci_run_fixture() -> CiEvalRun {
             "latency_delta_ms": 5,
             "newly_failed_case_count": 1,
             "summary": "One case failed after the indexing change."
+        },
+        "eval_regression": {
+            "current_experiment_id": experiment.id,
+            "baseline_experiment_id": "00000000-0000-0000-0000-000000000052",
+            "classification": "regressed",
+            "current_gate_status": "failed",
+            "baseline_gate_status": "passed",
+            "metric_deltas": [{
+                "metric": "recall_at_k",
+                "current": 0.6,
+                "baseline": 0.9,
+                "delta": -0.3,
+                "classification": "regressed"
+            }],
+            "newly_failed_cases": [{
+                "case_id": "00000000-0000-0000-0000-000000000042",
+                "retrieval_mode": "hybrid",
+                "query": "Private newly failed question",
+                "classification": "regressed",
+                "current_passed": false,
+                "baseline_passed": true,
+                "current_top_hit_rank": null,
+                "baseline_top_hit_rank": 1,
+                "current_retrieved_chunk_ids": [],
+                "baseline_retrieved_chunk_ids": [],
+                "current_failure_labels": ["expected_evidence_missing"],
+                "baseline_failure_labels": []
+            }],
+            "recovered_cases": [{
+                "case_id": "00000000-0000-0000-0000-000000000043",
+                "retrieval_mode": "lexical",
+                "query": "Private recovered question",
+                "classification": "improved",
+                "current_passed": true,
+                "baseline_passed": false,
+                "current_top_hit_rank": 1,
+                "baseline_top_hit_rank": null,
+                "current_retrieved_chunk_ids": [],
+                "baseline_retrieved_chunk_ids": [],
+                "current_failure_labels": [],
+                "baseline_failure_labels": ["expected_evidence_missing"]
+            }],
+            "changed_top_evidence_cases": [],
+            "changed_failure_label_cases": [],
+            "summary": "Current experiment regressed."
         },
         "report": {
             "title": "CI gate failed",

@@ -102,7 +102,8 @@ Admin:   Settings
 ```
 
 Existing `/app` URLs remain stable. CI Runs is a focused frontend view at
-`/app/evals?view=ci-runs`; `/app/evals` remains the default Eval Lab view.
+`/app/evals?view=ci-runs`; `/app/evals/ci-runs/:runId` owns persisted gate
+diagnostics and report creation; `/app/evals` remains the default Eval Lab view.
 Detail routes activate their parent area and expose linked breadcrumbs without
 requiring extra API calls.
 

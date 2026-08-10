@@ -274,12 +274,18 @@ impl PostgresStore {
         Ok(())
     }
 
-    pub(super) async fn revoke_api_key(&self, api_key_id: ApiKeyId) -> Result<(), StorageError> {
-        let result = sqlx::query("UPDATE api_keys SET revoked_at = $2 WHERE id = $1")
-            .bind(api_key_id.0)
-            .bind(OffsetDateTime::now_utc())
-            .execute(&self.pool)
-            .await?;
+    pub(super) async fn revoke_api_key(
+        &self,
+        workspace_id: WorkspaceId,
+        api_key_id: ApiKeyId,
+    ) -> Result<(), StorageError> {
+        let result =
+            sqlx::query("UPDATE api_keys SET revoked_at = $3 WHERE id = $1 AND workspace_id = $2")
+                .bind(api_key_id.0)
+                .bind(workspace_id.0)
+                .bind(OffsetDateTime::now_utc())
+                .execute(&self.pool)
+                .await?;
         if result.rows_affected() == 0 {
             return Err(StorageError::NotFound);
         }

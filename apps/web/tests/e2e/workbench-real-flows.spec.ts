@@ -137,6 +137,102 @@ test("completes the real guided workflow against the memory API", async ({
   await expect(page.getByText("Expected exact chunk").first()).toBeVisible();
   await expect(page.getByText("Expected document").first()).toBeVisible();
 
+  const apiUrl = "http://127.0.0.1:18080/api/v1";
+  const sourceDatasetId = page.url().split("/").at(-1);
+  expect(sourceDatasetId).toBeTruthy();
+  const sourceDatasetResponse = await page.request.get(
+    `${apiUrl}/eval-lab/datasets/${sourceDatasetId}`,
+  );
+  expect(sourceDatasetResponse.ok()).toBeTruthy();
+  const sourceDataset = (await sourceDatasetResponse.json()) as {
+    cases: Array<{ expected_chunk_ids: string[] }>;
+  };
+  const expectedChunkId = sourceDataset.cases.at(-1)?.expected_chunk_ids[0];
+  expect(expectedChunkId).toBeTruthy();
+
+  const ciDatasetName = `CI release gate ${crypto.randomUUID()}`;
+  const createDatasetResponse = await page.request.post(
+    `${apiUrl}/eval-lab/datasets`,
+    { data: { name: ciDatasetName, description: "Playwright CI gate" } },
+  );
+  expect(createDatasetResponse.ok()).toBeTruthy();
+  const ciDataset = (await createDatasetResponse.json()) as { id: string };
+  const createCaseResponse = await page.request.post(
+    `${apiUrl}/eval-lab/datasets/${ciDataset.id}/cases`,
+    {
+      data: {
+        name: "Missing release evidence",
+        query: "qxzv blorp",
+        top_k: 5,
+        expected_chunk_ids: [expectedChunkId],
+      },
+    },
+  );
+  expect(createCaseResponse.ok()).toBeTruthy();
+
+  await page.goto("/app/settings?tab=api-keys");
+  const keyName = `Playwright CI ${crypto.randomUUID()}`;
+  await page.getByLabel("Key name").fill(keyName);
+  await page.getByRole("button", { name: "Create key" }).click();
+  const secretRegion = page.getByLabel("Created API key secret");
+  await expect(secretRegion).toContainText("shown once");
+  await expect(page.getByText("CORPUSLAB_API_KEY")).toBeVisible();
+  const apiKey = await secretRegion.locator("code").textContent();
+  expect(apiKey).toBeTruthy();
+
+  const ciResponse = await page.request.post(`${apiUrl}/eval-lab/ci/runs`, {
+    data: {
+      dataset_id: ciDataset.id,
+      name: "Playwright release gate",
+      modes: ["lexical"],
+      branch: "feature/ci-polish",
+      commit_sha: "abc123def456",
+      base_ref: "main",
+      head_ref: "feature/ci-polish",
+      config_label: "playwright",
+      fail_on_gate: true,
+    },
+    headers: { Authorization: `Bearer ${apiKey}` },
+  });
+  expect(ciResponse.status()).toBe(422);
+  const ciRun = (await ciResponse.json()) as { id: string };
+
+  await page.goto("/app/evals?view=ci-runs");
+  await page
+    .getByRole("link", { name: `Open CI run for ${ciDatasetName}` })
+    .click();
+  await expect(page).toHaveURL(`/app/evals/ci-runs/${ciRun.id}`);
+  await expect(
+    page.getByRole("heading", { name: "Gate failed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Run metadata" }),
+  ).toBeVisible();
+  await expect(page.getByText("feature/ci-polish").first()).toBeVisible();
+  await expect(page.getByText("abc123def456")).toBeVisible();
+  await expect(page.getByText("playwright").first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Failed metrics" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Failed cases" }),
+  ).toBeVisible();
+  await expect(page.getByText("qxzv blorp").first()).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Metrics summary" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  await page.getByRole("button", { name: "Create audit report" }).click();
+  await expect(page.getByLabel("Privacy")).toHaveValue("metadata_only");
+  await page.getByRole("button", { name: "Create report" }).click();
+  await expect(page).toHaveURL(/\/app\/reports\/[0-9a-f-]+$/);
+  await expect(page.getByRole("heading", { name: /audit/i })).toBeVisible();
+
+  await page.goto(`/app/evals/datasets/${sourceDatasetId}`);
+
   for (const viewport of [
     { width: 1440, height: 900 },
     { width: 1024, height: 900 },
