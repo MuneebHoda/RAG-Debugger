@@ -9,7 +9,7 @@ RAG systems regress quietly. A chunking change, embedding refresh, scoring tweak
 - Run expected-evidence questions on every branch.
 - Compare lexical, vector, and hybrid behavior.
 - Record recall, precision, MRR, citation coverage, and latency.
-- Detect newly failing cases against the latest run for the same dataset/config label.
+- Detect newly failing cases when the latest run for the same dataset/config label also has the same top-k and retrieval-mode set; otherwise record that no comparable baseline exists.
 - Preserve an export-ready report for engineering review.
 
 ## Setup
@@ -72,7 +72,7 @@ The response includes:
 - linked Eval Lab experiment
 - gate status
 - branch and commit metadata
-- complete Eval Lab v2 regression details, including newly failed and recovered cases, versus the latest matching dataset/config run
+- complete Eval Lab v2 regression details, including newly failed, recovered, changed-top-evidence, and changed-failure-label cases, when the latest dataset/config run has matching top-k and modes; otherwise a no-baseline comparison
 - report JSON
 
 The example writes only gate status, aggregate recall, failed-case count, opaque run/experiment IDs, and the configured label to logs and the Actions job summary. It deliberately never prints the response body because it may contain case queries and report content.

@@ -145,7 +145,7 @@ export function CiRunDetailPage() {
       {failed ? (
         <WorkbenchPanel
           className={styles.panel}
-          description="Threshold failures and metrics that regressed from the previous matching CI configuration."
+          description="Threshold failures and metrics that regressed from the previous compatible CI configuration."
           title="Failed metrics"
         >
           <ul className={styles.list}>
@@ -165,7 +165,7 @@ export function CiRunDetailPage() {
 
       <WorkbenchPanel
         className={styles.panel}
-        description="Eval Lab v2 compares this run with the previous CI run for the same dataset and config label."
+        description="Eval Lab v2 compares this run only when the previous dataset/config run has the same top-k and mode set."
         title="Regression summary"
       >
         {regression ? (
@@ -194,6 +194,16 @@ export function CiRunDetailPage() {
                 cases={regression.recovered_cases}
                 empty="No recovered cases."
                 title="Recovered cases"
+              />
+              <RegressionCases
+                cases={regression.changed_top_evidence_cases}
+                empty="No changed top evidence."
+                title="Changed top evidence"
+              />
+              <RegressionCases
+                cases={regression.changed_failure_label_cases}
+                empty="No changed failure labels."
+                title="Changed failure labels"
               />
             </div>
           </>

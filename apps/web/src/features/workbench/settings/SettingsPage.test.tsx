@@ -137,6 +137,26 @@ describe("SettingsPage", () => {
       expect(writeText).toHaveBeenCalledWith("clab_one_time_secret"),
     );
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The API key secret could not be copied. Copy it manually.",
+    );
+  });
+
+  it("tells the user to copy manually when clipboard access is unavailable", async () => {
+    vi.stubGlobal("navigator", { ...navigator, clipboard: undefined });
+    vi.mocked(createApiKey).mockResolvedValue({
+      api_key: apiKey(),
+      secret: "clab_one_time_secret",
+    });
+    renderSettings("/app/settings?tab=api-keys");
+
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+    await screen.findByLabelText("Created API key secret");
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Clipboard access is unavailable. Copy the secret manually.",
+    );
   });
 
   it("shows API-key creation errors without leaving Settings", async () => {

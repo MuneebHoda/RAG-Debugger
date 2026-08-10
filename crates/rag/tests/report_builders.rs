@@ -129,6 +129,8 @@ fn ci_report_preserves_regression_context() {
 
     assert_eq!(report.subject, format!("CI eval run {}", run.id.0));
     assert_eq!(report.context["ci_branch"], "feature/indexing");
+    assert_eq!(report.context["ci_base_ref"], "main");
+    assert_eq!(report.context["ci_head_ref"], "feature/indexing");
     assert_eq!(report.context["ci_newly_failed_case_count"], "1");
     assert_eq!(report.context["regression_classification"], "regressed");
     assert_eq!(report.context["recovered_cases"], "1");

@@ -60,7 +60,8 @@ pub async fn run_ci_eval(
         .unwrap_or_else(|| "default".to_owned());
     let baseline = repository
         .latest_ci_eval_run_for_dataset(workspace_id, dataset.id, &config_label)
-        .await?;
+        .await?
+        .filter(|run| compatible_ci_baseline(run, top_k, &modes));
     let experiment = run_experiment_for_dataset(
         &state,
         workspace_id,
@@ -387,6 +388,11 @@ fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
     });
     normalized.dedup();
     normalized
+}
+
+fn compatible_ci_baseline(run: &CiEvalRun, top_k: u32, modes: &[RetrievalMode]) -> bool {
+    run.report.experiment.top_k == top_k
+        && normalized_modes(run.report.experiment.modes.clone()) == modes
 }
 
 fn validate_ci_request(mut request: RunCiEvalRequest) -> Result<RunCiEvalRequest, ApiError> {

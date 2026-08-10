@@ -217,6 +217,7 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     assert_eq!(ci_run["gate_status"], "passed");
     assert_eq!(ci_run["branch"], "feature/evals");
     assert!(ci_run["eval_regression"]["baseline_experiment_id"].is_null());
+    assert_eq!(ci_run["eval_regression"]["classification"], "unchanged");
 
     request_json_with_cookie(
         &app,
@@ -298,6 +299,47 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     )
     .await;
     assert_eq!(nonblocking_failure["status"], "failed");
+
+    let incompatible_modes_run = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({
+            "dataset_id": dataset_id,
+            "modes": ["hybrid"],
+            "config_label": "default",
+            "fail_on_gate": false
+        }),
+        secret,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert!(incompatible_modes_run["eval_regression"]["baseline_experiment_id"].is_null());
+    assert_eq!(
+        incompatible_modes_run["eval_regression"]["classification"],
+        "unchanged"
+    );
+    assert!(incompatible_modes_run["regression"].is_null());
+
+    let incompatible_run = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({
+            "dataset_id": dataset_id,
+            "modes": ["lexical"],
+            "top_k": 1,
+            "config_label": "default",
+            "fail_on_gate": false
+        }),
+        secret,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert!(incompatible_run["eval_regression"]["baseline_experiment_id"].is_null());
+    assert_eq!(
+        incompatible_run["eval_regression"]["classification"],
+        "unchanged"
+    );
+    assert!(incompatible_run["regression"].is_null());
 
     let keys = get_json_with_cookie(&app, "/api/v1/api-keys", &cookie, StatusCode::OK).await;
     assert_eq!(keys[0]["scopes"][0], "ci_eval_runs");

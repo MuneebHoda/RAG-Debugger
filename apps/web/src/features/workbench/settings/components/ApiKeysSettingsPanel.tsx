@@ -16,12 +16,14 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
   const [name, setName] = useState("GitHub Actions");
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const createMutation = useMutation({
     mutationFn: () =>
       createApiKey({ name: name.trim(), scopes: ["ci_eval_runs"] }),
     onSuccess: (created) => {
       setCreatedSecret(created.secret);
       setCopied(false);
+      setCopyError(null);
       void queryClient.invalidateQueries({ queryKey: ["api-keys"] });
     },
   });
@@ -62,10 +64,23 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
           <button
             type="button"
             onClick={() => {
+              setCopyError(null);
+              if (typeof navigator.clipboard?.writeText !== "function") {
+                setCopied(false);
+                setCopyError(
+                  "Clipboard access is unavailable. Copy the secret manually.",
+                );
+                return;
+              }
               void navigator.clipboard
                 .writeText(createdSecret)
                 .then(() => setCopied(true))
-                .catch(() => setCopied(false));
+                .catch(() => {
+                  setCopied(false);
+                  setCopyError(
+                    "The API key secret could not be copied. Copy it manually.",
+                  );
+                });
             }}
           >
             {copied ? (
@@ -75,6 +90,11 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
             )}
             {copied ? "Copied" : "Copy"}
           </button>
+          {copyError ? (
+            <p className={styles.error} role="alert">
+              {copyError}
+            </p>
+          ) : null}
         </div>
       ) : null}
 

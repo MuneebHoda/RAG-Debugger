@@ -243,6 +243,18 @@ describe("guided Eval Lab workflow", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("No recovered cases.")).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: "Changed top evidence" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Changed failure labels" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Which evidence changed rank?"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Which failure label changed?"),
+    ).toBeInTheDocument();
+    expect(
       screen.getByRole("heading", { name: "Failed cases" }),
     ).toBeInTheDocument();
     expect(
@@ -1120,7 +1132,7 @@ function regression(): RetrievalEvalRegressionComparison {
       {
         case_id: caseId,
         retrieval_mode: "hybrid",
-        query: "Which evidence explains GPU indexing workers?",
+        query: "Which evidence changed rank?",
         classification: "regressed",
         current_passed: false,
         baseline_passed: true,
@@ -1136,7 +1148,7 @@ function regression(): RetrievalEvalRegressionComparison {
       {
         case_id: caseId,
         retrieval_mode: "hybrid",
-        query: "Which evidence explains GPU indexing workers?",
+        query: "Which failure label changed?",
         classification: "regressed",
         current_passed: false,
         baseline_passed: true,
