@@ -13,6 +13,7 @@ CorpusLab turns retrieval runs into inspectable evidence, deterministic failure 
 
 > [!IMPORTANT]
 > CorpusLab is public pre-release software. `main` receives best-effort security support, but APIs and compatibility may evolve before a stable release.
+> The repository does not currently include a software license.
 
 ## Contents
 
@@ -170,6 +171,7 @@ Before using real private data, review [Privacy and Security](docs/privacy-secur
 - Rust stable via `rustup`, including `rustfmt` and Clippy
 - Node.js 24 or newer
 - Docker Desktop or another Docker daemon
+- OpenSSL for generating the local bootstrap password
 - [`just`](https://github.com/casey/just)
 
 Postgres runs through Docker for the standard local workflow. The SQLx CLI is needed only for manual migration authoring and commands; see the [Development Guide](docs/development.md).
