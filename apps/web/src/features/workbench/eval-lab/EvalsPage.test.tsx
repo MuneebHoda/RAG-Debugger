@@ -9,7 +9,10 @@ import {
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { RetrievalEvalCase } from "../../../lib/api/evalLab";
+import type {
+  RetrievalEvalCase,
+  RetrievalEvalRegressionComparison,
+} from "../../../lib/api/evalLab";
 import { CiRunDetailPage } from "./CiRunDetailPage";
 import { DatasetDetailPage } from "./DatasetDetailPage";
 import { ExperimentDetailPage } from "./ExperimentDetailPage";
@@ -34,11 +37,24 @@ let regressionShouldFail = false;
 let ciRunShouldFail = false;
 let experimentResponse: ReturnType<typeof experiment> | null = null;
 type CiRunFixtureBase = ReturnType<typeof ciRun>;
-type CiRunFixture = Omit<CiRunFixtureBase, "regression" | "eval_regression"> & {
+type CiRunFixture = Omit<
+  CiRunFixtureBase,
+  | "branch"
+  | "commit_sha"
+  | "base_ref"
+  | "head_ref"
+  | "regression"
+  | "eval_regression"
+> & {
+  branch: string | null;
+  commit_sha: string | null;
+  base_ref: string | null;
+  head_ref: string | null;
   regression: CiRunFixtureBase["regression"] | null;
-  eval_regression: CiRunFixtureBase["eval_regression"] | null;
+  eval_regression: RetrievalEvalRegressionComparison | null;
 };
 let ciRunResponse: CiRunFixture | null = null;
+let ciRunsResponse: CiRunFixture[] = [];
 
 describe("guided Eval Lab workflow", () => {
   beforeEach(() => {
@@ -47,6 +63,7 @@ describe("guided Eval Lab workflow", () => {
     ciRunShouldFail = false;
     experimentResponse = null;
     ciRunResponse = null;
+    ciRunsResponse = [];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
@@ -100,7 +117,7 @@ describe("guided Eval Lab workflow", () => {
             : responseJson(ciRunResponse ?? ciRun());
         }
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
-          return responseJson([]);
+          return responseJson(ciRunsResponse);
         }
         if (url.endsWith("/api/v1/eval-lab/evidence/query")) {
           return responseJson(evidenceLookup());
@@ -157,7 +174,41 @@ describe("guided Eval Lab workflow", () => {
     ).toHaveAttribute("href", "/app/settings?tab=api-keys");
   });
 
+  it("links saved CI runs to their accessible detail route", async () => {
+    ciRunsResponse = [ciRun()];
+    renderRoute(
+      "/app/evals?view=ci-runs",
+      <Route path="/app/evals" element={<EvalsPage />} />,
+    );
+
+    expect(
+      await screen.findByRole("link", {
+        name: "Open CI run for Production corpus gate",
+      }),
+    ).toHaveAttribute("href", `/app/evals/ci-runs/${ciRunId}`);
+    expect(screen.getByText(/feature\/ci-polish · abc123de/i)).toBeVisible();
+    expect(screen.getByText(/Config release-v2/i)).toBeVisible();
+  });
+
   it("shows a failed CI gate with metadata, regressions, cases, and report action", async () => {
+    const response = ciRun();
+    response.eval_regression.metric_deltas.push(
+      {
+        metric: "latency_p95_ms",
+        current: 45,
+        baseline: 20,
+        delta: 25,
+        classification: "regressed",
+      },
+      {
+        metric: "missing_embedding_failures",
+        current: 2,
+        baseline: 0,
+        delta: 2,
+        classification: "regressed",
+      },
+    );
+    ciRunResponse = response;
     renderRoute(
       `/app/evals/ci-runs/${ciRunId}`,
       <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
@@ -177,6 +228,12 @@ describe("guided Eval Lab workflow", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(/recall at k changed from 100% to 50%/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/latency p95 ms changed from 20 ms to 45 ms/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/missing embedding failures changed from 0 to 2/i),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Regression summary" }),
@@ -213,6 +270,26 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByRole("link", { name: "Back to CI Runs" }),
     ).toHaveAttribute("href", "/app/evals?view=ci-runs");
+    ciRunShouldFail = false;
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(
+      await screen.findByRole("heading", { name: "Production corpus gate" }),
+    ).toBeInTheDocument();
+  });
+
+  it("explains a failed metric-only gate without inventing case failures", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.report.failed_cases = [];
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(
+      await screen.findByText(
+        "No case-level failures were recorded; review the failed metrics above.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("keeps legacy aggregate regression summaries readable", async () => {
@@ -256,6 +333,64 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.queryByRole("button", { name: "Create audit report" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows a full no-baseline comparison and missing revision metadata", async () => {
+    ciRunResponse = ciRun();
+    ciRunResponse.status = "passed";
+    ciRunResponse.gate_status = "passed";
+    ciRunResponse.branch = null;
+    ciRunResponse.commit_sha = null;
+    ciRunResponse.base_ref = null;
+    ciRunResponse.head_ref = null;
+    ciRunResponse.regression = null;
+    ciRunResponse.eval_regression = noBaselineRegression();
+    ciRunResponse.report.gate = gate("passed");
+    ciRunResponse.report.failed_cases = [];
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(await screen.findByText("No baseline")).toBeInTheDocument();
+    expect(screen.getByText("No comparable baseline exists.")).toBeVisible();
+    expect(screen.getAllByText("Not provided")).toHaveLength(4);
+  });
+
+  it("shows recovered cases when a comparable CI run improved", async () => {
+    ciRunResponse = ciRun();
+    const comparison = regression();
+    comparison.classification = "improved";
+    comparison.current_gate_status = "passed";
+    comparison.baseline_gate_status = "failed";
+    comparison.newly_failed_cases = [];
+    comparison.recovered_cases = [
+      {
+        case_id: caseId,
+        retrieval_mode: "hybrid",
+        query: "Recovered release evidence",
+        classification: "improved",
+        current_passed: true,
+        baseline_passed: false,
+        current_top_hit_rank: 1,
+        baseline_top_hit_rank: null,
+        current_retrieved_chunk_ids: [chunkId],
+        baseline_retrieved_chunk_ids: [],
+        current_failure_labels: [],
+        baseline_failure_labels: ["expected_evidence_missing"],
+      },
+    ];
+    comparison.summary = "The release evidence recovered.";
+    ciRunResponse.eval_regression = comparison;
+    renderRoute(
+      `/app/evals/ci-runs/${ciRunId}`,
+      <Route path="/app/evals/ci-runs/:runId" element={<CiRunDetailPage />} />,
+    );
+
+    expect(await screen.findByText("improved")).toBeInTheDocument();
+    expect(screen.getByText("The release evidence recovered.")).toBeVisible();
+    expect(screen.getByText("Recovered release evidence")).toBeVisible();
+    expect(screen.getByText(/hybrid · recovered/i)).toBeVisible();
   });
 
   it("opens a focused dataset with cases and experiment controls", async () => {
@@ -941,7 +1076,7 @@ function trendSummary() {
   };
 }
 
-function regression() {
+function regression(): RetrievalEvalRegressionComparison {
   return {
     current_experiment_id: experimentId,
     baseline_experiment_id: baselineId,
@@ -1342,8 +1477,8 @@ function modeResult(
 function gate(status: "passed" | "failed") {
   return {
     status,
-    average_recall_at_k: 0.5,
-    weak_evidence_rate: 1,
+    average_recall_at_k: status === "passed" ? 1 : 0.5,
+    weak_evidence_rate: status === "passed" ? 0 : 1,
     critical_failure_count: status === "failed" ? 1 : 0,
     recall_threshold: 0.8,
     weak_evidence_limit: 0.2,
@@ -1354,7 +1489,7 @@ function gate(status: "passed" | "failed") {
   };
 }
 
-function noBaselineRegression() {
+function noBaselineRegression(): RetrievalEvalRegressionComparison {
   return {
     current_experiment_id: firstExperimentId,
     baseline_experiment_id: null,

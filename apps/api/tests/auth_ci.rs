@@ -288,6 +288,7 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
         "/api/v1/eval-lab/ci/runs",
         json!({
             "dataset_id": dataset_id,
+            "name": "   ",
             "modes": ["lexical"],
             "config_label": "default",
             "fail_on_gate": false
