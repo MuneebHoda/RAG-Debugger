@@ -5,6 +5,7 @@ pub mod diagnosis;
 pub mod embedding;
 pub mod evals;
 pub mod extraction;
+pub mod imported_trace;
 pub mod ingestion;
 pub mod intelligence;
 pub mod reports;

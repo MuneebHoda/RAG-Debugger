@@ -167,3 +167,7 @@ Generate and visually check the handbook PDF when architecture or API documentat
 ```sh
 just docs-pdf
 ```
+
+## Trace Ingestion
+
+Trace ingestion has pure privacy/validation and OTLP mapper tests, Axum native/protobuf integration tests, and a shared memory/PostgreSQL repository contract. Run the hermetic protobuf path with `just trace-ingestion-smoke`; `just ci-check` runs the PostgreSQL variant after migrations.

@@ -96,6 +96,7 @@ The current implementation is local-first: ingestion, embeddings, retrieval, tra
 - Reopen traces without losing the evidence and ranking context that produced the diagnosis.
 - Rerun the same trace with lexical, vector, or hybrid retrieval and a different `top_k` value.
 - Compare primary issues, secondary candidate warnings, evidence coverage, and ranked results across reruns.
+- Import external RAG traces through versioned native JSON or authenticated OTLP/HTTP protobuf, with privacy filtering before storage. See [Local trace ingestion](docs/trace-ingestion.md).
 
 ### Eval Lab and Release Gates
 

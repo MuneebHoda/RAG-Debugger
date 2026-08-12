@@ -58,6 +58,12 @@ export function TraceDetailPage() {
         actions={
           <CreateAuditReportAction
             compact
+            allowedPrivacyModes={allowedReportModes(trace)}
+            disabledReason={
+              trace.ingestion?.privacy_mode === "full_local_only"
+                ? "Full-local imported traces cannot be reported or exported."
+                : undefined
+            }
             source={{ sourceType: "trace", sourceId: trace.id }}
           />
         }
@@ -74,15 +80,17 @@ export function TraceDetailPage() {
               {trace.evidence_strength ?? "weak"} evidence
             </WorkbenchStatusPill>
             <WorkbenchStatusPill tone="info">
-              {trace.retrieval?.run.retrieval_mode ?? "unknown"}
+              {trace.ingestion?.source.replaceAll("_", "/") ??
+                trace.retrieval?.run.retrieval_mode ??
+                "unknown"}
             </WorkbenchStatusPill>
             <WorkbenchStatusPill tone="neutral">
               {trace.retrieval?.run.latency_ms ?? 0} ms
             </WorkbenchStatusPill>
           </>
         }
-        section="Saved retrieval run"
-        title={trace.input}
+        section={trace.ingestion ? "Imported RAG trace" : "Saved retrieval run"}
+        title={trace.input || "Query withheld by privacy policy"}
         titleId="run-title"
       />
 
@@ -114,6 +122,17 @@ export function TraceDetailPage() {
       {activeTab === "compare" ? <TraceRerunPanel trace={trace} /> : null}
     </section>
   );
+}
+
+function allowedReportModes(trace: import("../../../lib/api/traces").Trace) {
+  if (!trace.ingestion) return undefined;
+  if (trace.ingestion.privacy_mode === "metadata_only") {
+    return ["metadata_only"] as const;
+  }
+  if (trace.ingestion.privacy_mode === "snippets_allowed") {
+    return ["metadata_only", "snippets_allowed"] as const;
+  }
+  return [] as const;
 }
 
 function evidenceTone(

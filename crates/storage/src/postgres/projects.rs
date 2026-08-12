@@ -58,4 +58,22 @@ impl PostgresStore {
 
         Ok(project)
     }
+
+    pub(super) async fn get_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project_id: ProjectId,
+    ) -> Result<Project, StorageError> {
+        let row = sqlx::query(
+            "SELECT id, name, privacy_mode, created_at, updated_at
+             FROM projects
+             WHERE workspace_id = $1 AND id = $2",
+        )
+        .bind(workspace_id.0)
+        .bind(project_id.0)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or(StorageError::NotFound)?;
+        project_from_row(&row)
+    }
 }

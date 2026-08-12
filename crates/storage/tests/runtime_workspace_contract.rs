@@ -367,5 +367,6 @@ fn trace(project_id: ProjectId, response: &RetrievalQueryResponse) -> Trace {
         retrieval: Some(response.clone()),
         reruns: Vec::new(),
         diagnosis: None,
+        ingestion: None,
     }
 }

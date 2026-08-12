@@ -9,9 +9,9 @@ use rag_debugger_core::{
     ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
     ChunkId, CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
     DocumentSummary, EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo,
-    EmbeddingStatus, IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals,
-    Organization, PrivacyMode, Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
+    EmbeddingStatus, ImportedTraceUpsertResult, IngestionRun, IngestionRunId, IngestionRunStatus,
+    IngestionTotals, Organization, PrivacyMode, Project, ProjectId, RetrievalEvalCase,
+    RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
     RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
     RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
     TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
@@ -106,6 +106,22 @@ impl ProjectRepository for MemoryStore {
         inner.projects.insert(project.id, project.clone());
         inner.project_workspaces.insert(project.id, workspace_id);
         Ok(project)
+    }
+
+    async fn get_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project_id: ProjectId,
+    ) -> Result<Project, StorageError> {
+        let inner = self.lock()?;
+        if inner.project_workspaces.get(&project_id) != Some(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
+        inner
+            .projects
+            .get(&project_id)
+            .cloned()
+            .ok_or(StorageError::NotFound)
     }
 }
 
@@ -362,6 +378,50 @@ impl TraceRepository for MemoryStore {
         inner.traces.insert(trace.id, trace.clone());
         inner.trace_workspaces.insert(trace.id, workspace_id);
         Ok(trace)
+    }
+
+    async fn upsert_imported_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<ImportedTraceUpsertResult, StorageError> {
+        let mut inner = self.lock()?;
+        if !workspace_owns_project(&inner, workspace_id, trace.project_id) {
+            return Err(StorageError::NotFound);
+        }
+        let identity = trace.ingestion.as_ref().ok_or_else(|| {
+            StorageError::InvalidData("imported trace metadata is required".to_owned())
+        })?;
+        let existing = inner
+            .traces
+            .values()
+            .find(|candidate| {
+                inner.trace_workspaces.get(&candidate.id) == Some(&workspace_id)
+                    && candidate.project_id == trace.project_id
+                    && candidate.ingestion.as_ref().is_some_and(|metadata| {
+                        metadata.source == identity.source
+                            && metadata.external_trace_id == identity.external_trace_id
+                    })
+            })
+            .cloned();
+        let (saved, disposition) = if let Some(existing) = existing {
+            let merged = rag_debugger_core::merge_imported_trace(&existing, trace)
+                .map_err(|message| StorageError::Conflict(message.to_owned()))?;
+            let disposition = if merged == existing {
+                rag_debugger_core::TraceIngestionDisposition::Unchanged
+            } else {
+                rag_debugger_core::TraceIngestionDisposition::Updated
+            };
+            (merged, disposition)
+        } else {
+            (trace, rag_debugger_core::TraceIngestionDisposition::Created)
+        };
+        inner.trace_workspaces.insert(saved.id, workspace_id);
+        inner.traces.insert(saved.id, saved.clone());
+        Ok(ImportedTraceUpsertResult {
+            trace: saved,
+            disposition,
+        })
     }
 
     async fn list_traces(
@@ -1596,8 +1656,17 @@ fn trace_summary_from_trace(trace: &Trace) -> TraceSummary {
             })
             .unwrap_or(rag_debugger_core::EvidenceStrength::Weak),
         failure_labels: trace.failure_labels.clone(),
-        span_count: trace.spans.len() as u32,
+        span_count: trace
+            .ingestion
+            .as_ref()
+            .map_or(trace.spans.len(), |metadata| metadata.spans.len()) as u32,
         rerun_count: trace.reruns.len() as u32,
         created_at: trace.started_at,
+        ingestion_source: trace.ingestion.as_ref().map(|value| value.source),
+        external_trace_id: trace
+            .ingestion
+            .as_ref()
+            .map(|value| value.external_trace_id.clone()),
+        mapping_status: trace.ingestion.as_ref().map(|value| value.mapping_status),
     }
 }

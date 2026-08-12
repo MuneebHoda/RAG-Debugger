@@ -169,3 +169,7 @@ Traces remain inside the configured CorpusLab storage boundary. A trace stores r
 - Store trace filters directly in `RetrievalQueryRun` so query-input spans can show exact source/document filters.
 - Add prompt and generation spans when generation is implemented.
 - Add API key and local collector upload paths for production traces.
+
+## Imported Traces
+
+`POST /api/v1/traces/ingest` accepts versioned native traces, and `POST /api/v1/otel/v1/traces` accepts authenticated OTLP/HTTP protobuf with a required `x-corpuslab-project-id` header that is verified inside the key's workspace. Imported detail shows source, mapping status, external identity, versions, privacy mode, limitations, permitted evidence, and an accessible parent/child hierarchy. Metadata-only traces explain why diagnosis and Eval conversion are limited. External traces cannot be rerun inside CorpusLab because the originating application owns that execution.

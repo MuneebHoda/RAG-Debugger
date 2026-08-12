@@ -131,7 +131,8 @@ impl PostgresStore {
     ) -> Result<Vec<TraceSummary>, StorageError> {
         let rows = sqlx::query(
             "SELECT id, query, retrieval_mode, latency_ms, evidence_strength,
-                    failure_labels, span_count, rerun_count, created_at
+                    failure_labels, span_count, rerun_count, created_at,
+                    ingestion_source, external_trace_id, ingestion_mapping_status
              FROM debug_traces
              WHERE workspace_id = $1
              ORDER BY created_at DESC
@@ -161,5 +162,124 @@ impl PostgresStore {
         .ok_or(StorageError::NotFound)?;
 
         trace_from_row(&row)
+    }
+
+    pub(super) async fn upsert_imported_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<ImportedTraceUpsertResult, StorageError> {
+        let identity = trace.ingestion.as_ref().ok_or_else(|| {
+            StorageError::InvalidData("imported trace metadata is required".to_owned())
+        })?;
+        let mut transaction = self.pool.begin().await?;
+        let owns_project: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1 AND workspace_id = $2)",
+        )
+        .bind(trace.project_id.0)
+        .bind(workspace_id.0)
+        .fetch_one(&mut *transaction)
+        .await?;
+        if !owns_project {
+            return Err(StorageError::NotFound);
+        }
+
+        let lock_key = format!(
+            "{}:{}:{}:{}",
+            workspace_id.0,
+            trace.project_id.0,
+            identity.source.as_str(),
+            identity.external_trace_id
+        );
+        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(lock_key)
+            .execute(&mut *transaction)
+            .await?;
+
+        let existing = sqlx::query(
+            "SELECT trace_json FROM debug_traces
+             WHERE workspace_id = $1 AND project_id = $2
+               AND ingestion_source = $3 AND external_trace_id = $4
+             FOR UPDATE",
+        )
+        .bind(workspace_id.0)
+        .bind(trace.project_id.0)
+        .bind(identity.source.as_str())
+        .bind(&identity.external_trace_id)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .map(|row| trace_from_row(&row))
+        .transpose()?;
+
+        let (saved, disposition) = if let Some(existing) = existing {
+            let merged = merge_imported_trace(&existing, trace)
+                .map_err(|message| StorageError::Conflict(message.to_owned()))?;
+            let disposition = if merged == existing {
+                TraceIngestionDisposition::Unchanged
+            } else {
+                TraceIngestionDisposition::Updated
+            };
+            (merged, disposition)
+        } else {
+            (trace, TraceIngestionDisposition::Created)
+        };
+        let metadata = saved.ingestion.as_ref().ok_or_else(|| {
+            StorageError::InvalidData("imported trace metadata is required".to_owned())
+        })?;
+        let retrieval_mode = metadata.retrieval_mode.unwrap_or_default();
+        let latency_ms = saved
+            .completed_at
+            .and_then(|end| {
+                (end - saved.started_at)
+                    .whole_milliseconds()
+                    .try_into()
+                    .ok()
+            })
+            .unwrap_or(0_i64);
+        let now = OffsetDateTime::now_utc();
+
+        sqlx::query(
+            "INSERT INTO debug_traces (
+                id, workspace_id, project_id, source_run_id, query, retrieval_mode, summary, status,
+                evidence_strength, failure_labels, span_count, rerun_count, latency_ms,
+                trace_json, created_at, updated_at, ingestion_source, external_trace_id,
+                ingestion_schema_version, ingestion_mapper_version, ingestion_mapping_status,
+                ingestion_privacy_mode
+             ) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+             ON CONFLICT (id) DO UPDATE SET
+                query=EXCLUDED.query, retrieval_mode=EXCLUDED.retrieval_mode,
+                summary=EXCLUDED.summary, status=EXCLUDED.status,
+                evidence_strength=EXCLUDED.evidence_strength, failure_labels=EXCLUDED.failure_labels,
+                span_count=EXCLUDED.span_count, latency_ms=EXCLUDED.latency_ms,
+                trace_json=EXCLUDED.trace_json, updated_at=EXCLUDED.updated_at,
+                ingestion_mapping_status=EXCLUDED.ingestion_mapping_status",
+        )
+        .bind(saved.id.0)
+        .bind(workspace_id.0)
+        .bind(saved.project_id.0)
+        .bind(&saved.input)
+        .bind(retrieval_mode_to_str(retrieval_mode))
+        .bind(&saved.summary)
+        .bind(trace_status_to_str(saved.status))
+        .bind(evidence_strength_to_str(saved.evidence_strength.unwrap_or(EvidenceStrength::Weak)))
+        .bind(failure_labels_to_text(&saved.failure_labels))
+        .bind(metadata.spans.len() as i32)
+        .bind(latency_ms)
+        .bind(Json(&saved))
+        .bind(saved.started_at)
+        .bind(now)
+        .bind(metadata.source.as_str())
+        .bind(&metadata.external_trace_id)
+        .bind(&metadata.schema_version)
+        .bind(&metadata.mapper_version)
+        .bind(metadata.mapping_status.as_str())
+        .bind(metadata.privacy_mode.as_str())
+        .execute(&mut *transaction)
+        .await?;
+        transaction.commit().await?;
+        Ok(ImportedTraceUpsertResult {
+            trace: saved,
+            disposition,
+        })
     }
 }

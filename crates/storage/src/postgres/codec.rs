@@ -426,6 +426,27 @@ pub(super) fn trace_summary_from_row(
         span_count: as_u32(row.try_get("span_count")?, "span_count")?,
         rerun_count: as_u32(row.try_get("rerun_count")?, "rerun_count")?,
         created_at: row.try_get("created_at")?,
+        ingestion_source: row
+            .try_get::<Option<String>, _>("ingestion_source")?
+            .map(|value| match value.as_str() {
+                "native" => Ok(TraceIngestionSource::Native),
+                "otlp_http" => Ok(TraceIngestionSource::OtlpHttp),
+                _ => Err(StorageError::InvalidData(
+                    "invalid trace ingestion source".to_owned(),
+                )),
+            })
+            .transpose()?,
+        external_trace_id: row.try_get("external_trace_id")?,
+        mapping_status: row
+            .try_get::<Option<String>, _>("ingestion_mapping_status")?
+            .map(|value| match value.as_str() {
+                "complete" => Ok(TraceMappingStatus::Complete),
+                "partially_mapped" => Ok(TraceMappingStatus::PartiallyMapped),
+                _ => Err(StorageError::InvalidData(
+                    "invalid trace mapping status".to_owned(),
+                )),
+            })
+            .transpose()?,
     })
 }
 
@@ -755,6 +776,7 @@ pub(super) fn api_key_scopes_to_text(scopes: &[ApiKeyScope]) -> Vec<String> {
         .iter()
         .map(|scope| match scope {
             ApiKeyScope::CiEvalRuns => "ci_eval_runs".to_owned(),
+            ApiKeyScope::TraceIngest => "trace_ingest".to_owned(),
         })
         .collect()
 }
@@ -766,6 +788,7 @@ pub(super) fn api_key_scopes_from_text(
         .into_iter()
         .map(|scope| match scope.as_str() {
             "ci_eval_runs" => Ok(ApiKeyScope::CiEvalRuns),
+            "trace_ingest" => Ok(ApiKeyScope::TraceIngest),
             other => Err(StorageError::InvalidData(format!(
                 "unknown api key scope: {other}"
             ))),
@@ -808,19 +831,7 @@ pub(super) fn evidence_strength_from_str(strength: &str) -> Result<EvidenceStren
 }
 
 pub(super) fn failure_label_to_str(label: &FailureLabel) -> &'static str {
-    match label {
-        FailureLabel::MissingDocument => "missing_document",
-        FailureLabel::BadChunking => "bad_chunking",
-        FailureLabel::BadEmbedding => "bad_embedding",
-        FailureLabel::BadRanking => "bad_ranking",
-        FailureLabel::BadPrompt => "bad_prompt",
-        FailureLabel::UnsupportedQuestion => "unsupported_question",
-        FailureLabel::HallucinatedAnswer => "hallucinated_answer",
-        FailureLabel::WeakEvidence => "weak_evidence",
-        FailureLabel::MissingEmbeddingIndex => "missing_embedding_index",
-        FailureLabel::DuplicateEvidence => "duplicate_evidence",
-        FailureLabel::HeadingOnlyEvidence => "heading_only_evidence",
-    }
+    label.as_str()
 }
 
 pub(super) fn failure_label_from_str(label: &str) -> Result<FailureLabel, StorageError> {

@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use rag_debugger_core::{
     DebugReport, DebugReportEvidenceRef, DebugReportEvidenceRole, DebugReportFinding,
-    DebugReportSeverity, DebugReportSource, DebuggerConfig, DiagnosisFailure, DiagnosisSeverity,
-    RetrievalConfig, Trace,
+    DebugReportPrivacyMode, DebugReportSeverity, DebugReportSource, DebuggerConfig,
+    DiagnosisFailure, DiagnosisSeverity, RetrievalConfig, Trace,
 };
 
 use crate::diagnosis::diagnose_retrieval;
@@ -25,6 +25,9 @@ pub fn build_trace_debug_report(
         &DebuggerConfig::default(),
     );
     let trace = &trace;
+    if trace.ingestion.is_some() {
+        return build_imported_trace_report(context, trace);
+    }
     let retrieval = trace
         .retrieval
         .as_ref()
@@ -38,6 +41,7 @@ pub fn build_trace_debug_report(
         .map(|(index, hit)| DebugReportEvidenceRef {
             label: format!("E{}", index + 1),
             role: DebugReportEvidenceRole::Retrieved,
+            external_evidence_id: None,
             source_id: Some(hit.source.id),
             document_id: Some(hit.document.id),
             chunk_id: Some(hit.chunk.id),
@@ -118,6 +122,129 @@ pub fn build_trace_debug_report(
         recommendations: debug_report_recommendations(&diagnosis.recommendations),
         evidence,
         diagnosis: Some(diagnosis),
+        created_at: context.created_at,
+    })
+}
+
+fn build_imported_trace_report(
+    context: DebugReportBuildContext,
+    trace: &Trace,
+) -> Result<DebugReport, ReportBuildError> {
+    let imported = trace
+        .ingestion
+        .as_ref()
+        .ok_or(ReportBuildError::InvalidSource(
+            "trace does not contain ingestion metadata",
+        ))?;
+    match imported.privacy_mode {
+        rag_debugger_core::TraceIngestionPrivacyMode::FullLocalOnly => {
+            return Err(ReportBuildError::InvalidSource(
+                "full-local imported traces cannot create reports",
+            ));
+        }
+        rag_debugger_core::TraceIngestionPrivacyMode::MetadataOnly
+            if context.privacy_mode != DebugReportPrivacyMode::MetadataOnly =>
+        {
+            return Err(ReportBuildError::InvalidSource(
+                "metadata-only imported traces cannot create content reports",
+            ));
+        }
+        rag_debugger_core::TraceIngestionPrivacyMode::SnippetsAllowed
+            if context.privacy_mode == DebugReportPrivacyMode::FullLocalOnly =>
+        {
+            return Err(ReportBuildError::InvalidSource(
+                "snippet imports cannot create full-local reports",
+            ));
+        }
+        _ => {}
+    }
+    let evidence = imported
+        .evidence
+        .iter()
+        .enumerate()
+        .map(|(index, item)| DebugReportEvidenceRef {
+            label: format!("E{}", index + 1),
+            role: DebugReportEvidenceRole::Retrieved,
+            external_evidence_id: Some(item.external_chunk_id.clone()),
+            source_id: None,
+            document_id: None,
+            chunk_id: None,
+            rank: Some(item.rank),
+            document_path: (context.privacy_mode == DebugReportPrivacyMode::SnippetsAllowed)
+                .then(|| item.document_label.clone())
+                .flatten(),
+            section_title: None,
+            checksum_prefix: None,
+            citation_label: item.citation_label.clone(),
+            snippet: (context.privacy_mode == DebugReportPrivacyMode::SnippetsAllowed)
+                .then(|| item.snippet.clone())
+                .flatten(),
+            evidence_strength: trace.evidence_strength,
+            chunk_quality_flags: Vec::new(),
+            retrieval_quality_flags: Vec::new(),
+        })
+        .collect::<Vec<_>>();
+    let mut context_map = BTreeMap::from([
+        (
+            "ingestion_source".to_owned(),
+            imported.source.as_str().to_owned(),
+        ),
+        (
+            "external_trace_id".to_owned(),
+            imported.external_trace_id.clone(),
+        ),
+        ("schema_version".to_owned(), imported.schema_version.clone()),
+        ("mapper_version".to_owned(), imported.mapper_version.clone()),
+        (
+            "mapping_status".to_owned(),
+            imported.mapping_status.as_str().to_owned(),
+        ),
+        ("span_count".to_owned(), imported.spans.len().to_string()),
+    ]);
+    if !imported.limitations.is_empty() {
+        context_map.insert(
+            "mapping_limitations".to_owned(),
+            imported.limitations.join(", "),
+        );
+    }
+    let findings = if let Some(diagnosis) = &trace.diagnosis {
+        diagnosis.failures.iter().map(diagnosis_finding).collect()
+    } else {
+        vec![DebugReportFinding {
+            code: "partial_mapping".to_owned(),
+            severity: DebugReportSeverity::Info,
+            title: "Diagnosis is limited for this imported trace".to_owned(),
+            summary: trace.summary.clone(),
+            failure_labels: trace
+                .failure_labels
+                .iter()
+                .map(|label| label.as_str().to_owned())
+                .collect(),
+            evidence_refs: evidence.iter().map(|item| item.label.clone()).collect(),
+        }]
+    };
+    Ok(DebugReport {
+        id: context.report_id,
+        workspace_id: context.workspace_id,
+        project_id: context.project_id,
+        title: "Imported RAG trace audit".to_owned(),
+        subject: if context.privacy_mode == DebugReportPrivacyMode::SnippetsAllowed
+            && !trace.input.is_empty()
+        {
+            trace.input.clone()
+        } else {
+            format!("Imported trace {}", imported.external_trace_id)
+        },
+        source: DebugReportSource::Trace { trace_id: trace.id },
+        privacy_mode: context.privacy_mode,
+        executive_summary: trace.summary.clone(),
+        context: context_map,
+        findings,
+        recommendations: trace.diagnosis.as_ref().map_or_else(Vec::new, |diagnosis| {
+            debug_report_recommendations(&diagnosis.recommendations)
+        }),
+        evidence,
+        diagnosis: trace.diagnosis.clone(),
         created_at: context.created_at,
     })
 }

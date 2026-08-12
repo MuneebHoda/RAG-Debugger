@@ -432,3 +432,9 @@ The future HPC path should stay cleanly separated from the API route layer:
 - Add vector index backends such as pgvector, Tantivy, or a dedicated ANN service.
 
 The goal is not just faster retrieval. The goal is explainable retrieval quality at corpus scale.
+
+## External Trace Ingestion
+
+`POST /api/v1/traces/ingest` accepts the versioned native JSON contract. `POST /api/v1/otel/v1/traces` accepts authenticated OTLP/HTTP protobuf, groups spans by trace ID, reconstructs parents, deduplicates retries, and returns standard partial success. Generated OTLP types stop at the Axum boundary; core, RAG, storage, and UI remain protocol-independent.
+
+Workspace identity comes from a session or `trace_ingest` key and the explicit project is verified inside it. Privacy filtering precedes all storage and secondary use. Native ingestion supports metadata, bounded snippets, and non-exportable full-local detail within project policy; OTLP is metadata-only in v1. Imported traces can become Eval Lab cases only when a retained query and authorized corpus evidence make the case reproducible, and report modes cannot exceed import privacy.

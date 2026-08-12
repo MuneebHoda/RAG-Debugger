@@ -219,6 +219,11 @@ fn write_evidence(
     optional_table_row(output, "Rank", evidence.rank.map(|rank| rank.to_string()));
     optional_table_row(
         output,
+        "External evidence ID",
+        evidence.external_evidence_id.clone(),
+    );
+    optional_table_row(
+        output,
         "Source ID",
         evidence.source_id.map(|id| id.0.to_string()),
     );

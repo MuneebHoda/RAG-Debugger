@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { DebugReportPrivacyMode } from "../../../../lib/api/reports";
 import {
   CreateAuditReportAction,
   type AuditReportSource,
@@ -69,6 +70,25 @@ describe("CreateAuditReportAction", () => {
     expect(await screen.findByText("Opened report")).toBeInTheDocument();
   });
 
+  it("submits the first privacy mode permitted for an imported trace", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => responseJson(report(), 201)),
+    );
+    renderAction({ sourceType: "trace", sourceId }, ["metadata_only"] as const);
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Create audit report" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create report" }));
+
+    await screen.findByText("Opened report");
+    const [, requestInit] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String(requestInit?.body))).toMatchObject({
+      privacy_mode: "metadata_only",
+    });
+  });
+
   it("keeps structured creation errors in the action", async () => {
     vi.stubGlobal(
       "fetch",
@@ -93,7 +113,10 @@ describe("CreateAuditReportAction", () => {
   });
 });
 
-function renderAction(source: AuditReportSource) {
+function renderAction(
+  source: AuditReportSource,
+  allowedPrivacyModes?: readonly DebugReportPrivacyMode[],
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -103,7 +126,12 @@ function renderAction(source: AuditReportSource) {
         <Routes>
           <Route
             path="/source"
-            element={<CreateAuditReportAction source={source} />}
+            element={
+              <CreateAuditReportAction
+                source={source}
+                allowedPrivacyModes={allowedPrivacyModes}
+              />
+            }
           />
           <Route path="/app/reports/:reportId" element={<p>Opened report</p>} />
         </Routes>

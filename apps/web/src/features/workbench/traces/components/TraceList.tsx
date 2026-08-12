@@ -29,11 +29,13 @@ export function TraceList({ runs }: { runs: TraceSummary[] }) {
       {runs.map((run) => (
         <Link className={styles.row} key={run.id} to={`/app/traces/${run.id}`}>
           <span className={styles.query}>
-            <strong>{run.query}</strong>
+            <strong>{run.query || "Query withheld by privacy policy"}</strong>
             <small>
-              {run.failure_labels.length === 0
-                ? "No failure signals"
-                : `${run.failure_labels.length} signals · ${run.rerun_count} comparisons`}
+              {run.ingestion_source
+                ? `${run.ingestion_source.replaceAll("_", "/")} import · ${run.mapping_status?.replaceAll("_", " ") ?? "mapped"}`
+                : run.failure_labels.length === 0
+                  ? "No failure signals"
+                  : `${run.failure_labels.length} signals · ${run.rerun_count} comparisons`}
             </small>
           </span>
           <WorkbenchStatusPill tone="info">

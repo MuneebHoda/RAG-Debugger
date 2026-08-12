@@ -131,3 +131,5 @@ Future provider work should add:
 - Prefer short-lived sessions in hosted deployments.
 - Require HTTPS before setting secure cookies.
 - Keep bootstrap passwords and database credentials out of committed files.
+
+Trace ingestion adds the `trace_ingest` scope. Native ingestion accepts a session for local interactive use or that scope for external applications; an invalid bearer header never falls back to a session. OTLP accepts only the scoped key. `GET /api/v1/projects/current` exposes the session user's default project, while both ingestion routes independently verify ownership. Workspace and project telemetry attributes are never authorization inputs.

@@ -10,6 +10,7 @@ import {
 } from "../../../lib/api/apiKeys";
 import { getCurrentUser } from "../../../lib/api/auth";
 import { getProductConfig } from "../../../lib/api/config";
+import { getCurrentProject } from "../../../lib/api/projects";
 import { SettingsPage } from "./SettingsPage";
 
 vi.mock("../../../lib/api/apiKeys", () => ({
@@ -19,12 +20,20 @@ vi.mock("../../../lib/api/apiKeys", () => ({
 }));
 vi.mock("../../../lib/api/auth", () => ({ getCurrentUser: vi.fn() }));
 vi.mock("../../../lib/api/config", () => ({ getProductConfig: vi.fn() }));
+vi.mock("../../../lib/api/projects", () => ({ getCurrentProject: vi.fn() }));
 
 describe("SettingsPage", () => {
   beforeEach(() => {
     vi.mocked(getProductConfig).mockResolvedValue(productConfig());
     vi.mocked(getCurrentUser).mockResolvedValue(currentUser());
     vi.mocked(listApiKeys).mockResolvedValue([]);
+    vi.mocked(getCurrentProject).mockResolvedValue({
+      id: "018f7a2a-6e2e-7000-a000-000000004899",
+      name: "Corpus Workspace",
+      privacy_mode: "LocalOnly",
+      created_at: "2026-08-12T08:00:00Z",
+      updated_at: "2026-08-12T08:00:00Z",
+    });
   });
 
   afterEach(() => {
@@ -95,6 +104,31 @@ describe("SettingsPage", () => {
       await screen.findByRole("button", { name: "Copied" }),
     ).toBeInTheDocument();
     expect(writeText).toHaveBeenCalledWith("clab_one_time_secret");
+  });
+
+  it("creates a trace-ingestion key and exposes the trusted project ID", async () => {
+    vi.mocked(createApiKey).mockResolvedValue({
+      api_key: { ...apiKey(), scopes: ["trace_ingest"] },
+      secret: "clab_trace_secret",
+    });
+    renderSettings("/app/settings?tab=api-keys");
+
+    expect(
+      await screen.findByText(/018f7a2a-6e2e-7000-a000-000000004899/),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Key purpose"), {
+      target: { value: "trace_ingest" },
+    });
+    fireEvent.change(screen.getByLabelText("Key name"), {
+      target: { value: "Local collector" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create key" }));
+
+    await screen.findByText("clab_trace_secret");
+    expect(createApiKey).toHaveBeenCalledWith({
+      name: "Local collector",
+      scopes: ["trace_ingest"],
+    });
   });
 
   it("shows scope, creation time, and last use without exposing a secret", async () => {

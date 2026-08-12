@@ -48,6 +48,7 @@ pub fn build_trace_from_retrieval(
         retrieval: Some(response),
         reruns: Vec::new(),
         diagnosis: Some(diagnosis),
+        ingestion: None,
     }
 }
 

@@ -16,6 +16,12 @@ pub enum ApiError {
     Forbidden(String),
     #[error("unprocessable entity: {0}")]
     Unprocessable(String),
+    #[error("request rejected: {code}")]
+    Coded {
+        status: StatusCode,
+        code: &'static str,
+        message: &'static str,
+    },
     #[error("service is not ready")]
     NotReady,
     #[error("not found: {0}")]
@@ -60,6 +66,11 @@ impl IntoResponse for ApiError {
                 "unprocessable_entity",
                 format!("unprocessable entity: {message}"),
             ),
+            Self::Coded {
+                status,
+                code,
+                message,
+            } => (status, code, message.to_owned()),
             Self::NotReady => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "service_not_ready",

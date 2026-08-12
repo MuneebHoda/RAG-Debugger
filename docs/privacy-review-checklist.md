@@ -81,3 +81,12 @@ CodeRabbit is an external engineering review provider installed only on `MuneebH
 Raw customer data remains local by default, no product export or telemetry path changes, and no new data class is persisted by CorpusLab. Repository secrets remain prohibited in source, pull request content, logs, and test artifacts; GitHub secret scanning and push protection are enabled before CodeRabbit receives a pull request diff.
 
 This public repository explicitly accepts CodeRabbit's default cache and knowledge-base retention. Code/dependency caches expire within seven days; review learnings and pull request context remain until an administrator deletes them or enables the immediate, irreversible `knowledge_base.opt_out`. The repository owner is responsible for reviewing CodeRabbit's maintained subprocessor register, currently including model providers such as OpenAI and Anthropic, and for verifying deletion in the CodeRabbit dashboard during rollback. After deletion is verified, removing repository access and reverting `.coderabbit.yaml` stops future processing without a CorpusLab data migration. ADR 0005 records this boundary and procedure.
+
+## Local Trace Ingestion Review Note
+
+- Data remains inside the configured CorpusLab API and database; no provider or external model is contacted.
+- Workspace authority comes only from a valid session or hashed scoped API key; the project is verified inside that workspace.
+- Native privacy is bounded by project policy. OTLP is forced to `metadata_only`, regardless of telemetry attributes.
+- Filtering occurs before persistence, diagnosis, UI, reports, or operational events. Tests assert secret markers are absent from metadata-only stored traces and errors.
+- Operational events contain numeric counts, payload bytes, latency, mapping status, and stable reason codes only, using the existing local log destination and retention policy.
+- `full_local_only` report creation and export are denied. No public sharing or clipboard integration was added.

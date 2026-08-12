@@ -187,6 +187,12 @@ export function ReportDetailPage() {
                   <dt>Rank</dt>
                   <dd>{evidence.rank ?? "—"}</dd>
                 </div>
+                {evidence.external_evidence_id ? (
+                  <div>
+                    <dt>External evidence</dt>
+                    <dd>{evidence.external_evidence_id}</dd>
+                  </div>
+                ) : null}
                 <div>
                   <dt>Chunk</dt>
                   <dd>{evidence.chunk_id ?? "Not recorded"}</dd>

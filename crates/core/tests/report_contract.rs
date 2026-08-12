@@ -111,6 +111,7 @@ fn optional_evidence_fields_round_trip_as_null() {
     let evidence = DebugReportEvidenceRef {
         label: "E-missing".to_owned(),
         role: DebugReportEvidenceRole::Missing,
+        external_evidence_id: None,
         source_id: None,
         document_id: Some(DocumentId(uuid("00000000-0000-0000-0000-000000000301"))),
         chunk_id: None,
@@ -172,6 +173,7 @@ fn sample_report() -> DebugReport {
         evidence: vec![DebugReportEvidenceRef {
             label: "E1".to_owned(),
             role: DebugReportEvidenceRole::Retrieved,
+            external_evidence_id: None,
             source_id: Some(SourceId(uuid("00000000-0000-0000-0000-000000000201"))),
             document_id: Some(DocumentId(uuid("00000000-0000-0000-0000-000000000202"))),
             chunk_id: Some(ChunkId(uuid("00000000-0000-0000-0000-000000000203"))),

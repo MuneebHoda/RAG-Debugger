@@ -117,6 +117,7 @@ pub struct CreateApiKeyRequest {
 #[serde(rename_all = "snake_case")]
 pub enum ApiKeyScope {
     CiEvalRuns,
+    TraceIngest,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]

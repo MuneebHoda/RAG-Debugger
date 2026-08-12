@@ -14,11 +14,19 @@ export type AuditReportSource =
 interface CreateAuditReportActionProps {
   source: AuditReportSource;
   compact?: boolean;
+  allowedPrivacyModes?: readonly DebugReportPrivacyMode[];
+  disabledReason?: string;
 }
 
 export function CreateAuditReportAction({
   source,
   compact = false,
+  allowedPrivacyModes = [
+    "metadata_only",
+    "snippets_allowed",
+    "full_local_only",
+  ],
+  disabledReason,
 }: CreateAuditReportActionProps) {
   const navigate = useNavigate();
   const privacyId = useId();
@@ -53,13 +61,27 @@ export function CreateAuditReportAction({
 
   if (!isOpen) {
     return (
-      <button
-        className={compact ? styles.compactTrigger : styles.trigger}
-        type="button"
-        onClick={() => setIsOpen(true)}
-      >
-        <FilePlus2 aria-hidden="true" size={15} /> Create audit report
-      </button>
+      <span className={styles.triggerGroup}>
+        <button
+          aria-describedby={
+            disabledReason ? `${privacyId}-disabled` : undefined
+          }
+          className={compact ? styles.compactTrigger : styles.trigger}
+          type="button"
+          disabled={allowedPrivacyModes.length === 0}
+          onClick={() => {
+            setPrivacyMode(allowedPrivacyModes[0] ?? "metadata_only");
+            setIsOpen(true);
+          }}
+        >
+          <FilePlus2 aria-hidden="true" size={15} /> Create audit report
+        </button>
+        {disabledReason ? (
+          <small className={styles.disabledReason} id={`${privacyId}-disabled`}>
+            {disabledReason}
+          </small>
+        ) : null}
+      </span>
     );
   }
 
@@ -82,9 +104,15 @@ export function CreateAuditReportAction({
           createReport.reset();
         }}
       >
-        <option value="metadata_only">Metadata only</option>
-        <option value="snippets_allowed">Approved snippets</option>
-        <option value="full_local_only">Full local diagnostics</option>
+        {allowedPrivacyModes.includes("metadata_only") ? (
+          <option value="metadata_only">Metadata only</option>
+        ) : null}
+        {allowedPrivacyModes.includes("snippets_allowed") ? (
+          <option value="snippets_allowed">Approved snippets</option>
+        ) : null}
+        {allowedPrivacyModes.includes("full_local_only") ? (
+          <option value="full_local_only">Full local diagnostics</option>
+        ) : null}
       </select>
       <button
         className={styles.confirm}

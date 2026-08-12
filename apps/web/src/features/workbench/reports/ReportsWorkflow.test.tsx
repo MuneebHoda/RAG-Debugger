@@ -119,6 +119,7 @@ describe("audit reports workbench", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Weak evidence")).toBeInTheDocument();
     expect(screen.getByText("Increase retrieval depth")).toBeInTheDocument();
+    expect(screen.getByText("collector-chunk-7")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Download Markdown" }),
     ).toHaveAttribute(
@@ -219,6 +220,7 @@ const report: DebugReport = {
     {
       label: "E1",
       role: "retrieved",
+      external_evidence_id: "collector-chunk-7",
       source_id: null,
       document_id: null,
       chunk_id: "018f7a2a-6e2e-7000-a000-000000000820",

@@ -155,3 +155,7 @@ The workflow is intentionally split into reviewable tickets:
 7. Professional Markdown rendering and snapshot tests. **Implemented.**
 
 PDF export, billing, hosted sync, external LLM calls, and broad Reports-page redesign are not part of this stack.
+
+## Imported Trace Reports
+
+Imported traces cannot exceed their ingestion policy: metadata imports create only metadata reports; snippet imports create metadata or snippet reports; and `full_local_only` imports cannot create a report. Imported evidence uses its external evidence ID for lineage and never fabricates CorpusLab corpus IDs.
