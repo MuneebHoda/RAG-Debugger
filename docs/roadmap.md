@@ -40,7 +40,7 @@
 - Report export from failed gates.
 - Team comments on failed cases and traces.
 
-Status: local auth, workspaces, hashed API keys, and CI Eval Lab runs are implemented as the first hosted foundation. Next work should harden permissions, report exports, and CI ergonomics before adding hosted billing.
+Status: local auth, workspaces, hashed API keys, CI Eval Lab runs, and scoped trace ingestion are implemented. The current sequence is to validate the complete local-first workflow with 3 to 5 design partners, use their evidence to refine hosted-alpha issue #29 and deployment issues #102-#108, and build hosted onboarding afterward. Hosted access, public signup, billing, and production infrastructure are not current capabilities.
 
 ## Phase 6: Hybrid Team Product
 
@@ -49,6 +49,8 @@ Status: local auth, workspaces, hashed API keys, and CI Eval Lab runs are implem
 - Hosted project/team dashboard.
 - Redacted trace sync.
 - Shareable debug reports, audit events, and report redaction.
+
+All Phase 6 items are directional future work unless the changelog explicitly records their implementation.
 
 ## Phase 7: GPU/HPC Workers
 

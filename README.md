@@ -1,22 +1,37 @@
 # CorpusLab
 
-**Local-first RAG debugging and corpus observability for teams that need to understand why retrieval works—or fails.**
+**CI and observability for RAG quality.**
 
 [![CI](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/ci.yml/badge.svg)](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/ci.yml)
 [![Coverage](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/coverage.yml/badge.svg)](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/coverage.yml)
-[![Cargo Deny](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/cargo-deny.yml/badge.svg)](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/cargo-deny.yml)
-[![Dependency Review](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/dependency-review.yml/badge.svg?event=pull_request)](https://github.com/MuneebHoda/RAG-Debugger/actions/workflows/dependency-review.yml)
 
-CorpusLab turns retrieval runs into inspectable evidence, deterministic failure labels, regression tests, and privacy-classified reports. It brings ingestion, chunking, retrieval, tracing, evaluation, and release gates into one workbench so engineers can improve RAG quality without sending raw corpus data to a hosted model.
+CorpusLab is a RAG debugging, evaluation, and audit platform for teams building document-based AI systems. It turns retrieval runs into inspectable evidence, deterministic failure labels, regression tests, CI gates, and privacy-classified reports so engineers can understand why a RAG answer failed and whether a fix actually helped.
 
-![CorpusLab dashboard showing corpus health, retrieval quality, evaluation pass rate, and workspace status](apps/web/public/product/corpuslab-dashboard.png)
+> Observe a real RAG failure -> inspect its retrieval evidence -> diagnose it -> preserve it as an evaluation -> compare fixes -> prevent regressions through CI.
 
 > [!IMPORTANT]
+> CorpusLab currently runs locally in the user's environment. Hosted access, public SaaS signup, and billing are not available. The current offering is controlled local-first design-partner validation, not a public SaaS launch. Sensitive data does not need to leave the machine running CorpusLab.
+>
 > CorpusLab is public pre-release software. `main` receives best-effort security support, but APIs and compatibility may evolve before a stable release.
 > The repository does not currently include a software license.
 
+## Fastest Local Demo
+
+After installing the [prerequisites](#prerequisites), copy `.env.example` to `.env`, set a generated local bootstrap password, and run:
+
+```sh
+just db-up
+just db-migrate
+just api
+```
+
+In a second terminal, run `just web`, open `http://127.0.0.1:5173/login`, then follow Home's single next action: load the deterministic sample corpus, index it locally, run the recommended query, inspect ranked evidence, save the trace, and create a metadata-only audit report.
+
+The demo requires no external model, hosted service, or paid API. Use the [Design-Partner Demo Script](docs/demo-script.md) for the complete trace, Eval Lab, failed CI-gate, native ingestion, and OTLP walkthrough.
+
 ## Contents
 
+- [Fastest Local Demo](#fastest-local-demo)
 - [Why CorpusLab](#why-corpuslab)
 - [How It Works](#how-it-works)
 - [Product Tour](#product-tour)
@@ -60,7 +75,7 @@ Instead of treating observability, evaluation, and reporting as separate systems
 | **Evaluate** | Runs expected-evidence datasets across retrieval modes and calculates recall, precision, MRR, citation coverage, latency, and gates. |
 | **Report**   | Produces workspace-owned audit snapshots with explicit privacy modes and controlled Markdown export.                                 |
 
-The current implementation is local-first: ingestion, embeddings, retrieval, traces, evaluations, and reports run against the configured CorpusLab instance and its private storage boundary.
+The current implementation is local-first: ingestion, embeddings, retrieval, traces, evaluations, and reports run against the configured CorpusLab instance and its private storage boundary. See [Known Limitations](docs/known-limitations.md) for the exact pre-release boundary.
 
 ## Product Tour
 
@@ -94,7 +109,7 @@ The current implementation is local-first: ingestion, embeddings, retrieval, tra
 
 - Save retrieval runs as workspace-owned traces with the query, ranked evidence, citations, failure labels, and timeline spans.
 - Reopen traces without losing the evidence and ranking context that produced the diagnosis.
-- Rerun the same trace with lexical, vector, or hybrid retrieval and a different `top_k` value.
+- Rerun a trace saved from CorpusLab retrieval with lexical, vector, or hybrid retrieval and a different `top_k` value. Imported traces remain observational and cannot be rerun.
 - Compare primary issues, secondary candidate warnings, evidence coverage, and ranked results across reruns.
 - Import external RAG traces through versioned native JSON or authenticated OTLP/HTTP protobuf, with privacy filtering before storage. See [Local trace ingestion](docs/trace-ingestion.md).
 
@@ -226,6 +241,8 @@ just web
 
 Sign in with the bootstrap email and password from `.env`, or create a separate local workspace through `/signup`.
 
+That signup is local to the configured CorpusLab instance. It does not create a hosted account.
+
 ### Common setup issues
 
 - If `just db-up` cannot reach Docker, start the Docker daemon and rerun it.
@@ -325,12 +342,13 @@ Read [Development](docs/development.md), [Testing](docs/testing.md), and [Engine
 
 ## Documentation
 
-| Area                    | Guides                                                                                                                                                                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Use CorpusLab**       | [Guided Demo](docs/guided-demo.md) · [File Ingestion](docs/file-ingestion.md) · [Retrieval Playground](docs/retrieval-playground.md) · [Trace Debugger](docs/trace-debugger.md) · [Eval Lab](docs/eval-lab.md) · [Audit Reports](docs/rag-audit-reports.md) |
-| **Build and test**      | [Development](docs/development.md) · [Architecture](docs/architecture.md) · [Frontend Architecture](docs/frontend-architecture.md) · [Testing](docs/testing.md) · [Engineering Quality](docs/engineering-quality.md)                                        |
-| **Privacy and trust**   | [Privacy and Security](docs/privacy-security.md) · [Logging and Redaction](docs/logging-redaction.md) · [Privacy Review](docs/privacy-review-checklist.md) · [Security Policy](SECURITY.md) · [RAG Invariants](docs/rag-invariants.md)                      |
-| **Project maintenance** | [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md) · [ADRs](docs/adr) · [Technical Handbook](docs/technical-handbook.md) · [Documentation Maintenance](docs/doc-maintenance.md)                                                                         |
+| Area                     | Guides                                                                                                                                                                                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Design-partner start** | [Onboarding](docs/design-partner-onboarding.md) · [Demo Script](docs/demo-script.md) · [Product One-Pager](docs/product-one-pager.md) · [Feedback Template](docs/design-partner-feedback.md) · [Known Limitations](docs/known-limitations.md)               |
+| **Use CorpusLab**        | [Guided Demo](docs/guided-demo.md) · [File Ingestion](docs/file-ingestion.md) · [Retrieval Playground](docs/retrieval-playground.md) · [Trace Debugger](docs/trace-debugger.md) · [Eval Lab](docs/eval-lab.md) · [Audit Reports](docs/rag-audit-reports.md) |
+| **Build and test**       | [Development](docs/development.md) · [Architecture](docs/architecture.md) · [Frontend Architecture](docs/frontend-architecture.md) · [Testing](docs/testing.md) · [Engineering Quality](docs/engineering-quality.md)                                        |
+| **Privacy and trust**    | [Privacy and Security](docs/privacy-security.md) · [Logging and Redaction](docs/logging-redaction.md) · [Privacy Review](docs/privacy-review-checklist.md) · [Security Policy](SECURITY.md) · [RAG Invariants](docs/rag-invariants.md)                      |
+| **Project maintenance**  | [Roadmap](docs/roadmap.md) · [Changelog](CHANGELOG.md) · [ADRs](docs/adr) · [Technical Handbook](docs/technical-handbook.md) · [Documentation Maintenance](docs/doc-maintenance.md)                                                                         |
 
 ## Contributing and Security
 

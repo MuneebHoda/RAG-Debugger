@@ -6,6 +6,18 @@ CorpusLab is a corpus workbench for teams building retrieval-augmented generatio
 
 The current implementation is privacy-first and local by default. Uploaded binaries are not persisted. Extracted text, chunk text, metadata, embeddings, retrieval runs, traces, evals, and reports are stored in Postgres. Retrieval and trace diagnosis use local lexical scoring and a local hash embedding baseline so relevance can be debugged without external model calls.
 
+## Local-First Design-Partner Package
+
+The current product offer is controlled local-first validation, not a public SaaS launch. CorpusLab runs in the partner's environment, hosted access is deferred to issue #29, and sensitive data does not need to leave the machine running the product.
+
+- `docs/design-partner-onboarding.md`: prerequisites, startup, scoped ingestion, privacy, cleanup, troubleshooting, and sanitized feedback.
+- `docs/demo-script.md`: the reproducible corpus-to-trace-to-eval-to-CI-to-report walkthrough.
+- `docs/product-one-pager.md`: concise technical positioning and product boundary.
+- `docs/design-partner-feedback.md`: reusable session and defect template.
+- `docs/known-limitations.md`: current operating, integration, privacy, administration, CI, and scale constraints.
+
+The product loop is: observe a real RAG failure, inspect its retrieval evidence, diagnose it, preserve it as an evaluation, compare fixes, and prevent regressions through CI. Evidence from 3 to 5 design partners will guide hosted-alpha and deployment priorities; roadmap items are not presented as implemented capabilities.
+
 ## Repository Structure
 
 - `apps/api`: Axum API service, runtime config, routes, startup state, telemetry, and integration tests.

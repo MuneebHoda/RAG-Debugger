@@ -2,6 +2,8 @@
 
 The CorpusLab guided demo is an additive, authenticated workflow that takes a new workspace from a sample corpus to a shareable RAG audit report in about five minutes. It exercises the same ingestion, embedding, retrieval, trace, report, storage, and privacy boundaries used by user-owned corpora.
 
+For a facilitated design-partner session that continues through Eval Lab, a failed CI gate, and external trace ingestion, use the [Design-Partner Demo Script](demo-script.md).
+
 ## Walkthrough
 
 1. Open Home and choose **Load sample corpus**.
