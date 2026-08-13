@@ -934,6 +934,21 @@ mod tests {
                 .status,
             TraceStatus::Warning
         );
+
+        let mut partial = existing.clone();
+        let metadata = partial.ingestion.as_mut().expect("partial metadata");
+        metadata.mapping_status = TraceMappingStatus::PartiallyMapped;
+        metadata.limitations = vec!["unsupported_operation".to_owned()];
+        partial.status = TraceStatus::Warning;
+        partial.summary = imported_summary(partial.status, metadata.mapping_status);
+        partial.diagnosis = None;
+        let merged_partial =
+            merge_imported_trace(&existing, partial).expect("merge partial mapping");
+        assert_eq!(merged_partial.status, TraceStatus::Warning);
+        assert_eq!(
+            merged_partial.summary,
+            "Imported trace is only partially mapped; diagnosis is limited."
+        );
     }
 
     #[test]

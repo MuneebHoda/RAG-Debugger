@@ -35,6 +35,60 @@ async fn postgres_eval_repository_enforces_workspace_ownership() {
     run_eval_workspace_contract(&store).await;
 }
 
+#[tokio::test]
+#[ignore = "requires a migrated Postgres database"]
+async fn postgres_eval_provenance_lock_blocks_concurrent_trace_mutation() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    let store = PostgresStore::connect(&database_url)
+        .await
+        .expect("connect Postgres store");
+    let workspace_id = create_workspace(&store, "provenance-lock").await;
+    let project = store
+        .ensure_default_project(workspace_id)
+        .await
+        .expect("default project");
+    let trace = full_local_trace(project.id);
+    store
+        .upsert_imported_trace(workspace_id, trace.clone())
+        .await
+        .expect("save source trace");
+
+    let metadata = trace.ingestion.as_ref().expect("source metadata");
+    let mut validation = store.pool().begin().await.expect("validation transaction");
+    sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM debug_traces
+         WHERE id = $1 AND workspace_id = $2
+           AND ingestion_source = $3 AND ingestion_privacy_mode = $4
+           AND trace_json ->> 'input' = $5
+         FOR SHARE",
+    )
+    .bind(trace.id.0)
+    .bind(workspace_id.0)
+    .bind(metadata.source.as_str())
+    .bind(metadata.privacy_mode.as_str())
+    .bind(&trace.input)
+    .fetch_one(&mut *validation)
+    .await
+    .expect("lock matching source trace");
+
+    let mut changed = trace;
+    changed.input = "changed after validation".to_owned();
+    let writer = store.clone();
+    let mut update =
+        tokio::spawn(async move { writer.upsert_imported_trace(workspace_id, changed).await });
+    assert!(
+        tokio::time::timeout(std::time::Duration::from_millis(100), &mut update)
+            .await
+            .is_err(),
+        "source trace update must wait for provenance validation"
+    );
+    validation.commit().await.expect("commit validation lock");
+    update
+        .await
+        .expect("join source trace update")
+        .expect("update source trace after validation");
+}
+
 async fn run_eval_workspace_contract<R>(repository: &R)
 where
     R: AuthRepository + CiEvalRepository + EvalRepository + ProjectRepository + TraceRepository,

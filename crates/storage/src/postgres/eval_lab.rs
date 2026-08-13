@@ -793,20 +793,19 @@ async fn validate_eval_case_provenance(
     if provenance.privacy_mode != TraceIngestionPrivacyMode::FullLocalOnly {
         return Err(StorageError::NotFound);
     }
-    let matches = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS (
-             SELECT 1 FROM debug_traces
-             WHERE id = $1 AND workspace_id = $2
-               AND ingestion_source = $3 AND ingestion_privacy_mode = $4
-               AND trace_json ->> 'input' = $5
-         )",
+    let matches = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM debug_traces
+         WHERE id = $1 AND workspace_id = $2
+           AND ingestion_source = $3 AND ingestion_privacy_mode = $4
+           AND trace_json ->> 'input' = $5
+         FOR SHARE",
     )
     .bind(provenance.source_trace_id.0)
     .bind(workspace_id.0)
     .bind(provenance.source.as_str())
     .bind(provenance.privacy_mode.as_str())
     .bind(query)
-    .fetch_one(&mut **transaction)
+    .fetch_optional(&mut **transaction)
     .await?;
-    matches.then_some(()).ok_or(StorageError::NotFound)
+    matches.map(|_| ()).ok_or(StorageError::NotFound)
 }

@@ -281,6 +281,7 @@ pub fn merge_imported_trace(
         .ok_or(TraceMergeError::IncomingNotImported)?;
     let incoming_status_was_supplied = new.status_supplied;
     let incoming_status_signal = incoming_status_was_supplied
+        || new.mapping_status == TraceMappingStatus::PartiallyMapped
         || !new.known_failure_labels.is_empty()
         || new.evaluation_passed == Some(false)
         || new
