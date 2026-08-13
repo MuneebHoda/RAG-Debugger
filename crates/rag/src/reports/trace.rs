@@ -7,6 +7,7 @@ use rag_debugger_core::{
 };
 
 use crate::diagnosis::diagnose_retrieval;
+use crate::imported_trace::strength;
 
 use super::{
     embedding_readiness_label,
@@ -179,7 +180,7 @@ fn build_imported_trace_report(
             snippet: (context.privacy_mode == DebugReportPrivacyMode::SnippetsAllowed)
                 .then(|| item.snippet.clone())
                 .flatten(),
-            evidence_strength: trace.evidence_strength,
+            evidence_strength: Some(strength(item.score)),
             chunk_quality_flags: Vec::new(),
             retrieval_quality_flags: Vec::new(),
         })

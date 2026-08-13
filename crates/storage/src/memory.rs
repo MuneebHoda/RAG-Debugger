@@ -405,8 +405,15 @@ impl TraceRepository for MemoryStore {
             })
             .cloned();
         let (saved, disposition) = if let Some(existing) = existing {
-            let merged = rag_debugger_core::merge_imported_trace(&existing, trace)
-                .map_err(|message| StorageError::Conflict(message.to_owned()))?;
+            let merged =
+                rag_debugger_core::merge_imported_trace(&existing, trace).map_err(|error| {
+                    match error {
+                        rag_debugger_core::TraceMergeError::IdentityImmutable => {
+                            StorageError::Conflict(error.to_string())
+                        }
+                        _ => StorageError::InvalidData(error.to_string()),
+                    }
+                })?;
             let disposition = if merged == existing {
                 rag_debugger_core::TraceIngestionDisposition::Unchanged
             } else {
@@ -416,6 +423,19 @@ impl TraceRepository for MemoryStore {
         } else {
             (trace, rag_debugger_core::TraceIngestionDisposition::Created)
         };
+        if inner.traces.get(&saved.id).is_some_and(|existing| {
+            inner.trace_workspaces.get(&saved.id) != Some(&workspace_id)
+                || existing.project_id != saved.project_id
+                || existing.ingestion.as_ref().is_none_or(|existing_metadata| {
+                    saved.ingestion.as_ref().is_none_or(|saved_metadata| {
+                        existing_metadata.source != saved_metadata.source
+                            || existing_metadata.external_trace_id
+                                != saved_metadata.external_trace_id
+                    })
+                })
+        }) {
+            return Err(StorageError::NotFound);
+        }
         inner.trace_workspaces.insert(saved.id, workspace_id);
         inner.traces.insert(saved.id, saved.clone());
         Ok(ImportedTraceUpsertResult {

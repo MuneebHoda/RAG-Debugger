@@ -162,7 +162,7 @@ async fn eval_lab_manages_datasets_and_cases() {
 }
 
 #[tokio::test]
-async fn full_local_import_cannot_be_copied_into_eval_lab() {
+async fn imported_traces_cannot_be_copied_into_eval_lab() {
     let app = test_app().await;
     let project = get_json(&app, "/api/v1/projects/current").await;
     let upload = upload_text_file(&app, "safe-evidence.md", "Authorized local evidence.").await;
@@ -228,13 +228,49 @@ async fn full_local_import_cannot_be_copied_into_eval_lab() {
         .expect("eval guard response");
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
     let error = json_body(response).await;
-    assert_eq!(error["error"]["code"], "full_local_eval_not_permitted");
+    assert_eq!(error["error"]["code"], "imported_trace_eval_not_permitted");
     assert!(!error.to_string().contains(marker));
     assert!(
         get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await["cases"]
             .as_array()
             .expect("cases")
             .is_empty()
+    );
+
+    let metadata_ingest = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/traces/ingest",
+            json!({
+                "schema_version": "1",
+                "project_id": project["id"],
+                "external_trace_id": "metadata-eval-guard",
+                "privacy_mode": "metadata_only"
+            }),
+        ))
+        .await
+        .expect("metadata ingestion response");
+    let metadata_trace_id = json_body(metadata_ingest).await["trace_id"]
+        .as_str()
+        .expect("metadata trace id")
+        .to_owned();
+    let metadata_response = app
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "separate safe query",
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": metadata_trace_id
+            }),
+        ))
+        .await
+        .expect("metadata eval guard response");
+    assert_eq!(metadata_response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        json_body(metadata_response).await["error"]["code"],
+        "imported_trace_eval_not_permitted"
     );
 }
 

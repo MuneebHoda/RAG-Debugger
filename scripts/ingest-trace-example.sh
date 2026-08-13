@@ -5,9 +5,23 @@ set -eu
 : "${CORPUSLAB_API_KEY:?Create a trace-ingestion API key in Settings}"
 : "${CORPUSLAB_PROJECT_ID:?Copy the project ID from Settings > API keys}"
 
+case "${CORPUSLAB_PROJECT_ID}" in
+  *[!0-9a-fA-F-]*)
+    echo "CORPUSLAB_PROJECT_ID must be a UUID." >&2
+    exit 1
+    ;;
+esac
+
+header_file=$(mktemp "${TMPDIR:-/tmp}/corpuslab-ingest.XXXXXX")
+trap 'rm -f "${header_file}"' EXIT HUP INT TERM
+chmod 600 "${header_file}"
+printf 'Authorization: Bearer %s\n' "${CORPUSLAB_API_KEY}" >"${header_file}"
+
 curl --fail-with-body \
+  --connect-timeout 5 \
+  --max-time 30 \
   --request POST \
-  --header "Authorization: Bearer ${CORPUSLAB_API_KEY}" \
+  --header "@${header_file}" \
   --header "Content-Type: application/json" \
   --data "{
     \"schema_version\": \"1\",

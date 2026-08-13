@@ -303,9 +303,10 @@ fn validate_spans(spans: &[ImportedSpan]) -> Result<(), ImportValidationError> {
         ] {
             validate_label(value, 256)?;
         }
-        if span.completed_at.is_some_and(|end| end < span.started_at)
-            || by_id.insert(span.external_span_id.as_str(), span).is_some()
-        {
+        if span.completed_at.is_some_and(|end| end < span.started_at) {
+            return Err(ImportValidationError::InvalidNumber);
+        }
+        if by_id.insert(span.external_span_id.as_str(), span).is_some() {
             return Err(ImportValidationError::DuplicateSpan);
         }
     }
@@ -419,7 +420,7 @@ fn valid_score(value: f32) -> bool {
     value.is_finite() && (0.0..=1.0).contains(&value)
 }
 
-fn strength(score: f32) -> EvidenceStrength {
+pub(crate) fn strength(score: f32) -> EvidenceStrength {
     if score >= 0.75 {
         EvidenceStrength::Strong
     } else if score >= 0.4 {
@@ -727,6 +728,15 @@ mod tests {
             Err(ImportValidationError::InvalidSpanHierarchy)
         );
 
+        let mut invalid_timestamp = request(TraceIngestionPrivacyMode::SnippetsAllowed);
+        let mut invalid_span = span("bad-time", None);
+        invalid_span.completed_at = Some(invalid_span.started_at - Duration::milliseconds(1));
+        invalid_timestamp.spans = vec![invalid_span];
+        assert_eq!(
+            validate_native_request(&local, &invalid_timestamp),
+            Err(ImportValidationError::InvalidNumber)
+        );
+
         let cloud = project(PrivacyMode::RedactedCloudSync);
         assert_eq!(
             validate_native_request(&cloud, &request(TraceIngestionPrivacyMode::SnippetsAllowed)),
@@ -824,6 +834,60 @@ mod tests {
     }
 
     #[test]
+    fn merged_imports_keep_evidence_rank_and_span_time_order() {
+        let project = project(PrivacyMode::LocalOnly);
+        let now = OffsetDateTime::now_utc();
+        let mut existing_request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        existing_request.retrieved_evidence[0].external_chunk_id = "chunk-z".to_owned();
+        existing_request.retrieved_evidence[0].rank = 2;
+        let mut later = span("span-z", None);
+        later.started_at = now + Duration::seconds(1);
+        later.completed_at = Some(later.started_at);
+        existing_request.spans = vec![later];
+        let existing = build_native_trace(
+            &project,
+            existing_request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("initial import");
+
+        let mut incoming_request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        incoming_request.retrieved_evidence[0].external_chunk_id = "chunk-a".to_owned();
+        incoming_request.retrieved_evidence[0].rank = 1;
+        let mut earlier = span("span-a", None);
+        earlier.started_at = now;
+        earlier.completed_at = Some(now);
+        incoming_request.spans = vec![earlier];
+        let incoming = build_native_trace(
+            &project,
+            incoming_request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("incremental import");
+
+        let merged = merge_imported_trace(&existing, incoming).expect("merge import");
+        let metadata = merged.ingestion.expect("merged metadata");
+        assert_eq!(
+            metadata
+                .evidence
+                .iter()
+                .map(|value| value.external_chunk_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["chunk-a", "chunk-z"]
+        );
+        assert_eq!(
+            metadata
+                .spans
+                .iter()
+                .map(|value| value.external_span_id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["span-a", "span-z"]
+        );
+    }
+
+    #[test]
     fn imported_report_permissions_follow_ingestion_privacy() {
         let project = project(PrivacyMode::LocalOnly);
         let context = |privacy_mode| DebugReportBuildContext {
@@ -833,9 +897,15 @@ mod tests {
             privacy_mode,
             created_at: OffsetDateTime::now_utc(),
         };
+        let mut snippets_request = request(TraceIngestionPrivacyMode::SnippetsAllowed);
+        let mut weak_evidence = snippets_request.retrieved_evidence[0].clone();
+        weak_evidence.external_chunk_id = "chunk-2".to_owned();
+        weak_evidence.rank = 2;
+        weak_evidence.score = 0.1;
+        snippets_request.retrieved_evidence.push(weak_evidence);
         let snippets = build_native_trace(
             &project,
-            request(TraceIngestionPrivacyMode::SnippetsAllowed),
+            snippets_request,
             &RetrievalConfig::default(),
             &DebuggerConfig::default(),
         )
@@ -848,6 +918,14 @@ mod tests {
             Some("chunk-1")
         );
         assert_eq!(report.subject, "Imported trace trace-1");
+        assert_eq!(
+            report.evidence[0].evidence_strength,
+            Some(EvidenceStrength::Strong)
+        );
+        assert_eq!(
+            report.evidence[1].evidence_strength,
+            Some(EvidenceStrength::Weak)
+        );
         assert!(report.evidence[0].document_path.is_none());
         assert!(report.evidence[0].snippet.is_some());
         let markdown = render_debug_report_markdown(&report).expect("imported report markdown");

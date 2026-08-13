@@ -112,6 +112,18 @@ where
         .await
         .expect("list imported traces");
     assert_eq!(summaries[0].span_count, 2);
+    assert_eq!(
+        summaries[0].ingestion_source,
+        Some(TraceIngestionSource::Native)
+    );
+    assert_eq!(
+        summaries[0].external_trace_id.as_deref(),
+        Some("external-1")
+    );
+    assert_eq!(
+        summaries[0].mapping_status,
+        Some(TraceMappingStatus::PartiallyMapped)
+    );
     let mut privacy_conflict = first.clone();
     privacy_conflict
         .ingestion
@@ -136,6 +148,31 @@ where
             .await,
         Err(StorageError::NotFound)
     ));
+
+    let second_project = repository
+        .ensure_default_project(second_workspace)
+        .await
+        .expect("second project");
+    let mut colliding_trace = imported_trace(second_project.id, "external-2", "span-collision");
+    colliding_trace.id = created.trace.id;
+    assert!(matches!(
+        repository
+            .upsert_imported_trace(second_workspace, colliding_trace)
+            .await,
+        Err(StorageError::NotFound)
+    ));
+    let preserved = repository
+        .get_trace_detail(first_workspace, created.trace.id)
+        .await
+        .expect("original trace remains owned");
+    assert_eq!(
+        preserved
+            .ingestion
+            .as_ref()
+            .expect("preserved metadata")
+            .external_trace_id,
+        "external-1"
+    );
     created.trace.id
 }
 

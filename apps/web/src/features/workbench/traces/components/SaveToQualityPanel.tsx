@@ -18,7 +18,7 @@ export function SaveToQualityPanel({ trace }: { trace: Trace }) {
       </WorkbenchPanel>
     );
   }
-  if (trace.ingestion || !trace.input) {
+  if (trace.ingestion) {
     return (
       <WorkbenchPanel
         className={styles.panel}
@@ -28,6 +28,20 @@ export function SaveToQualityPanel({ trace }: { trace: Trace }) {
         <p>
           The query was not retained, so this imported trace cannot become an
           Eval Lab case. Create a case manually from non-sensitive input.
+        </p>
+      </WorkbenchPanel>
+    );
+  }
+  if (!trace.input) {
+    return (
+      <WorkbenchPanel
+        className={styles.panel}
+        title="Add to Quality"
+        description="Create a reproducible Eval Lab case from this failure."
+      >
+        <p>
+          This trace has no retained query, so it cannot become an Eval Lab
+          case.
         </p>
       </WorkbenchPanel>
     );

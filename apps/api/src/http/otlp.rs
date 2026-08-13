@@ -314,12 +314,6 @@ fn map_trace(
         {
             has_failure = true;
             ImportedSpanStatus::Failed
-        } else if span
-            .status
-            .as_ref()
-            .is_some_and(|value| value.code == StatusCode::Unset as i32)
-        {
-            ImportedSpanStatus::Warning
         } else {
             ImportedSpanStatus::Succeeded
         };
@@ -458,7 +452,7 @@ fn map_trace(
         status: Some(if has_failure {
             TraceStatus::Failed
         } else {
-            TraceStatus::Warning
+            TraceStatus::Completed
         }),
     };
     let mut trace = build_native_trace(project, request, retrieval_config, debugger_config)
@@ -958,7 +952,10 @@ mod tests {
         assert_eq!(metadata.spans.len(), 2);
         assert_eq!(metadata.spans[0].name, "Retrieval");
         assert_eq!(metadata.spans[0].kind, ImportedSpanKind::Server);
+        assert_eq!(metadata.spans[0].status, ImportedSpanStatus::Succeeded);
         assert_eq!(metadata.spans[1].kind, ImportedSpanKind::Client);
+        assert_eq!(metadata.spans[1].status, ImportedSpanStatus::Succeeded);
+        assert_eq!(batch.traces[0].status, TraceStatus::Completed);
         assert!(metadata
             .limitations
             .iter()

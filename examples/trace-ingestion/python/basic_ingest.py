@@ -3,6 +3,7 @@
 import os
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http import Compression
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -28,7 +29,7 @@ provider.add_span_processor(
                 "Authorization": f"Bearer {api_key}",
                 "x-corpuslab-project-id": project_id,
             },
-            compression=None,
+            compression=Compression.NoCompression,
         )
     )
 )

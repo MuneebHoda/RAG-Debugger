@@ -13,8 +13,8 @@ use rag_debugger_core::{
     RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
     RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
     RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
-    RunRetrievalEvalExperimentRequest, TraceIngestionPrivacyMode, UpdateRetrievalEvalCaseRequest,
-    WorkspaceId, EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
+    RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest, WorkspaceId,
+    EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
     EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS,
     EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS, EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
 };
@@ -120,13 +120,11 @@ pub async fn create_case(
             .get_trace_detail(workspace_id, trace_id)
             .await
             .map_err(not_found_to_api("trace"))?;
-        if trace.ingestion.as_ref().is_some_and(|metadata| {
-            metadata.privacy_mode == TraceIngestionPrivacyMode::FullLocalOnly
-        }) {
+        if trace.ingestion.is_some() {
             return Err(ApiError::Coded {
                 status: axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-                code: "full_local_eval_not_permitted",
-                message: "full-local imported traces cannot create Eval Lab cases",
+                code: "imported_trace_eval_not_permitted",
+                message: "imported traces cannot create Eval Lab cases",
             });
         }
         if trace.input.trim() != request.query.trim() {

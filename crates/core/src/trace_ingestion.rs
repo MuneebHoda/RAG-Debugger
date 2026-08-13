@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
@@ -243,16 +244,40 @@ pub struct ImportedTraceUpsertResult {
     pub disposition: TraceIngestionDisposition,
 }
 
-pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Trace, &'static str> {
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum TraceMergeError {
+    ExistingNotImported,
+    IncomingNotImported,
+    IdentityImmutable,
+    InvalidStoredMapperVersion,
+    InvalidIncomingMapperVersion,
+}
+
+impl fmt::Display for TraceMergeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::ExistingNotImported => "existing trace is not imported",
+            Self::IncomingNotImported => "incoming trace is not imported",
+            Self::IdentityImmutable => "import identity, schema, and privacy mode are immutable",
+            Self::InvalidStoredMapperVersion => "stored mapper version is invalid",
+            Self::InvalidIncomingMapperVersion => "incoming mapper version is invalid",
+        })
+    }
+}
+
+pub fn merge_imported_trace(
+    existing: &Trace,
+    mut incoming: Trace,
+) -> Result<Trace, TraceMergeError> {
     let incoming_had_diagnosis = incoming.diagnosis.is_some();
     let old = existing
         .ingestion
         .as_ref()
-        .ok_or("existing trace is not imported")?;
+        .ok_or(TraceMergeError::ExistingNotImported)?;
     let new = incoming
         .ingestion
         .as_mut()
-        .ok_or("incoming trace is not imported")?;
+        .ok_or(TraceMergeError::IncomingNotImported)?;
     let incoming_status_signal = new.status_supplied
         || !new.known_failure_labels.is_empty()
         || new.evaluation_passed == Some(false)
@@ -265,16 +290,16 @@ pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Tra
         || old.schema_version != new.schema_version
         || old.privacy_mode != new.privacy_mode
     {
-        return Err("import identity, schema, and privacy mode are immutable");
+        return Err(TraceMergeError::IdentityImmutable);
     }
     let old_mapper = old
         .mapper_version
         .parse::<u32>()
-        .map_err(|_| "stored mapper version is invalid")?;
+        .map_err(|_| TraceMergeError::InvalidStoredMapperVersion)?;
     let incoming_mapper = new
         .mapper_version
         .parse::<u32>()
-        .map_err(|_| "incoming mapper version is invalid")?;
+        .map_err(|_| TraceMergeError::InvalidIncomingMapperVersion)?;
     if incoming_mapper < old_mapper {
         new.mapper_version.clone_from(&old.mapper_version);
     }
@@ -353,6 +378,11 @@ pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Tra
             .map(|value| (value.external_chunk_id.clone(), value)),
     );
     new.evidence = evidence.into_values().collect();
+    new.evidence.sort_by(|left, right| {
+        left.rank
+            .cmp(&right.rank)
+            .then_with(|| left.external_chunk_id.cmp(&right.external_chunk_id))
+    });
 
     let mut spans = old
         .spans
@@ -366,6 +396,11 @@ pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Tra
             .map(|value| (value.external_span_id.clone(), value)),
     );
     new.spans = spans.into_values().collect();
+    new.spans.sort_by(|left, right| {
+        left.started_at
+            .cmp(&right.started_at)
+            .then_with(|| left.external_span_id.cmp(&right.external_span_id))
+    });
 
     match new.privacy_mode {
         TraceIngestionPrivacyMode::MetadataOnly => {

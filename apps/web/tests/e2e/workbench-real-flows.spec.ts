@@ -279,9 +279,14 @@ test("ingests privacy-scoped external traces through Debugger and permitted repo
     ),
   });
   await page.getByRole("button", { name: "Ingest files" }).click();
+  await expect(
+    page.getByRole("link").filter({
+      hasText: `collector-guide-${suffix}.md`,
+    }),
+  ).toBeVisible();
   await page.goto("/app/retrieval");
   await page.getByText("Advanced", { exact: true }).click();
-  await page.getByRole("button", { name: "Index" }).click();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
   await expect(page.getByText(/indexed · local-hash-v1/i)).toBeVisible();
 
   const projectResponse = await page.request.get(`${apiUrl}/projects/current`);

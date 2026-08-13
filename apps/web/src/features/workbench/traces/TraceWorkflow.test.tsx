@@ -376,6 +376,22 @@ describe("guided run workflow", () => {
     expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
   });
 
+  it("explains imported and queryless Eval restrictions separately", () => {
+    const imported = importedTrace();
+    imported.ingestion!.privacy_mode = "metadata_only";
+    const view = render(<SaveToQualityPanel trace={imported} />);
+
+    expect(
+      screen.getByText(/this imported trace cannot become an Eval Lab case/i),
+    ).toBeInTheDocument();
+
+    view.rerender(<SaveToQualityPanel trace={{ ...trace, input: "" }} />);
+    expect(
+      screen.getByText(/this trace has no retained query/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/imported trace/i)).not.toBeInTheDocument();
+  });
+
   it("keeps legacy traces readable when structured diagnosis is absent", async () => {
     vi.stubGlobal(
       "fetch",
@@ -414,6 +430,7 @@ describe("guided run workflow", () => {
     expect(screen.getByText("external-otel-1")).toBeInTheDocument();
     expect(screen.getByText("collector-demo · 1.2.3")).toBeInTheDocument();
     expect(screen.getByText("demo.tracer · 1.0")).toBeInTheDocument();
+    expect(screen.queryByText("0 ms")).not.toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
         name: /query withheld by privacy policy/i,

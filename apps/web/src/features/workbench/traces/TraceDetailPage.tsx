@@ -84,9 +84,11 @@ export function TraceDetailPage() {
                 trace.retrieval?.run.retrieval_mode ??
                 "unknown"}
             </WorkbenchStatusPill>
-            <WorkbenchStatusPill tone="neutral">
-              {trace.retrieval?.run.latency_ms ?? 0} ms
-            </WorkbenchStatusPill>
+            {trace.retrieval ? (
+              <WorkbenchStatusPill tone="neutral">
+                {trace.retrieval.run.latency_ms} ms
+              </WorkbenchStatusPill>
+            ) : null}
           </>
         }
         section={trace.ingestion ? "Imported RAG trace" : "Saved retrieval run"}

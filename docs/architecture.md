@@ -53,6 +53,9 @@ Current ingestion APIs:
 - `GET /api/v1/api-keys`
 - `POST /api/v1/api-keys`
 - `DELETE /api/v1/api-keys/:api_key_id`
+- `GET /api/v1/projects/current`
+- `POST /api/v1/traces/ingest`
+- `POST /api/v1/otel/v1/traces`
 - `POST /api/v1/sources/files`
 - `GET /api/v1/sources`
 - `GET /api/v1/documents/:document_id/chunks`

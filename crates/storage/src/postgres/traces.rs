@@ -212,8 +212,12 @@ impl PostgresStore {
         .transpose()?;
 
         let (saved, disposition) = if let Some(existing) = existing {
-            let merged = merge_imported_trace(&existing, trace)
-                .map_err(|message| StorageError::Conflict(message.to_owned()))?;
+            let merged = merge_imported_trace(&existing, trace).map_err(|error| match error {
+                rag_debugger_core::TraceMergeError::IdentityImmutable => {
+                    StorageError::Conflict(error.to_string())
+                }
+                _ => StorageError::InvalidData(error.to_string()),
+            })?;
             let disposition = if merged == existing {
                 TraceIngestionDisposition::Unchanged
             } else {
@@ -232,13 +236,14 @@ impl PostgresStore {
             .and_then(|end| {
                 (end - saved.started_at)
                     .whole_milliseconds()
+                    .max(0)
                     .try_into()
                     .ok()
             })
             .unwrap_or(0_i64);
         let now = OffsetDateTime::now_utc();
 
-        sqlx::query(
+        let result = sqlx::query(
             "INSERT INTO debug_traces (
                 id, workspace_id, project_id, source_run_id, query, retrieval_mode, summary, status,
                 evidence_strength, failure_labels, span_count, rerun_count, latency_ms,
@@ -253,7 +258,11 @@ impl PostgresStore {
                 span_count=EXCLUDED.span_count, latency_ms=EXCLUDED.latency_ms,
                 trace_json=EXCLUDED.trace_json, updated_at=EXCLUDED.updated_at,
                 ingestion_mapper_version=EXCLUDED.ingestion_mapper_version,
-                ingestion_mapping_status=EXCLUDED.ingestion_mapping_status",
+                ingestion_mapping_status=EXCLUDED.ingestion_mapping_status
+             WHERE debug_traces.workspace_id=EXCLUDED.workspace_id
+               AND debug_traces.project_id=EXCLUDED.project_id
+               AND debug_traces.ingestion_source=EXCLUDED.ingestion_source
+               AND debug_traces.external_trace_id=EXCLUDED.external_trace_id",
         )
         .bind(saved.id.0)
         .bind(workspace_id.0)
@@ -277,6 +286,9 @@ impl PostgresStore {
         .bind(metadata.privacy_mode.as_str())
         .execute(&mut *transaction)
         .await?;
+        if result.rows_affected() == 0 {
+            return Err(StorageError::NotFound);
+        }
         transaction.commit().await?;
         Ok(ImportedTraceUpsertResult {
             trace: saved,
