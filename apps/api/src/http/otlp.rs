@@ -244,6 +244,7 @@ fn map_trace(
     let mut stripped_content = false;
     let mut unsupported_operation = false;
     let mut unsupported_span_kind = false;
+    let mut unsupported_document_score = false;
 
     for span in spans {
         if span.attributes.len() > 64 || span.events.len() > 32 || span.links.len() > 32 {
@@ -366,9 +367,11 @@ fn map_trace(
         )? {
             let rank = checked_u32_attr(&attributes, &["corpuslab.evidence.rank"], 1, 100)?
                 .unwrap_or(evidence.len() as u32 + 1);
-            let score =
-                checked_score_attr(&attributes, &["corpuslab.evidence.score", "document.score"])?
-                    .unwrap_or(0.0);
+            let (document_score, unsupported) = optional_document_score_attr(&attributes);
+            unsupported_document_score |= unsupported;
+            let score = checked_score_attr(&attributes, &["corpuslab.evidence.score"])?
+                .or(document_score)
+                .unwrap_or(0.0);
             evidence.insert(
                 external_chunk_id.clone(),
                 ImportedEvidence {
@@ -487,6 +490,11 @@ fn map_trace(
             metadata
                 .limitations
                 .push("unsupported_span_kind".to_owned());
+        }
+        if unsupported_document_score {
+            metadata
+                .limitations
+                .push("document_score_not_mapped".to_owned());
         }
         metadata.limitations.sort();
         metadata.limitations.dedup();
@@ -773,6 +781,17 @@ fn checked_score_attr(
     }
     .ok_or("invalid_numeric_attribute")?;
     Ok(Some(value))
+}
+
+fn optional_document_score_attr(values: &HashMap<String, Primitive>) -> (Option<f32>, bool) {
+    match values.get("document.score") {
+        None => (None, false),
+        Some(Primitive::Double(value)) if value.is_finite() && (0.0..=1.0).contains(value) => {
+            (Some(*value as f32), false)
+        }
+        Some(Primitive::Int(value)) if (0..=1).contains(value) => (Some(*value as f32), false),
+        Some(_) => (None, true),
+    }
 }
 
 fn bool_attr(values: &HashMap<String, Primitive>, keys: &[&str]) -> Option<bool> {
@@ -1191,6 +1210,57 @@ mod tests {
         assert_eq!(batch.rejected_spans, 1);
         assert_eq!(
             batch.rejection_reasons.get("invalid_identifier_attribute"),
+            Some(&1)
+        );
+    }
+
+    #[test]
+    fn unsupported_third_party_document_score_is_partially_mapped() {
+        let mut retrieval = span(vec![7; 16], vec![1; 8], Vec::new(), "retrieval");
+        retrieval.attributes.extend([
+            string_attribute("document.id", "chunk-7"),
+            int_attribute("corpuslab.evidence.rank", 1),
+            double_attribute("document.score", 42.0),
+        ]);
+
+        let batch = decode_and_map(
+            &export(vec![retrieval]).encode_to_vec(),
+            &project(),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("map unsupported optional score");
+        let metadata = batch.traces[0].ingestion.as_ref().expect("ingestion");
+
+        assert_eq!(metadata.evidence[0].score, 0.0);
+        assert_eq!(metadata.mapping_status, TraceMappingStatus::PartiallyMapped);
+        assert!(metadata
+            .limitations
+            .iter()
+            .any(|value| value == "document_score_not_mapped"));
+    }
+
+    #[test]
+    fn corpuslab_evidence_score_remains_strict() {
+        let mut retrieval = span(vec![8; 16], vec![1; 8], Vec::new(), "retrieval");
+        retrieval.attributes.extend([
+            string_attribute("document.id", "chunk-8"),
+            int_attribute("corpuslab.evidence.rank", 1),
+            double_attribute("corpuslab.evidence.score", 1.1),
+            double_attribute("document.score", 0.8),
+        ]);
+
+        let batch = decode_and_map(
+            &export(vec![retrieval]).encode_to_vec(),
+            &project(),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("decode invalid strict score");
+
+        assert!(batch.traces.is_empty());
+        assert_eq!(
+            batch.rejection_reasons.get("invalid_numeric_attribute"),
             Some(&1)
         );
     }

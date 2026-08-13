@@ -1,5 +1,6 @@
 use axum::{
     extract::{Extension, Path, State},
+    http::StatusCode,
     Json,
 };
 use rag_debugger_core::{
@@ -107,6 +108,13 @@ pub async fn rerun_trace(
         .get_trace_detail(user.workspace.id, rag_debugger_core::TraceId(trace_id))
         .await
         .map_err(trace_storage_error)?;
+    if trace.ingestion.is_some() {
+        return Err(ApiError::Coded {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "imported_trace_rerun_not_permitted",
+            message: "imported traces cannot be rerun against the local corpus",
+        });
+    }
     let mut trace = rag_debugger_rag::tracing::ensure_trace_diagnosis(
         trace,
         &state.config().product.retrieval,

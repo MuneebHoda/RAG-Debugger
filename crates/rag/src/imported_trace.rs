@@ -455,10 +455,13 @@ fn synthetic_response(trace: &Trace, metadata: &TraceIngestionMetadata) -> Retri
         .evidence
         .iter()
         .map(|evidence| {
-            let document_id = DocumentId(correlation_uuid(
-                &metadata.external_trace_id,
-                evidence.document_label.as_deref().unwrap_or("document"),
-            ));
+            let document_id = DocumentId(match evidence.document_label.as_deref() {
+                Some(label) => correlation_uuid(&metadata.external_trace_id, label),
+                None => correlation_uuid(
+                    &metadata.external_trace_id,
+                    &format!("chunk:{}", evidence.external_chunk_id),
+                ),
+            });
             let chunk_id = ChunkId(correlation_uuid(
                 &metadata.external_trace_id,
                 &evidence.external_chunk_id,
@@ -1002,6 +1005,57 @@ mod tests {
                 .map(|value| value.external_span_id.as_str())
                 .collect::<Vec<_>>(),
             vec!["span-a", "span-z"]
+        );
+    }
+
+    #[test]
+    fn incremental_import_rejects_a_rank_owned_by_another_chunk() {
+        let project = project(PrivacyMode::LocalOnly);
+        let existing = build_native_trace(
+            &project,
+            request(TraceIngestionPrivacyMode::FullLocalOnly),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("initial import");
+        let mut conflicting = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        conflicting.retrieved_evidence[0].external_chunk_id = "chunk-2".to_owned();
+        let conflicting = build_native_trace(
+            &project,
+            conflicting,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("individually valid retry");
+
+        assert_eq!(
+            merge_imported_trace(&existing, conflicting),
+            Err(TraceMergeError::DuplicateEvidenceRank)
+        );
+    }
+
+    #[test]
+    fn evidence_without_document_labels_gets_distinct_stable_document_ids() {
+        let project = project(PrivacyMode::LocalOnly);
+        let mut request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        request.retrieved_evidence[0].document_label = None;
+        let mut second = request.retrieved_evidence[0].clone();
+        second.external_chunk_id = "chunk-2".to_owned();
+        second.rank = 2;
+        request.retrieved_evidence.push(second);
+        let trace = build_native_trace(
+            &project,
+            request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("valid import without document labels");
+        let response = synthetic_response(&trace, trace.ingestion.as_ref().expect("ingestion"));
+
+        assert_ne!(response.hits[0].document.id, response.hits[1].document.id);
+        assert_eq!(
+            response.hits[0].document.id,
+            DocumentId(correlation_uuid("trace-1", "chunk:chunk-1"))
         );
     }
 

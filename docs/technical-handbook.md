@@ -71,6 +71,7 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `POST /api/v1/auth/logout`: revoke the current session.
 - `GET /api/v1/auth/me`: return the authenticated user, organization, workspace, and role.
 - `GET /api/v1/workspaces/current`: return the active workspace context.
+- `GET /api/v1/projects/current`: return the workspace-owned default project used by local ingestion.
 - `GET /api/v1/api-keys`: list workspace API keys without secrets.
 - `POST /api/v1/api-keys`: create a workspace API key and return the one-time `clab_...` secret.
 - `DELETE /api/v1/api-keys/:api_key_id`: revoke an API key.
@@ -82,6 +83,8 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `POST /api/v1/retrieval/query`: lexical, vector, or hybrid retrieval with evidence summary and citations.
 - `GET /api/v1/traces`: recent trace summaries.
 - `GET /api/v1/traces/:trace_id`: full trace timeline.
+- `POST /api/v1/traces/ingest`: ingest a versioned native JSON trace through session or scoped API-key authentication.
+- `POST /api/v1/otel/v1/traces`: ingest OTLP/HTTP protobuf traces through a scoped API key and explicit project header.
 - `POST /api/v1/traces/from-retrieval-run`: save a retrieval run as a trace.
 - `POST /api/v1/traces/:trace_id/rerun`: rerun a trace with changed retrieval settings.
 - `GET /api/v1/retrieval/evals`: saved eval cases.
@@ -435,6 +438,6 @@ The goal is not just faster retrieval. The goal is explainable retrieval quality
 
 ## External Trace Ingestion
 
-`POST /api/v1/traces/ingest` accepts the versioned native JSON contract. `POST /api/v1/otel/v1/traces` accepts authenticated OTLP/HTTP protobuf, groups spans by trace ID, reconstructs parents, deduplicates retries, and returns standard partial success. Generated OTLP types stop at the Axum boundary; core, RAG, storage, and UI remain protocol-independent.
+`POST /api/v1/traces/ingest` accepts the versioned native JSON contract. Its external trace, chunk, and span identifiers are bounded caller-defined ASCII correlation IDs. `POST /api/v1/otel/v1/traces` accepts authenticated OTLP/HTTP protobuf, validates fixed 16-byte trace and 8-byte span identifiers, groups spans by trace ID, reconstructs parents, deduplicates retries, and returns standard partial success. Generated OTLP types stop at the Axum boundary; core, RAG, storage, and UI remain protocol-independent.
 
 Workspace identity comes from a session or `trace_ingest` key and the explicit project is verified inside it. Privacy filtering precedes all storage and secondary use. Native metadata strips all content, snippets mode retains only explicitly supplied bounded evidence snippets, and full-local mode can retain local detail within project policy; OTLP is metadata-only in v1. Original span names are retained only for full-local imports, while other modes show a canonical operation label and limitation; protocol-independent span kind and parentage remain visible. Metadata/snippet imports cannot enter Eval Lab because no query is retained. Full-local native imports may create local Eval cases after an authenticated source lookup, exact query match, and user selection of workspace-authorized CorpusLab evidence. Server-derived provenance is stored on the case and experiment results; affected datasets are rejected from CI and affected experiments are rejected from reports. Imported status is derived monotonically from explicit status, evaluation result, span status, failure labels, and mapping state. Report modes cannot exceed import privacy, and full-local imports cannot create reports.

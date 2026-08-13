@@ -24,15 +24,24 @@ async fn postgres_trace_ingestion_repository_contract() {
     let pool = sqlx::PgPool::connect(&database_url)
         .await
         .expect("connect verification pool");
-    let versions: (String, String) = sqlx::query_as(
-        "SELECT ingestion_mapper_version, trace_json->'ingestion'->>'mapper_version' \
+    let persisted: (String, String, OffsetDateTime, i32, i64) = sqlx::query_as(
+        "SELECT ingestion_mapper_version, trace_json->'ingestion'->>'mapper_version', \
+                created_at, rerun_count, \
+                (SELECT COUNT(*) FROM trace_rerun_experiments WHERE trace_id = debug_traces.id) \
          FROM debug_traces WHERE id = $1",
     )
     .bind(trace_id.0)
     .fetch_one(&pool)
     .await
     .expect("read persisted mapper versions");
-    assert_eq!(versions, ("2".to_owned(), "2".to_owned()));
+    assert_eq!(persisted.0, "2");
+    assert_eq!(persisted.1, "2");
+    assert_eq!(
+        persisted.2,
+        OffsetDateTime::from_unix_timestamp(1_699_996_400).expect("valid merged timestamp")
+    );
+    assert_eq!(persisted.3, 1);
+    assert_eq!(persisted.4, 1);
 }
 
 async fn run_contract<R>(repository: &R) -> TraceId
@@ -46,6 +55,10 @@ where
         .await
         .expect("first project");
     let mut first = imported_trace(project.id, "external-1", "span-1");
+    let first_started_at =
+        OffsetDateTime::from_unix_timestamp(1_700_000_000).expect("valid first timestamp");
+    first.started_at = first_started_at;
+    first.completed_at = Some(first_started_at);
     let first_metadata = first.ingestion.as_mut().expect("first metadata");
     first_metadata.spans[0].parent_span_id = Some("span-2".to_owned());
     first_metadata
@@ -64,6 +77,10 @@ where
     assert_eq!(unchanged.disposition, TraceIngestionDisposition::Unchanged);
 
     let second = imported_trace(project.id, "external-1", "span-2");
+    let second_started_at = first_started_at - time::Duration::hours(1);
+    let mut second = second;
+    second.started_at = second_started_at;
+    second.completed_at = Some(first_started_at + time::Duration::seconds(1));
     let updated = repository
         .upsert_imported_trace(first_workspace, second)
         .await
@@ -75,6 +92,7 @@ where
         .limitations
         .iter()
         .any(|value| value == "orphan_parent_span"));
+    assert_eq!(updated.trace.started_at, second_started_at);
 
     let mut mapper_advance = imported_trace(project.id, "external-1", "span-2");
     let mapper_metadata = mapper_advance.ingestion.as_mut().expect("mapper metadata");
@@ -102,16 +120,25 @@ where
             .operation,
         ImportedSpanOperation::Generation
     );
+    let mut with_rerun = advanced.trace.clone();
+    with_rerun.reruns.push(rerun_comparison());
+    repository
+        .save_trace(first_workspace, with_rerun)
+        .await
+        .expect("save imported trace rerun history");
     let unchanged = repository
         .upsert_imported_trace(first_workspace, mapper_advance)
         .await
         .expect("idempotent mapper retry");
     assert_eq!(unchanged.disposition, TraceIngestionDisposition::Unchanged);
+    assert_eq!(unchanged.trace.reruns.len(), 1);
     let summaries = repository
         .list_traces(first_workspace)
         .await
         .expect("list imported traces");
     assert_eq!(summaries[0].span_count, 2);
+    assert_eq!(summaries[0].rerun_count, 1);
+    assert_eq!(summaries[0].created_at, second_started_at);
     assert_eq!(
         summaries[0].ingestion_source,
         Some(TraceIngestionSource::Native)
@@ -163,6 +190,16 @@ where
             .await,
         Err(StorageError::NotFound)
     ));
+
+    let mut same_workspace_collision =
+        imported_trace(project.id, "external-collision", "span-collision");
+    same_workspace_collision.id = created.trace.id;
+    assert!(matches!(
+        repository
+            .upsert_imported_trace(first_workspace, same_workspace_collision)
+            .await,
+        Err(StorageError::Conflict(_))
+    ));
     assert!(matches!(
         repository
             .get_trace_detail(second_workspace, created.trace.id)
@@ -194,6 +231,31 @@ where
             .external_trace_id,
         "external-1"
     );
+
+    let mut ranked = imported_trace(project.id, "external-1", "span-2");
+    ranked.ingestion.as_mut().expect("ranked metadata").evidence = vec![evidence("chunk-1", 1)];
+    repository
+        .upsert_imported_trace(first_workspace, ranked.clone())
+        .await
+        .expect("add ranked evidence");
+    repository
+        .upsert_imported_trace(first_workspace, ranked)
+        .await
+        .expect("identical ranked evidence retry");
+    let mut rank_conflict = imported_trace(project.id, "external-1", "span-2");
+    rank_conflict
+        .ingestion
+        .as_mut()
+        .expect("conflicting metadata")
+        .evidence = vec![evidence("chunk-2", 1)];
+    assert!(matches!(
+        repository
+            .upsert_imported_trace(first_workspace, rank_conflict)
+            .await,
+        Err(StorageError::TraceMerge(
+            TraceMergeError::DuplicateEvidenceRank
+        ))
+    ));
     created.trace.id
 }
 
@@ -293,5 +355,68 @@ fn imported_trace(project_id: ProjectId, external_trace_id: &str, span_id: &str)
             evaluation_label: None,
             timestamps_supplied: true,
         }),
+    }
+}
+
+fn rerun_comparison() -> TraceRerunComparison {
+    let created_at =
+        OffsetDateTime::from_unix_timestamp(1_700_000_100).expect("valid rerun timestamp");
+    let response = RetrievalQueryResponse {
+        run: RetrievalQueryRun {
+            id: RetrievalQueryRunId(Uuid::now_v7()),
+            query: "rerun".to_owned(),
+            top_k: 1,
+            retrieval_mode: RetrievalMode::Hybrid,
+            latency_ms: 1,
+            created_at,
+        },
+        answer: ExtractiveAnswer {
+            status: ExtractiveAnswerStatus::InsufficientEvidence,
+            text: "Insufficient evidence.".to_owned(),
+            citations: Vec::new(),
+        },
+        hits: Vec::new(),
+        embedding_status: RetrievalEmbeddingStatus {
+            readiness: RetrievalEmbeddingReadiness::NotRequired,
+            required: false,
+            model: EmbeddingModelInfo::default(),
+            total_chunks: 0,
+            indexed_chunks: 0,
+            missing_chunks: 0,
+            stale_chunks: 0,
+        },
+        diagnosis: None,
+    };
+    TraceRerunComparison {
+        id: TraceRerunId(Uuid::now_v7()),
+        request: RetrievalQueryRequest {
+            query: response.run.query.clone(),
+            top_k: 1,
+            retrieval_mode: RetrievalMode::Hybrid,
+            source_ids: Vec::new(),
+            document_ids: Vec::new(),
+        },
+        response,
+        score_delta: 0.0,
+        latency_delta_ms: 0,
+        overlap_count: 0,
+        changed_rank_count: 0,
+        diagnosis: None,
+        created_at,
+    }
+}
+
+fn evidence(external_chunk_id: &str, rank: u32) -> ImportedEvidence {
+    ImportedEvidence {
+        external_chunk_id: external_chunk_id.to_owned(),
+        document_label: None,
+        rank,
+        score: 0.5,
+        lexical_score: None,
+        semantic_score: None,
+        citation_label: None,
+        snippet: None,
+        answer_support_status: AnswerSupportStatus::Unassessed,
+        answer_support_reason: AnswerSupportReason::Unassessed,
     }
 }

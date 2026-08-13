@@ -19,6 +19,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 ### Added
 
 - Workspace-scoped native and OTLP/HTTP protobuf trace ingestion with idempotent span merging, deterministic monotonic status, pre-persistence privacy enforcement, privacy-safe span names and kinds, imported Trace Debugger views, privacy-provenance-preserving full-local Eval conversion, permitted audit reports, and local SDK and Collector examples.
+- Hardened imported-trace retries with unique aggregate evidence ranks, preserved rerun history and timestamps, server-side rerun rejection, strict CorpusLab scores with partial third-party score mapping, collision-aware errors, complete ingestion metadata constraints, and isolated log-redaction coverage.
 - Complete CI release-gate workflow with explicit hashed-key onboarding, privacy-safe GitHub Actions summaries, persisted Eval Lab v2 regression context, focused failed-run diagnosis, and metadata-only audit-report creation.
 - Repository governance baseline with rendered-Markdown exact-link issue-policy validation, private security-reporting and containment guidance, actionable bug and feature forms, explicit CODEOWNERS coverage, and clean-worktree exact-commit release verification.
 - Advisory CodeRabbit reviews for ready pull requests with repository-owned settings, high-level summaries, nonblocking status, disabled code-generation finishing touches, and a documented external engineering-data boundary.

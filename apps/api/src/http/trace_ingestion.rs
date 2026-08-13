@@ -295,6 +295,13 @@ fn import_storage_error(error: rag_debugger_storage::StorageError) -> ApiError {
             "project_not_found",
             "project was not found",
         ),
+        rag_debugger_storage::StorageError::TraceMerge(
+            rag_debugger_core::TraceMergeError::DuplicateEvidenceRank,
+        ) => coded(
+            StatusCode::CONFLICT,
+            "evidence_rank_conflict",
+            "incremental trace evidence conflicts with an existing rank",
+        ),
         other => ApiError::Storage(other),
     }
 }
@@ -422,6 +429,9 @@ async fn ingest_otlp_inner(
                 rag_debugger_storage::StorageError::Conflict(_) => {
                     OtlpRejection::new(StatusCode::CONFLICT, "import_identity_conflict")
                 }
+                rag_debugger_storage::StorageError::TraceMerge(
+                    rag_debugger_core::TraceMergeError::DuplicateEvidenceRank,
+                ) => OtlpRejection::new(StatusCode::CONFLICT, "evidence_rank_conflict"),
                 _ => OtlpRejection::new(StatusCode::INTERNAL_SERVER_ERROR, "storage_error"),
             })?;
     }
@@ -527,4 +537,31 @@ pub(crate) fn project_id_header(headers: &HeaderMap) -> Result<ProjectId, ApiErr
             "project ID is invalid",
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imported_identity_collisions_have_a_distinct_conflict_response() {
+        assert!(matches!(
+            import_storage_error(rag_debugger_storage::StorageError::Conflict(
+                "same-workspace collision".to_owned()
+            )),
+            ApiError::Coded {
+                status: StatusCode::CONFLICT,
+                code: "import_identity_conflict",
+                ..
+            }
+        ));
+        assert!(matches!(
+            import_storage_error(rag_debugger_storage::StorageError::NotFound),
+            ApiError::Coded {
+                status: StatusCode::NOT_FOUND,
+                code: "project_not_found",
+                ..
+            }
+        ));
+    }
 }

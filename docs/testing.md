@@ -170,4 +170,4 @@ just docs-pdf
 
 ## Trace Ingestion
 
-Trace ingestion has pure privacy/validation and OTLP mapper tests, Axum native/protobuf integration tests, and a shared memory/PostgreSQL repository contract. Run the hermetic protobuf path with `just trace-ingestion-smoke`; `just ci-check` runs the PostgreSQL variant after migrations.
+Trace ingestion has pure privacy/validation and OTLP mapper tests, Axum native/protobuf integration tests, and a shared memory/PostgreSQL repository contract. The process-global log-capture regression lives in its own integration-test binary so parallel ingestion tests cannot replace or inherit its subscriber. Run the hermetic protobuf path with `just trace-ingestion-smoke`; `just ci-check` runs the PostgreSQL variant after migrations.

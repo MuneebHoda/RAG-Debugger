@@ -211,12 +211,30 @@ impl PostgresStore {
         .map(|row| trace_from_row(&row))
         .transpose()?;
 
+        if existing.is_none() {
+            if let Some(same_workspace) = sqlx::query_scalar::<_, bool>(
+                "SELECT COALESCE(workspace_id = $2, FALSE) FROM debug_traces WHERE id = $1",
+            )
+            .bind(trace.id.0)
+            .bind(workspace_id.0)
+            .fetch_optional(&mut *transaction)
+            .await?
+            {
+                if !same_workspace {
+                    return Err(StorageError::NotFound);
+                }
+                return Err(StorageError::Conflict(
+                    "trace ID is already assigned to another trace identity".to_owned(),
+                ));
+            }
+        }
+
         let (saved, disposition) = if let Some(existing) = existing {
             let merged = merge_imported_trace(&existing, trace).map_err(|error| match error {
                 rag_debugger_core::TraceMergeError::IdentityImmutable => {
                     StorageError::Conflict(error.to_string())
                 }
-                _ => StorageError::InvalidData(error.to_string()),
+                _ => StorageError::TraceMerge(error),
             })?;
             let disposition = if merged == existing {
                 TraceIngestionDisposition::Unchanged
@@ -250,13 +268,14 @@ impl PostgresStore {
                 trace_json, created_at, updated_at, ingestion_source, external_trace_id,
                 ingestion_schema_version, ingestion_mapper_version, ingestion_mapping_status,
                 ingestion_privacy_mode
-             ) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,0,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+             ) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
              ON CONFLICT (id) DO UPDATE SET
                 query=EXCLUDED.query, retrieval_mode=EXCLUDED.retrieval_mode,
                 summary=EXCLUDED.summary, status=EXCLUDED.status,
                 evidence_strength=EXCLUDED.evidence_strength, failure_labels=EXCLUDED.failure_labels,
-                span_count=EXCLUDED.span_count, latency_ms=EXCLUDED.latency_ms,
-                trace_json=EXCLUDED.trace_json, updated_at=EXCLUDED.updated_at,
+                span_count=EXCLUDED.span_count, rerun_count=EXCLUDED.rerun_count,
+                latency_ms=EXCLUDED.latency_ms, trace_json=EXCLUDED.trace_json,
+                created_at=EXCLUDED.created_at, updated_at=EXCLUDED.updated_at,
                 ingestion_mapper_version=EXCLUDED.ingestion_mapper_version,
                 ingestion_mapping_status=EXCLUDED.ingestion_mapping_status
              WHERE debug_traces.workspace_id=EXCLUDED.workspace_id
@@ -274,6 +293,7 @@ impl PostgresStore {
         .bind(evidence_strength_to_str(saved.evidence_strength.unwrap_or(EvidenceStrength::Weak)))
         .bind(failure_labels_to_text(&saved.failure_labels))
         .bind(metadata.spans.len() as i32)
+        .bind(saved.reruns.len() as i32)
         .bind(latency_ms)
         .bind(Json(&saved))
         .bind(saved.started_at)

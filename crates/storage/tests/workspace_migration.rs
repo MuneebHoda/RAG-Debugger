@@ -63,6 +63,17 @@ async fn run_single_workspace_backfill(database_url: &str) {
         trace_owner(&database.pool, trace_id).await,
         Some(workspace_id)
     );
+    let partial_ingestion =
+        sqlx::query("UPDATE debug_traces SET ingestion_mapper_version = '1' WHERE id = $1")
+            .bind(trace_id)
+            .execute(&database.pool)
+            .await
+            .expect_err("partially populated ingestion identity must be rejected");
+    assert!(matches!(
+        partial_ingestion,
+        sqlx::Error::Database(ref error)
+            if error.constraint() == Some("debug_traces_ingestion_identity_check")
+    ));
 
     database.drop().await;
 }

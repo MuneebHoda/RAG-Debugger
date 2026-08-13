@@ -21,6 +21,8 @@ Send `POST /api/v1/traces/ingest` with `Content-Type: application/json`. A brows
 
 Schema version `1` requires `project_id`, `external_trace_id`, and `privacy_mode`. It accepts bounded query/prompt/answer fields, retrieval configuration, model labels, evidence, spans, known failure labels, evaluation state, timestamps, latency, and status. Unknown fields are rejected. The response reports the internal trace ID, `created`, `updated`, or `unchanged`, mapping status, accepted span count, and stable limitation codes.
 
+Native `external_trace_id`, evidence `external_chunk_id`, and span/parent IDs are caller-defined correlation IDs: 1–128 ASCII letters, digits, `-`, `_`, `.`, or `:`. OTLP IDs follow the protobuf contract instead: trace IDs are exactly 16 nonzero bytes and span/parent IDs are exactly 8 nonzero bytes; CorpusLab stores their lowercase hexadecimal form. These formats are not interchangeable validation rules.
+
 Stored status is derived deterministically. A failed span, failed evaluation, or explicit failed status makes the trace failed. Warning spans, failure labels, partial mapping, or an explicit warning make it at least warning. Completed is used only when no failure or warning signal exists, and retries cannot downgrade an existing aggregate status.
 
 ## Direct OTLP/HTTP export
@@ -62,6 +64,8 @@ Mapping precedence is `corpuslab.*`, OpenInference, then OpenTelemetry GenAI. Su
 
 Known content attributes—including query, prompt, completion, messages, document content, evidence snippets, exception messages, and stack traces—are discarded from OTLP imports. Unknown attributes are not persisted. OTLP span kind is retained as `internal`, `server`, `client`, `producer`, `consumer`, or `unspecified`. Because v1 OTLP is metadata-only, its original span name is treated as potentially content-bearing: Trace Debugger displays the canonical operation label instead and records `span_names_not_retained`. Unsupported operations remain visible as bounded `other` spans, and missing evidence produces `partially_mapped` rather than a false complete diagnosis.
 
+`corpuslab.evidence.score` is authoritative and must be finite within 0–1. An optional third-party `document.score` in that range may be mapped when no CorpusLab score exists. Unsupported third-party values are ignored without rejecting the trace and add the stable `document_score_not_mapped` limitation.
+
 ## Privacy and downstream use
 
 | Import mode        | Stored                                                                                  | Eval Lab                                                                | Reports                           |
@@ -76,6 +80,8 @@ Metadata and snippet imports cannot become Eval Lab cases because they retain no
 
 The project policy is an upper bound: `LocalOnly` permits all native modes, `ExplicitSnippetSync` permits metadata/snippets, and `RedactedCloudSync` permits metadata only. CorpusLab rejects attempts to exceed it rather than silently downgrading. Privacy mode and schema version are immutable for an imported identity; use a new external trace ID to change either. The internal mapper version may advance on an incremental delivery; memory and PostgreSQL update the serialized trace and relational mapper-version column together.
 
+Incremental evidence is keyed by external chunk ID: an identical retry replaces that same item, while different chunk IDs must retain unique ranks across the complete merged trace. A conflicting aggregate rank is rejected with `evidence_rank_conflict`; previously stored rerun history is never removed by an import retry. Imported traces are observational snapshots and the rerun API rejects them, including `full_local_only` imports, because only the originating application can reproduce the execution safely.
+
 ## Limits and partial success
 
 The request body limit is 1 MiB. Native requests allow 100 evidence records and 256 spans. OTLP allows 16 resource groups, 64 scope groups, 32 traces, 512 total spans, and 256 spans per trace. A span allows 64 attributes, 32 events, 32 links, and 32 attributes per event/link. Resource and scope limits are 32 and 16 attributes. Nested values stop at depth 8 and 32 entries. IDs are 128 characters; labels 256; document labels 512; raw attribute strings 4,096; query/prompt/answer 8,192; snippets 280. Top-k is 1–25, ranks 1–100, and scores must be finite within 0–1.
@@ -89,7 +95,7 @@ Request-wide authentication, project, content-type, encoding, decoding, or globa
 | Authentication and project  | `unauthorized`, `insufficient_scope`, `project_header_required`, `invalid_project_id`, `project_not_found`                                                                                                                                                          |
 | Transport and body          | `unsupported_content_type`, `unsupported_content_encoding`, `payload_limit_exceeded`, `malformed_json`, `malformed_protobuf`                                                                                                                                        |
 | Native validation           | `invalid_native_trace`, `unsupported_schema_version`, `privacy_mode_not_permitted`, `invalid_identifier`, `invalid_label`, `invalid_content`, `invalid_number`, `collection_limit_exceeded`, `duplicate_evidence_id`, `duplicate_span_id`, `invalid_span_hierarchy` |
-| Import identity and service | `import_identity_conflict`, `imported_trace_eval_not_permitted`, `trace_query_mismatch`, `imported_trace_query_immutable`, `full_local_eval_ci_not_permitted`, `full_local_eval_report_not_permitted`, `mapping_error`, `service_not_ready`, `storage_error`        |
+| Import identity and service | `import_identity_conflict`, `evidence_rank_conflict`, `imported_trace_rerun_not_permitted`, `imported_trace_eval_not_permitted`, `trace_query_mismatch`, `imported_trace_query_immutable`, `full_local_eval_ci_not_permitted`, `full_local_eval_report_not_permitted`, `mapping_error`, `service_not_ready`, `storage_error` |
 | OTLP global limits          | `resource_span_limit_exceeded`, `scope_span_limit_exceeded`, `span_limit_exceeded`, `trace_limit_exceeded`, `resource_attribute_limit_exceeded`, `scope_attribute_limit_exceeded`                                                                                   |
 
 Per-trace OTLP mapping failures are returned only as stable codes and counts in `partial_success.error_message`; they include invalid or conflicting IDs, timestamps, bounded numeric attributes, labels, nested attributes, hierarchy, and per-trace span limits. Error bodies and operational events never echo credentials, IDs, labels, or content.

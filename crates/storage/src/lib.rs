@@ -14,6 +14,8 @@ pub enum StorageError {
     Conflict(String),
     #[error("invalid stored data: {0}")]
     InvalidData(String),
+    #[error("trace merge failed: {0}")]
+    TraceMerge(#[from] rag_debugger_core::TraceMergeError),
     #[error("internal storage error: {0}")]
     Internal(String),
     #[error("storage operation is not implemented yet: {0}")]

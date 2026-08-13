@@ -251,6 +251,7 @@ pub enum TraceMergeError {
     IdentityImmutable,
     InvalidStoredMapperVersion,
     InvalidIncomingMapperVersion,
+    DuplicateEvidenceRank,
 }
 
 impl fmt::Display for TraceMergeError {
@@ -261,9 +262,12 @@ impl fmt::Display for TraceMergeError {
             Self::IdentityImmutable => "import identity, schema, and privacy mode are immutable",
             Self::InvalidStoredMapperVersion => "stored mapper version is invalid",
             Self::InvalidIncomingMapperVersion => "incoming mapper version is invalid",
+            Self::DuplicateEvidenceRank => "imported evidence ranks must be unique",
         })
     }
 }
+
+impl std::error::Error for TraceMergeError {}
 
 pub fn merge_imported_trace(
     existing: &Trace,
@@ -386,6 +390,13 @@ pub fn merge_imported_trace(
             .cmp(&right.rank)
             .then_with(|| left.external_chunk_id.cmp(&right.external_chunk_id))
     });
+    if new
+        .evidence
+        .windows(2)
+        .any(|pair| pair[0].rank == pair[1].rank)
+    {
+        return Err(TraceMergeError::DuplicateEvidenceRank);
+    }
 
     let mut spans = old
         .spans
@@ -501,6 +512,7 @@ pub fn merge_imported_trace(
         (incoming_status_was_supplied || incoming_had_diagnosis).then_some(incoming.status);
     let incoming_status = derive_imported_trace_status(new, incoming_explicit_or_diagnosed_status);
     incoming.status = worst_status(existing.status, incoming_status);
+    incoming.reruns.clone_from(&existing.reruns);
     if existing.status != incoming_premerge_status
         && worst_status(existing.status, incoming_premerge_status) == existing.status
     {
