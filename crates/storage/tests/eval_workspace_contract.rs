@@ -52,37 +52,66 @@ async fn postgres_eval_provenance_lock_blocks_concurrent_trace_mutation() {
         .upsert_imported_trace(workspace_id, trace.clone())
         .await
         .expect("save source trace");
+    let dataset = dataset("Provenance lock dataset");
+    store
+        .create_retrieval_eval_dataset(workspace_id, dataset.clone())
+        .await
+        .expect("create provenance lock dataset");
+    let mut imported_case = eval_case("Provenance lock case");
+    imported_case.query.clone_from(&trace.input);
+    imported_case.provenance = Some(RetrievalEvalCaseProvenance {
+        source_trace_id: trace.id,
+        source: TraceIngestionSource::Native,
+        privacy_mode: TraceIngestionPrivacyMode::FullLocalOnly,
+    });
 
-    let metadata = trace.ingestion.as_ref().expect("source metadata");
-    let mut validation = store.pool().begin().await.expect("validation transaction");
-    sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM debug_traces
-         WHERE id = $1 AND workspace_id = $2
-           AND ingestion_source = $3 AND ingestion_privacy_mode = $4
-           AND trace_json ->> 'input' = $5
-         FOR SHARE",
-    )
-    .bind(trace.id.0)
-    .bind(workspace_id.0)
-    .bind(metadata.source.as_str())
-    .bind(metadata.privacy_mode.as_str())
-    .bind(&trace.input)
-    .fetch_one(&mut *validation)
-    .await
-    .expect("lock matching source trace");
+    let mut blocker = store.pool().begin().await.expect("blocking transaction");
+    sqlx::query_scalar::<_, Uuid>("SELECT id FROM debug_traces WHERE id = $1 FOR UPDATE")
+        .bind(trace.id.0)
+        .fetch_one(&mut *blocker)
+        .await
+        .expect("hold source trace update lock");
+
+    let creator = store.clone();
+    let create = tokio::spawn(async move {
+        creator
+            .create_retrieval_eval_case_in_dataset(workspace_id, dataset.id, imported_case)
+            .await
+    });
+    let mut saw_validation_lock = false;
+    for _ in 0..100 {
+        saw_validation_lock = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (
+                 SELECT 1 FROM pg_stat_activity
+                 WHERE datname = current_database()
+                   AND wait_event_type = 'Lock'
+                   AND query LIKE 'SELECT id FROM debug_traces%'
+                   AND query LIKE '%FOR SHARE%'
+             )",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("inspect blocked validation query");
+        if saw_validation_lock {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(
+        saw_validation_lock,
+        "repository creation must validate provenance with a shared row lock"
+    );
 
     let mut changed = trace;
     changed.input = "changed after validation".to_owned();
     let writer = store.clone();
-    let mut update =
+    let update =
         tokio::spawn(async move { writer.upsert_imported_trace(workspace_id, changed).await });
-    assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(100), &mut update)
-            .await
-            .is_err(),
-        "source trace update must wait for provenance validation"
-    );
-    validation.commit().await.expect("commit validation lock");
+    blocker.commit().await.expect("release source trace lock");
+    create
+        .await
+        .expect("join Eval case creation")
+        .expect("create provenance-locked Eval case");
     update
         .await
         .expect("join source trace update")
