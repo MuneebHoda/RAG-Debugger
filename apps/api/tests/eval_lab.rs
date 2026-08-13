@@ -162,6 +162,83 @@ async fn eval_lab_manages_datasets_and_cases() {
 }
 
 #[tokio::test]
+async fn full_local_import_cannot_be_copied_into_eval_lab() {
+    let app = test_app().await;
+    let project = get_json(&app, "/api/v1/projects/current").await;
+    let upload = upload_text_file(&app, "safe-evidence.md", "Authorized local evidence.").await;
+    let chunk_id = upload["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("chunk id");
+    let dataset = create_dataset(&app, "Private import guard").await;
+    let dataset_id = dataset["id"].as_str().expect("dataset id");
+    let marker = "FULL_LOCAL_QUERY_MUST_NOT_ESCAPE";
+    let ingest = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/traces/ingest",
+            json!({
+                "schema_version": "1",
+                "project_id": project["id"],
+                "external_trace_id": "full-local-eval-guard",
+                "privacy_mode": "full_local_only",
+                "query": marker
+            }),
+        ))
+        .await
+        .expect("ingestion response");
+    assert_eq!(ingest.status(), StatusCode::CREATED);
+    let trace_id = json_body(ingest).await["trace_id"]
+        .as_str()
+        .expect("trace id")
+        .to_owned();
+
+    let inaccessible_trace = "00000000-0000-0000-0000-000000000099";
+    let inaccessible = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "safe query",
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": inaccessible_trace
+            }),
+        ))
+        .await
+        .expect("inaccessible source response");
+    assert_eq!(inaccessible.status(), StatusCode::NOT_FOUND);
+    assert!(!json_body(inaccessible)
+        .await
+        .to_string()
+        .contains(inaccessible_trace));
+
+    let response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": marker,
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": trace_id
+            }),
+        ))
+        .await
+        .expect("eval guard response");
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let error = json_body(response).await;
+    assert_eq!(error["error"]["code"], "full_local_eval_not_permitted");
+    assert!(!error.to_string().contains(marker));
+    assert!(
+        get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await["cases"]
+            .as_array()
+            .expect("cases")
+            .is_empty()
+    );
+}
+
+#[tokio::test]
 async fn evidence_lookup_separates_requested_items_from_bounded_candidates() {
     let app = test_app().await;
     let _alpha = upload_text_file(&app, "aaa-indexing.md", "Indexing candidate alpha.").await;

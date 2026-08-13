@@ -18,6 +18,7 @@ export function SaveEvidenceToEvalPanel({
   sourceNote,
   sourcePending = false,
   defaultOpen = false,
+  sourceTraceId,
 }: {
   sourceIdentity: string;
   query: string;
@@ -26,6 +27,7 @@ export function SaveEvidenceToEvalPanel({
   sourceNote: string;
   sourcePending?: boolean;
   defaultOpen?: boolean;
+  sourceTraceId?: string;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const lifecycle = useSaveEvidenceLifecycle({
@@ -35,6 +37,7 @@ export function SaveEvidenceToEvalPanel({
       query,
       topK,
       note: sourceNote,
+      traceId: sourceTraceId,
     },
     sourcePending,
   });

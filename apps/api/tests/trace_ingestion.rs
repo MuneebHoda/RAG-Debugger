@@ -11,6 +11,10 @@ use opentelemetry_proto::tonic::{
 };
 use prost::Message;
 use serde_json::{json, Value};
+use std::{
+    io::Write,
+    sync::{Arc, Mutex, OnceLock},
+};
 use tower::ServiceExt;
 
 #[tokio::test]
@@ -318,6 +322,120 @@ async fn trace_key_authorizes_protobuf_otlp_and_invalid_bearer_never_uses_sessio
 }
 
 #[tokio::test]
+async fn otlp_incremental_delivery_is_idempotent_and_reconstructs_hierarchy() {
+    let (router, secret, project_id) = otlp_test_context().await;
+    let trace_id = vec![11; 16];
+    let parent_id = vec![1; 8];
+    let child_id = vec![2; 8];
+    let mut child_request = otlp_request();
+    let child = &mut child_request.resource_spans[0].scope_spans[0].spans[0];
+    child.trace_id.clone_from(&trace_id);
+    child.span_id.clone_from(&child_id);
+    child.parent_span_id.clone_from(&parent_id);
+
+    send_otlp(&router, &secret, &project_id, &child_request).await;
+    send_otlp(&router, &secret, &project_id, &child_request).await;
+    let external_trace_id = hex::encode(&trace_id);
+    let detail = trace_by_external_id(&router, &external_trace_id).await;
+    assert_eq!(
+        detail["ingestion"]["spans"]
+            .as_array()
+            .expect("spans")
+            .len(),
+        1
+    );
+    assert!(detail["ingestion"]["limitations"]
+        .as_array()
+        .expect("limitations")
+        .iter()
+        .any(|value| value == "orphan_parent_span"));
+
+    let mut parent_request = otlp_request();
+    let parent = &mut parent_request.resource_spans[0].scope_spans[0].spans[0];
+    parent.trace_id.clone_from(&trace_id);
+    parent.span_id.clone_from(&parent_id);
+    parent.kind = opentelemetry_proto::tonic::trace::v1::span::SpanKind::Server as i32;
+    send_otlp(&router, &secret, &project_id, &parent_request).await;
+    let detail = trace_by_external_id(&router, &external_trace_id).await;
+    assert_eq!(
+        detail["ingestion"]["spans"]
+            .as_array()
+            .expect("spans")
+            .len(),
+        2
+    );
+    assert!(!detail["ingestion"]["limitations"]
+        .as_array()
+        .expect("limitations")
+        .iter()
+        .any(|value| value == "orphan_parent_span"));
+    assert_eq!(
+        detail["ingestion"]["spans"]
+            .as_array()
+            .expect("spans")
+            .iter()
+            .find(|span| span["external_span_id"] == hex::encode(&parent_id))
+            .expect("parent")["kind"],
+        "server"
+    );
+
+    let parent = &mut parent_request.resource_spans[0].scope_spans[0].spans[0];
+    parent.attributes[0] = attribute("corpuslab.operation", "generation");
+    parent.kind = opentelemetry_proto::tonic::trace::v1::span::SpanKind::Client as i32;
+    send_otlp(&router, &secret, &project_id, &parent_request).await;
+    let detail = trace_by_external_id(&router, &external_trace_id).await;
+    let parent = detail["ingestion"]["spans"]
+        .as_array()
+        .expect("spans")
+        .iter()
+        .find(|span| span["external_span_id"] == hex::encode(&parent_id))
+        .expect("updated parent");
+    assert_eq!(parent["operation"], "generation");
+    assert_eq!(parent["name"], "Generation");
+    assert_eq!(parent["kind"], "client");
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn operational_logs_exclude_credentials_and_otlp_content() {
+    let (router, secret, project_id) = otlp_test_context().await;
+    let markers = [
+        "PRIVATE_QUERY_MARKER",
+        "PRIVATE_PROMPT_MARKER",
+        "PRIVATE_ANSWER_MARKER",
+        "PRIVATE_SNIPPET_MARKER",
+        "PRIVATE_SPAN_NAME_MARKER",
+    ];
+    let mut request = otlp_request();
+    let span = &mut request.resource_spans[0].scope_spans[0].spans[0];
+    span.name = markers[4].to_owned();
+    span.attributes.extend([
+        attribute("corpuslab.query", markers[0]),
+        attribute("corpuslab.prompt", markers[1]),
+        attribute("corpuslab.answer", markers[2]),
+        attribute("corpuslab.evidence.snippet", markers[3]),
+    ]);
+    let captured = captured_logs();
+    captured.lock().expect("capture lock").clear();
+    let response = router
+        .oneshot(otlp_http_request(
+            request.encode_to_vec(),
+            &secret,
+            &project_id,
+            None,
+        ))
+        .await
+        .expect("captured OTLP response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let logs =
+        String::from_utf8(captured.lock().expect("capture lock").clone()).expect("UTF-8 logs");
+    assert!(logs.contains("trace ingestion completed"));
+    assert!(!logs.contains(&secret));
+    for marker in markers {
+        assert!(!logs.contains(marker), "logs contained {marker}");
+    }
+}
+
+#[tokio::test]
 async fn ingestion_rejects_wrong_scopes_revoked_keys_and_unsupported_transports() {
     let app = support::authenticated_test_app().await;
     let project = json_response(
@@ -529,6 +647,122 @@ fn otlp_request() -> ExportTraceServiceRequest {
             }],
             schema_url: String::new(),
         }],
+    }
+}
+
+async fn otlp_test_context() -> (axum::Router, String, String) {
+    let app = support::authenticated_test_app().await;
+    let project = json_response(
+        app.router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                "/api/v1/projects/current",
+                Body::empty(),
+                None,
+            ))
+            .await
+            .expect("project response"),
+    )
+    .await;
+    let key = json_response(
+        app.router
+            .clone()
+            .oneshot(json_request(
+                "/api/v1/api-keys",
+                &json!({"name":"incremental OTLP test", "scopes":["trace_ingest"]}),
+                None,
+            ))
+            .await
+            .expect("key response"),
+    )
+    .await;
+    (
+        app.router,
+        key["secret"].as_str().expect("secret").to_owned(),
+        project["id"].as_str().expect("project id").to_owned(),
+    )
+}
+
+async fn send_otlp(
+    router: &axum::Router,
+    secret: &str,
+    project_id: &str,
+    request: &ExportTraceServiceRequest,
+) {
+    let response = router
+        .clone()
+        .oneshot(otlp_http_request(
+            request.encode_to_vec(),
+            secret,
+            project_id,
+            None,
+        ))
+        .await
+        .expect("OTLP response");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+async fn trace_by_external_id(router: &axum::Router, external_trace_id: &str) -> Value {
+    let traces = json_response(
+        router
+            .clone()
+            .oneshot(request(Method::GET, "/api/v1/traces", Body::empty(), None))
+            .await
+            .expect("trace list"),
+    )
+    .await;
+    let id = traces
+        .as_array()
+        .expect("traces")
+        .iter()
+        .find(|trace| trace["external_trace_id"] == external_trace_id)
+        .and_then(|trace| trace["id"].as_str())
+        .expect("imported trace id");
+    json_response(
+        router
+            .clone()
+            .oneshot(request(
+                Method::GET,
+                &format!("/api/v1/traces/{id}"),
+                Body::empty(),
+                None,
+            ))
+            .await
+            .expect("trace detail"),
+    )
+    .await
+}
+
+struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+static CAPTURED_LOGS: OnceLock<Arc<Mutex<Vec<u8>>>> = OnceLock::new();
+
+fn captured_logs() -> Arc<Mutex<Vec<u8>>> {
+    CAPTURED_LOGS
+        .get_or_init(|| {
+            let captured = Arc::new(Mutex::new(Vec::new()));
+            let output = captured.clone();
+            tracing::subscriber::set_global_default(
+                tracing_subscriber::fmt()
+                    .without_time()
+                    .with_max_level(tracing::Level::INFO)
+                    .with_writer(move || CapturedWriter(output.clone()))
+                    .finish(),
+            )
+            .expect("install test log capture");
+            captured
+        })
+        .clone()
+}
+
+impl Write for CapturedWriter {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().expect("capture lock").write(bytes)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 

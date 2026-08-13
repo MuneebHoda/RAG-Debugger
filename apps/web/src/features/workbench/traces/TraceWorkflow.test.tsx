@@ -370,6 +370,7 @@ describe("guided run workflow", () => {
       expected_chunk_ids: [secondChunkId],
       expected_document_ids: [secondDocumentId],
       notes: `Saved from trace ${secondTraceId.slice(0, 8)}.`,
+      source_trace_id: secondTraceId,
     });
     expect(JSON.stringify(createdCaseBody)).not.toContain(chunkId);
     expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
@@ -413,12 +414,19 @@ describe("guided run workflow", () => {
     expect(screen.getByText("external-otel-1")).toBeInTheDocument();
     expect(screen.getByText("collector-demo · 1.2.3")).toBeInTheDocument();
     expect(screen.getByText("demo.tracer · 1.0")).toBeInTheDocument();
-    expect(screen.getByText(/query was not retained/i)).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", {
+        name: /query withheld by privacy policy/i,
+      }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
     ).toBeDisabled();
     expect(
       screen.getByText(/full-local imported traces cannot be reported/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/privacy classification cannot yet be preserved/i),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
@@ -431,8 +439,13 @@ describe("guided run workflow", () => {
     const hierarchy = screen.getByRole("list", {
       name: /imported span hierarchy/i,
     });
-    expect(within(hierarchy).getByText("Retrieval")).toBeInTheDocument();
+    expect(
+      within(hierarchy).getByText("<img src=x onerror=alert(1)>"),
+    ).toBeInTheDocument();
+    expect(document.querySelector('img[src="x"]')).toBeNull();
     expect(within(hierarchy).getByText("Generation")).toBeInTheDocument();
+    expect(within(hierarchy).getByText("server")).toBeInTheDocument();
+    expect(within(hierarchy).getByText("client")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /compare/i }));
     expect(
@@ -545,7 +558,8 @@ function importedTrace(): Trace {
           external_span_id: "span-parent",
           parent_span_id: null,
           operation: "retrieval",
-          name: "Retrieval",
+          kind: "server",
+          name: "<img src=x onerror=alert(1)>",
           started_at: "2026-06-27T10:46:19Z",
           completed_at: "2026-06-27T10:46:20Z",
           latency_ms: 10,
@@ -560,6 +574,7 @@ function importedTrace(): Trace {
           external_span_id: "span-child",
           parent_span_id: "span-parent",
           operation: "generation",
+          kind: "client",
           name: "Generation",
           started_at: "2026-06-27T10:46:20Z",
           completed_at: "2026-06-27T10:46:20Z",

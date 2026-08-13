@@ -58,17 +58,21 @@ Mapping precedence is `corpuslab.*`, OpenInference, then OpenTelemetry GenAI. Su
 - `corpuslab.query`, `.prompt`, `.answer`, `corpuslab.evidence.document_label`, and `.snippet` are recognized only so they can be stripped and reported as privacy limitations
 - resource `service.name`, `service.version`, and `deployment.environment.name`, plus instrumentation scope name/version
 
-Known content attributes—including query, prompt, completion, messages, document content, evidence snippets, exception messages, and stack traces—are discarded from OTLP imports. Unknown attributes are not persisted. Unsupported operations remain visible as bounded structural spans, and missing evidence produces `partially_mapped` rather than a false complete diagnosis.
+Known content attributes—including query, prompt, completion, messages, document content, evidence snippets, exception messages, and stack traces—are discarded from OTLP imports. Unknown attributes are not persisted. OTLP span kind is retained as `internal`, `server`, `client`, `producer`, `consumer`, or `unspecified`. Because v1 OTLP is metadata-only, its original span name is treated as potentially content-bearing: Trace Debugger displays the canonical operation label instead and records `span_names_not_retained`. Unsupported operations remain visible as bounded `other` spans, and missing evidence produces `partially_mapped` rather than a false complete diagnosis.
 
 ## Privacy and downstream use
 
-| Import mode        | Stored                                                                                  | Eval Lab                                                    | Reports                           |
-| ------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------- | --------------------------------- |
-| `metadata_only`    | IDs, structure, timing, status, ranks, scores, citations, and safe configuration labels | Disabled because no reproducible query is retained          | Metadata only                     |
-| `snippets_allowed` | Explicit bounded query/answer, safe document labels, and snippets                       | Select authorized local corpus evidence, then save the case | Metadata or snippets              |
-| `full_local_only`  | Explicit bounded local query, prompt, answer, labels, and snippets                      | Local Eval conversion                                       | Report creation and export denied |
+| Import mode        | Stored                                                                                  | Eval Lab                                                           | Reports                           |
+| ------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------- |
+| `metadata_only`    | IDs, structure, timing, status, ranks, scores, citations, and safe configuration labels | Disabled because no reproducible query is retained                 | Metadata only                     |
+| `snippets_allowed` | The same metadata plus explicitly supplied bounded evidence snippets                    | Disabled because raw query/answer text is not an approved snippet  | Metadata or evidence snippets     |
+| `full_local_only`  | Explicit bounded local query, prompt, answer, labels, span names, and evidence snippets | Disabled until Eval Lab can preserve source privacy classification | Report creation and export denied |
 
-The project policy is an upper bound: `LocalOnly` permits all native modes, `ExplicitSnippetSync` permits metadata/snippets, and `RedactedCloudSync` permits metadata only. CorpusLab rejects attempts to exceed it rather than silently downgrading. Privacy mode is immutable for an imported identity; use a new external trace ID to change it.
+Native metadata/snippet imports replace submitted span names with the canonical operation label and record `span_names_not_retained`; full-local imports retain the validated, trimmed original name. Control characters and names longer than 256 characters are rejected. React renders names as text, never trusted HTML, and imported span names are not included in report Markdown. Native span kind is optional for backward compatibility and defaults to `unspecified`.
+
+Imported traces therefore cannot currently be converted directly into Eval Lab cases: modes that can enter Eval do not retain the query, while full-local content cannot safely lose its provenance. The API rejects a full-local trace source with `full_local_eval_not_permitted`; this is enforced server-side as well as explained in Trace Debugger. Users may still create an ordinary Eval Lab case manually from separate, non-sensitive input and must select workspace-authorized CorpusLab evidence.
+
+The project policy is an upper bound: `LocalOnly` permits all native modes, `ExplicitSnippetSync` permits metadata/snippets, and `RedactedCloudSync` permits metadata only. CorpusLab rejects attempts to exceed it rather than silently downgrading. Privacy mode and schema version are immutable for an imported identity; use a new external trace ID to change either. The internal mapper version may advance on an incremental delivery; memory and PostgreSQL update the serialized trace and relational mapper-version column together.
 
 ## Limits and partial success
 
@@ -78,13 +82,13 @@ Request-wide authentication, project, content-type, encoding, decoding, or globa
 
 ## Stable rejection codes
 
-| Area | Codes |
-| ---- | ----- |
-| Authentication and project | `unauthorized`, `insufficient_scope`, `project_header_required`, `invalid_project_id`, `project_not_found` |
-| Transport and body | `unsupported_content_type`, `unsupported_content_encoding`, `payload_limit_exceeded`, `malformed_json`, `malformed_protobuf` |
-| Native validation | `invalid_native_trace`, `unsupported_schema_version`, `privacy_mode_not_permitted`, `invalid_identifier`, `invalid_label`, `invalid_content`, `invalid_number`, `collection_limit_exceeded`, `duplicate_evidence_id`, `duplicate_span_id`, `invalid_span_hierarchy` |
-| Import identity and service | `import_identity_conflict`, `service_not_ready`, `storage_error` |
-| OTLP global limits | `resource_span_limit_exceeded`, `scope_span_limit_exceeded`, `span_limit_exceeded`, `trace_limit_exceeded`, `resource_attribute_limit_exceeded`, `scope_attribute_limit_exceeded` |
+| Area                        | Codes                                                                                                                                                                                                                                                               |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authentication and project  | `unauthorized`, `insufficient_scope`, `project_header_required`, `invalid_project_id`, `project_not_found`                                                                                                                                                          |
+| Transport and body          | `unsupported_content_type`, `unsupported_content_encoding`, `payload_limit_exceeded`, `malformed_json`, `malformed_protobuf`                                                                                                                                        |
+| Native validation           | `invalid_native_trace`, `unsupported_schema_version`, `privacy_mode_not_permitted`, `invalid_identifier`, `invalid_label`, `invalid_content`, `invalid_number`, `collection_limit_exceeded`, `duplicate_evidence_id`, `duplicate_span_id`, `invalid_span_hierarchy` |
+| Import identity and service | `import_identity_conflict`, `service_not_ready`, `storage_error`                                                                                                                                                                                                    |
+| OTLP global limits          | `resource_span_limit_exceeded`, `scope_span_limit_exceeded`, `span_limit_exceeded`, `trace_limit_exceeded`, `resource_attribute_limit_exceeded`, `scope_attribute_limit_exceeded`                                                                                   |
 
 Per-trace OTLP mapping failures are returned only as stable codes and counts in `partial_success.error_message`; they include invalid or conflicting IDs, timestamps, bounded numeric attributes, labels, nested attributes, hierarchy, and per-trace span limits. Error bodies and operational events never echo credentials, IDs, labels, or content.
 

@@ -87,6 +87,6 @@ This public repository explicitly accepts CodeRabbit's default cache and knowled
 - Data remains inside the configured CorpusLab API and database; no provider or external model is contacted.
 - Workspace authority comes only from a valid session or hashed scoped API key; the project is verified inside that workspace.
 - Native privacy is bounded by project policy. OTLP is forced to `metadata_only`, regardless of telemetry attributes.
-- Filtering occurs before persistence, diagnosis, UI, reports, or operational events. Tests assert secret markers are absent from metadata-only stored traces and errors.
+- Filtering occurs before persistence, diagnosis, UI, Eval Lab, reports, or operational events. Metadata strips all content; snippets mode retains only explicit bounded evidence snippets. Tests assert secret markers are absent from stored restricted fields, errors, and captured operational logs.
 - Operational events contain numeric counts, payload bytes, latency, mapping status, and stable reason codes only, using the existing local log destination and retention policy.
-- `full_local_only` report creation and export are denied. No public sharing or clipboard integration was added.
+- `full_local_only` Eval conversion, report creation, and export are denied at server boundaries. No public sharing or trace clipboard integration was added.

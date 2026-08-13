@@ -76,6 +76,10 @@ pub fn build_native_trace(
     {
         limitations.push("evidence_content_not_retained".to_owned());
     }
+    if request.privacy_mode != TraceIngestionPrivacyMode::FullLocalOnly && !request.spans.is_empty()
+    {
+        limitations.push("span_names_not_retained".to_owned());
+    }
     limitations.sort();
     let mapping_status = if limitations.is_empty() {
         TraceMappingStatus::Complete
@@ -331,8 +335,20 @@ fn apply_privacy(request: &mut NativeTraceIngestionRequest) {
                 evidence.snippet = None;
             }
         }
-        TraceIngestionPrivacyMode::SnippetsAllowed => request.prompt = None,
+        TraceIngestionPrivacyMode::SnippetsAllowed => {
+            request.query = None;
+            request.prompt = None;
+            request.answer = None;
+            for evidence in &mut request.retrieved_evidence {
+                evidence.document_label = None;
+            }
+        }
         TraceIngestionPrivacyMode::FullLocalOnly => {}
+    }
+    if request.privacy_mode != TraceIngestionPrivacyMode::FullLocalOnly {
+        for span in &mut request.spans {
+            span.name = span.operation.canonical_label().to_owned();
+        }
     }
 }
 
@@ -610,8 +626,11 @@ mod tests {
         let project = project(PrivacyMode::LocalOnly);
         let mut request = request(TraceIngestionPrivacyMode::MetadataOnly);
         request.query = Some("private query".to_owned());
+        request.prompt = Some("private prompt".to_owned());
         request.answer = Some("private answer".to_owned());
         request.retrieved_evidence[0].snippet = Some("private snippet".to_owned());
+        request.spans = vec![span("span-1", None)];
+        request.spans[0].name = "private span name".to_owned();
 
         let trace = build_native_trace(
             &project,
@@ -624,16 +643,22 @@ mod tests {
         assert!(trace.input.is_empty());
         assert!(trace.output.is_none());
         let imported = trace.ingestion.expect("imported metadata");
+        assert!(imported.prompt.is_none());
         assert!(imported.evidence[0].snippet.is_none());
         assert!(imported.evidence[0].document_label.is_none());
+        assert_eq!(imported.spans[0].name, "Retrieval");
+        assert!(imported
+            .limitations
+            .iter()
+            .any(|value| value == "span_names_not_retained"));
         assert!(trace.diagnosis.is_none());
     }
 
     #[test]
-    fn snippet_import_runs_existing_diagnosis() {
+    fn full_local_import_runs_existing_diagnosis() {
         let trace = build_native_trace(
             &project(PrivacyMode::LocalOnly),
-            request(TraceIngestionPrivacyMode::SnippetsAllowed),
+            request(TraceIngestionPrivacyMode::FullLocalOnly),
             &RetrievalConfig::default(),
             &DebuggerConfig::default(),
         )
@@ -646,7 +671,7 @@ mod tests {
 
     #[test]
     fn supported_import_keeps_weak_candidates_as_secondary_warnings() {
-        let mut request = request(TraceIngestionPrivacyMode::SnippetsAllowed);
+        let mut request = request(TraceIngestionPrivacyMode::FullLocalOnly);
         request.top_k = Some(2);
         request.retrieved_evidence.push(ImportedEvidence {
             external_chunk_id: "chunk-2".to_owned(),
@@ -721,13 +746,27 @@ mod tests {
             &DebuggerConfig::default(),
         )
         .expect("snippet import");
-        assert!(!snippets.input.is_empty());
-        assert!(snippets
-            .ingestion
-            .as_ref()
-            .expect("snippet metadata")
-            .prompt
-            .is_none());
+        let snippet_metadata = snippets.ingestion.as_ref().expect("snippet metadata");
+        assert!(snippets.input.is_empty());
+        assert!(snippets.output.is_none());
+        assert!(snippet_metadata.prompt.is_none());
+        assert!(snippet_metadata.evidence[0].document_label.is_none());
+        assert!(snippet_metadata.evidence[0].snippet.is_some());
+        assert!(snippets.diagnosis.is_none());
+
+        let mut unsafe_existing = snippets.clone();
+        unsafe_existing.input = "legacy unsafe query".to_owned();
+        unsafe_existing.output = Some("legacy unsafe answer".to_owned());
+        let unsafe_metadata = unsafe_existing.ingestion.as_mut().expect("unsafe metadata");
+        unsafe_metadata.prompt = Some("legacy unsafe prompt".to_owned());
+        unsafe_metadata.evidence[0].document_label = Some("legacy-private.md".to_owned());
+        let merged = merge_imported_trace(&unsafe_existing, snippets).expect("privacy scrub merge");
+        let merged_metadata = merged.ingestion.as_ref().expect("merged metadata");
+        assert!(merged.input.is_empty());
+        assert!(merged.output.is_none());
+        assert!(merged_metadata.prompt.is_none());
+        assert!(merged_metadata.evidence[0].document_label.is_none());
+        assert!(merged_metadata.evidence[0].snippet.is_some());
 
         let mut full = request(TraceIngestionPrivacyMode::FullLocalOnly);
         full.prompt = Some("local prompt".to_owned());
@@ -753,12 +792,12 @@ mod tests {
         let project = project(PrivacyMode::LocalOnly);
         let existing = build_native_trace(
             &project,
-            request(TraceIngestionPrivacyMode::SnippetsAllowed),
+            request(TraceIngestionPrivacyMode::FullLocalOnly),
             &RetrievalConfig::default(),
             &DebuggerConfig::default(),
         )
         .expect("initial import");
-        let mut incremental = request(TraceIngestionPrivacyMode::SnippetsAllowed);
+        let mut incremental = request(TraceIngestionPrivacyMode::FullLocalOnly);
         incremental.query = None;
         incremental.answer = None;
         incremental.retrieved_evidence.clear();
@@ -808,9 +847,14 @@ mod tests {
             report.evidence[0].external_evidence_id.as_deref(),
             Some("chunk-1")
         );
-        assert!(render_debug_report_markdown(&report)
-            .expect("imported report markdown")
-            .contains("chunk-1"));
+        assert_eq!(report.subject, "Imported trace trace-1");
+        assert!(report.evidence[0].document_path.is_none());
+        assert!(report.evidence[0].snippet.is_some());
+        let markdown = render_debug_report_markdown(&report).expect("imported report markdown");
+        assert!(markdown.contains("chunk-1"));
+        assert!(!markdown.contains("When is the index published?"));
+        assert!(!markdown.contains("After validation."));
+        assert!(!markdown.contains("policy.md"));
 
         let metadata = build_native_trace(
             &project,
@@ -891,6 +935,7 @@ mod tests {
             external_span_id: id.to_owned(),
             parent_span_id: parent.map(str::to_owned),
             operation: ImportedSpanOperation::Retrieval,
+            kind: ImportedSpanKind::Internal,
             name: "Retrieval".to_owned(),
             started_at: now,
             completed_at: Some(now),

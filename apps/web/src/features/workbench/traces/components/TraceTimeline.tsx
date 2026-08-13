@@ -69,6 +69,7 @@ function ImportedSpanNode({
         <div className={styles.metadata}>
           <span>ID {span.external_span_id}</span>
           <span>{span.operation}</span>
+          <span>{span.kind}</span>
           <span>{span.latency_ms} ms</span>
           {span.provider ? <span>{span.provider}</span> : null}
           {span.model ? <span>{span.model}</span> : null}

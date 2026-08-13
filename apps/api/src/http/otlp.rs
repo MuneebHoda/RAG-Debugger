@@ -4,7 +4,7 @@ use opentelemetry_proto::tonic::{
     collector::trace::v1::ExportTraceServiceRequest,
     common::v1::{any_value::Value, InstrumentationScope, KeyValue},
     resource::v1::Resource,
-    trace::v1::{status::StatusCode, Span},
+    trace::v1::{span::SpanKind, status::StatusCode, Span},
 };
 use prost::Message;
 use rag_debugger_core::*;
@@ -243,6 +243,7 @@ fn map_trace(
     let mut orphaned = false;
     let mut stripped_content = false;
     let mut unsupported_operation = false;
+    let mut unsupported_span_kind = false;
 
     for span in spans {
         if span.attributes.len() > 64 || span.events.len() > 32 || span.links.len() > 32 {
@@ -280,6 +281,18 @@ fn map_trace(
         started_at = Some(started_at.map_or(start, |current: OffsetDateTime| current.min(start)));
         completed_at = Some(completed_at.map_or(end, |current: OffsetDateTime| current.max(end)));
         let operation = operation(&attributes);
+        let kind = match SpanKind::try_from(span.kind) {
+            Ok(SpanKind::Internal) => ImportedSpanKind::Internal,
+            Ok(SpanKind::Server) => ImportedSpanKind::Server,
+            Ok(SpanKind::Client) => ImportedSpanKind::Client,
+            Ok(SpanKind::Producer) => ImportedSpanKind::Producer,
+            Ok(SpanKind::Consumer) => ImportedSpanKind::Consumer,
+            Ok(SpanKind::Unspecified) => ImportedSpanKind::Unspecified,
+            Err(_) => {
+                unsupported_span_kind = true;
+                ImportedSpanKind::Unspecified
+            }
+        };
         unsupported_operation |= operation == ImportedSpanOperation::Other;
         mapped_retrieval_mode = mapped_retrieval_mode.or_else(|| {
             string_attr(&attributes, &["corpuslab.retrieval_mode"])
@@ -398,7 +411,8 @@ fn map_trace(
             external_span_id: hex::encode(&span.span_id),
             parent_span_id,
             operation,
-            name: operation_label(operation).to_owned(),
+            kind,
+            name: operation.canonical_label().to_owned(),
             started_at: start,
             completed_at: Some(end),
             latency_ms: ((end - start).whole_nanoseconds().max(0) / 1_000_000) as u64,
@@ -474,6 +488,11 @@ fn map_trace(
             metadata
                 .limitations
                 .push("unsupported_operation".to_owned());
+        }
+        if unsupported_span_kind {
+            metadata
+                .limitations
+                .push("unsupported_span_kind".to_owned());
         }
         metadata.limitations.sort();
         metadata.limitations.dedup();
@@ -676,18 +695,6 @@ fn operation(attributes: &HashMap<String, Primitive>) -> ImportedSpanOperation {
         ImportedSpanOperation::Eval
     } else {
         ImportedSpanOperation::Other
-    }
-}
-
-fn operation_label(operation: ImportedSpanOperation) -> &'static str {
-    match operation {
-        ImportedSpanOperation::Retrieval => "Retrieval",
-        ImportedSpanOperation::Embedding => "Embedding",
-        ImportedSpanOperation::Reranking => "Reranking",
-        ImportedSpanOperation::Generation => "Generation",
-        ImportedSpanOperation::Tool => "Tool",
-        ImportedSpanOperation::Eval => "Evaluation",
-        ImportedSpanOperation::Other => "Other operation",
     }
 }
 
@@ -916,6 +923,10 @@ mod tests {
     #[test]
     fn standard_protobuf_maps_multiple_spans_without_content() {
         let trace_id = vec![1; 16];
+        let mut retrieval = span(trace_id.clone(), vec![2; 8], Vec::new(), "retrieval");
+        retrieval.kind = SpanKind::Server as i32;
+        let mut generation = span(trace_id, vec![3; 8], vec![2; 8], "generation");
+        generation.kind = SpanKind::Client as i32;
         let request = ExportTraceServiceRequest {
             resource_spans: vec![ResourceSpans {
                 resource: Some(Resource {
@@ -929,10 +940,7 @@ mod tests {
                         ..InstrumentationScope::default()
                     }),
                     schema_url: String::new(),
-                    spans: vec![
-                        span(trace_id.clone(), vec![2; 8], Vec::new(), "retrieval"),
-                        span(trace_id, vec![3; 8], vec![2; 8], "generation"),
-                    ],
+                    spans: vec![retrieval, generation],
                 }],
                 schema_url: String::new(),
             }],
@@ -948,12 +956,71 @@ mod tests {
         let metadata = batch.traces[0].ingestion.as_ref().expect("ingestion");
         assert_eq!(metadata.source, TraceIngestionSource::OtlpHttp);
         assert_eq!(metadata.spans.len(), 2);
+        assert_eq!(metadata.spans[0].name, "Retrieval");
+        assert_eq!(metadata.spans[0].kind, ImportedSpanKind::Server);
+        assert_eq!(metadata.spans[1].kind, ImportedSpanKind::Client);
+        assert!(metadata
+            .limitations
+            .iter()
+            .any(|value| value == "span_names_not_retained"));
         assert_eq!(metadata.service_name.as_deref(), Some("collector-demo"));
         assert_eq!(
             metadata.instrumentation_scope_name.as_deref(),
             Some("corpuslab.test")
         );
         assert!(batch.traces[0].input.is_empty());
+    }
+
+    #[test]
+    fn maps_multiple_trace_ids_and_rejects_only_a_malformed_sibling() {
+        let valid_one = span(vec![1; 16], vec![1; 8], Vec::new(), "retrieval");
+        let valid_two = span(vec![2; 16], vec![2; 8], Vec::new(), "generation");
+        let request = export(vec![valid_one.clone(), valid_two]);
+        let batch = decode_and_map(
+            &request.encode_to_vec(),
+            &project(),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("map two traces");
+        assert_eq!(batch.traces.len(), 2);
+        assert_eq!(batch.rejected_spans, 0);
+
+        let mut malformed = span(vec![3; 16], vec![3; 8], Vec::new(), "generation");
+        malformed.end_time_unix_nano = malformed.start_time_unix_nano - 1;
+        let batch = decode_and_map(
+            &export(vec![valid_one, malformed]).encode_to_vec(),
+            &project(),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("partially map export");
+        assert_eq!(batch.traces.len(), 1);
+        assert_eq!(batch.rejected_spans, 1);
+        assert_eq!(
+            batch.rejection_reasons.get("invalid_span_timestamp"),
+            Some(&1)
+        );
+    }
+
+    #[test]
+    fn conflicting_duplicate_span_rejects_the_whole_trace_deterministically() {
+        let first = span(vec![9; 16], vec![7; 8], Vec::new(), "retrieval");
+        let mut conflict = first.clone();
+        conflict.name = "different".to_owned();
+        let batch = decode_and_map(
+            &export(vec![first, conflict]).encode_to_vec(),
+            &project(),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("decode conflicting export");
+        assert!(batch.traces.is_empty());
+        assert_eq!(batch.rejected_spans, 2);
+        assert_eq!(
+            batch.rejection_reasons.get("conflicting_duplicate_span"),
+            Some(&1)
+        );
     }
 
     #[test]
@@ -1137,6 +1204,20 @@ mod tests {
             end_time_unix_nano: 1_800_000_000_010_000_000,
             attributes: vec![string_attribute("corpuslab.operation", operation)],
             ..Span::default()
+        }
+    }
+
+    fn export(spans: Vec<Span>) -> ExportTraceServiceRequest {
+        ExportTraceServiceRequest {
+            resource_spans: vec![ResourceSpans {
+                resource: None,
+                scope_spans: vec![ScopeSpans {
+                    scope: None,
+                    spans,
+                    schema_url: String::new(),
+                }],
+                schema_url: String::new(),
+            }],
         }
     }
 

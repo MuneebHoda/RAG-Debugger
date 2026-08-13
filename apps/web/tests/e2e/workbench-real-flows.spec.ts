@@ -32,7 +32,7 @@ test("completes the real guided workflow against the memory API", async ({
 
   await page.goto("/app/retrieval");
   await page.getByText("Advanced", { exact: true }).click();
-  await page.getByRole("button", { name: "Index" }).click();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
   await expect(page.getByText(/indexed · local-hash-v1/i)).toBeVisible();
   await page
     .getByLabel("What should the corpus answer?")
@@ -257,7 +257,7 @@ test("completes the real guided workflow against the memory API", async ({
   }
 });
 
-test("ingests an external trace through Debugger, Eval Lab, and permitted reports", async ({
+test("ingests privacy-scoped external traces through Debugger and permitted reports", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -361,7 +361,7 @@ test("ingests an external trace through Debugger, Eval Lab, and permitted report
   await page.goto(`/app/traces/${imported.trace_id}`);
   await expect(
     page.getByRole("heading", {
-      name: "When do collector workers publish a trace batch?",
+      name: "Query withheld by privacy policy",
     }),
   ).toBeVisible();
   await expect(
@@ -369,27 +369,32 @@ test("ingests an external trace through Debugger, Eval Lab, and permitted report
   ).toBeVisible();
   await page.getByRole("tab", { name: "Timeline" }).click();
   const hierarchy = page.getByRole("list", { name: "Imported span hierarchy" });
-  await expect(hierarchy.getByText("Retrieve local evidence")).toBeVisible();
-  await expect(hierarchy.getByText("Generate answer")).toBeVisible();
+  await expect(hierarchy.getByText("Retrieval", { exact: true })).toBeVisible();
+  await expect(
+    hierarchy.getByText("Generation", { exact: true }),
+  ).toBeVisible();
+  await expect(hierarchy.getByText("unspecified")).toHaveCount(2);
+
+  await page.getByRole("tab", { name: "Evidence" }).click();
+  await expect(
+    page.getByText(
+      "Collector workers validate trace batches before publishing them.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("collector-guide.md")).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Summary" }).click();
-  await page.getByRole("button", { name: "Choose evidence" }).click();
-  await page
-    .getByLabel("Quality dataset")
-    .selectOption({ label: "Default retrieval dataset" });
-  const search = page.getByLabel("Search corpus evidence");
-  await search.fill("collector workers");
-  await search.press("Enter");
-  const searchResults = page.getByLabel("Evidence search results");
-  await searchResults
-    .getByRole("button", { name: "Expect this exact chunk" })
-    .first()
-    .click();
-  await page.getByRole("button", { name: "Save quality case" }).click();
-  await expect(page.getByText("Quality case saved.")).toBeVisible();
+  await expect(
+    page.getByText(/this imported trace cannot become an Eval Lab case/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Choose evidence" }),
+  ).toHaveCount(0);
 
   await page.getByRole("button", { name: "Create audit report" }).click();
-  await page.getByLabel("Privacy").selectOption("snippets_allowed");
+  await page
+    .getByLabel("Privacy", { exact: true })
+    .selectOption("snippets_allowed");
   await page.getByRole("button", { name: "Create report" }).click();
   await expect(page).toHaveURL(/\/app\/reports\/[0-9a-f-]+$/);
   await expect(
@@ -419,6 +424,9 @@ test("ingests an external trace through Debugger, Eval Lab, and permitted report
     page.getByText(
       /full-local imported traces cannot be reported or exported/i,
     ),
+  ).toBeVisible();
+  await expect(
+    page.getByText(/privacy classification cannot yet be preserved/i),
   ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);

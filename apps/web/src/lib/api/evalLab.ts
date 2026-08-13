@@ -15,6 +15,7 @@ export interface CreateRetrievalEvalCaseRequest {
   expected_chunk_ids?: string[];
   expected_document_ids?: string[];
   notes?: string | null;
+  source_trace_id?: string;
 }
 
 export interface RetrievalEvalCase {

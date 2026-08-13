@@ -20,10 +20,22 @@ async fn postgres_trace_ingestion_repository_contract() {
     let store = PostgresStore::connect(&database_url)
         .await
         .expect("connect Postgres store");
-    run_contract(&store).await;
+    let trace_id = run_contract(&store).await;
+    let pool = sqlx::PgPool::connect(&database_url)
+        .await
+        .expect("connect verification pool");
+    let versions: (String, String) = sqlx::query_as(
+        "SELECT ingestion_mapper_version, trace_json->'ingestion'->>'mapper_version' \
+         FROM debug_traces WHERE id = $1",
+    )
+    .bind(trace_id.0)
+    .fetch_one(&pool)
+    .await
+    .expect("read persisted mapper versions");
+    assert_eq!(versions, ("2".to_owned(), "2".to_owned()));
 }
 
-async fn run_contract<R>(repository: &R)
+async fn run_contract<R>(repository: &R) -> TraceId
 where
     R: AuthRepository + ProjectRepository + TraceRepository,
 {
@@ -63,6 +75,38 @@ where
         .limitations
         .iter()
         .any(|value| value == "orphan_parent_span"));
+
+    let mut mapper_advance = imported_trace(project.id, "external-1", "span-2");
+    let mapper_metadata = mapper_advance.ingestion.as_mut().expect("mapper metadata");
+    mapper_metadata.mapper_version = "2".to_owned();
+    mapper_metadata.spans[0].operation = ImportedSpanOperation::Generation;
+    mapper_metadata.spans[0].name = "Updated generation".to_owned();
+    let advanced = repository
+        .upsert_imported_trace(first_workspace, mapper_advance.clone())
+        .await
+        .expect("advance mapper version");
+    assert_eq!(advanced.disposition, TraceIngestionDisposition::Updated);
+    let advanced_metadata = advanced
+        .trace
+        .ingestion
+        .as_ref()
+        .expect("advanced metadata");
+    assert_eq!(advanced_metadata.mapper_version, "2");
+    assert_eq!(advanced_metadata.spans.len(), 2);
+    assert_eq!(
+        advanced_metadata
+            .spans
+            .iter()
+            .find(|span| span.external_span_id == "span-2")
+            .expect("replaced span")
+            .operation,
+        ImportedSpanOperation::Generation
+    );
+    let unchanged = repository
+        .upsert_imported_trace(first_workspace, mapper_advance)
+        .await
+        .expect("idempotent mapper retry");
+    assert_eq!(unchanged.disposition, TraceIngestionDisposition::Unchanged);
     let summaries = repository
         .list_traces(first_workspace)
         .await
@@ -92,6 +136,7 @@ where
             .await,
         Err(StorageError::NotFound)
     ));
+    created.trace.id
 }
 
 async fn workspace<R: AuthRepository>(repository: &R, label: &str) -> WorkspaceId {
@@ -174,6 +219,7 @@ fn imported_trace(project_id: ProjectId, external_trace_id: &str, span_id: &str)
                 external_span_id: span_id.to_owned(),
                 parent_span_id: None,
                 operation: ImportedSpanOperation::Retrieval,
+                kind: ImportedSpanKind::Internal,
                 name: "Retrieval".to_owned(),
                 started_at: now,
                 completed_at: Some(now),

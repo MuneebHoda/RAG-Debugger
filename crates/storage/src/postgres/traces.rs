@@ -252,6 +252,7 @@ impl PostgresStore {
                 evidence_strength=EXCLUDED.evidence_strength, failure_labels=EXCLUDED.failure_labels,
                 span_count=EXCLUDED.span_count, latency_ms=EXCLUDED.latency_ms,
                 trace_json=EXCLUDED.trace_json, updated_at=EXCLUDED.updated_at,
+                ingestion_mapper_version=EXCLUDED.ingestion_mapper_version,
                 ingestion_mapping_status=EXCLUDED.ingestion_mapping_status",
         )
         .bind(saved.id.0)

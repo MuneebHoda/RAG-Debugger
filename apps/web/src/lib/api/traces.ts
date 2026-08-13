@@ -46,6 +46,13 @@ export type ImportedSpanOperation =
   | "tool"
   | "eval"
   | "other";
+export type ImportedSpanKind =
+  | "internal"
+  | "server"
+  | "client"
+  | "producer"
+  | "consumer"
+  | "unspecified";
 
 export interface TraceSummary {
   id: string;
@@ -79,6 +86,7 @@ export interface ImportedSpan {
   external_span_id: string;
   parent_span_id: string | null;
   operation: ImportedSpanOperation;
+  kind: ImportedSpanKind;
   name: string;
   started_at: string;
   completed_at: string | null;

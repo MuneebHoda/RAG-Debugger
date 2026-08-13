@@ -14,13 +14,10 @@ curl --fail-with-body \
     \"project_id\": \"${CORPUSLAB_PROJECT_ID}\",
     \"external_trace_id\": \"native-demo-001\",
     \"privacy_mode\": \"snippets_allowed\",
-    \"query\": \"When is the index published?\",
-    \"answer\": \"The answer could not be verified.\",
     \"retrieval_mode\": \"hybrid\",
     \"top_k\": 1,
     \"retrieved_evidence\": [{
       \"external_chunk_id\": \"policy-chunk-7\",
-      \"document_label\": \"policy/indexing.md\",
       \"rank\": 1,
       \"score\": 0.31,
       \"lexical_score\": 0.21,

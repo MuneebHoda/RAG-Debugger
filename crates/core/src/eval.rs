@@ -125,6 +125,8 @@ pub struct CreateRetrievalEvalLabCaseRequest {
     #[serde(default)]
     pub expected_document_ids: Vec<DocumentId>,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub source_trace_id: Option<TraceId>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq, Default)]

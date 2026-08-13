@@ -81,6 +81,32 @@ pub enum ImportedSpanOperation {
     Other,
 }
 
+impl ImportedSpanOperation {
+    pub const fn canonical_label(self) -> &'static str {
+        match self {
+            Self::Retrieval => "Retrieval",
+            Self::Embedding => "Embedding",
+            Self::Reranking => "Reranking",
+            Self::Generation => "Generation",
+            Self::Tool => "Tool",
+            Self::Eval => "Evaluation",
+            Self::Other => "Other operation",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum ImportedSpanKind {
+    Internal,
+    Server,
+    Client,
+    Producer,
+    Consumer,
+    #[default]
+    Unspecified,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportedSpanStatus {
@@ -122,6 +148,8 @@ pub struct ImportedSpan {
     pub external_span_id: String,
     pub parent_span_id: Option<String>,
     pub operation: ImportedSpanOperation,
+    #[serde(default)]
+    pub kind: ImportedSpanKind,
     pub name: String,
     #[serde(with = "crate::wire_time")]
     pub started_at: OffsetDateTime,
@@ -239,6 +267,17 @@ pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Tra
     {
         return Err("import identity, schema, and privacy mode are immutable");
     }
+    let old_mapper = old
+        .mapper_version
+        .parse::<u32>()
+        .map_err(|_| "stored mapper version is invalid")?;
+    let incoming_mapper = new
+        .mapper_version
+        .parse::<u32>()
+        .map_err(|_| "incoming mapper version is invalid")?;
+    if incoming_mapper < old_mapper {
+        new.mapper_version.clone_from(&old.mapper_version);
+    }
 
     incoming.id = existing.id;
     if new.timestamps_supplied {
@@ -328,6 +367,29 @@ pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Tra
     );
     new.spans = spans.into_values().collect();
 
+    match new.privacy_mode {
+        TraceIngestionPrivacyMode::MetadataOnly => {
+            incoming.input.clear();
+            incoming.output = None;
+            new.prompt = None;
+            for evidence in &mut new.evidence {
+                evidence.document_label = None;
+                evidence.snippet = None;
+            }
+            canonicalize_span_names(&mut new.spans);
+        }
+        TraceIngestionPrivacyMode::SnippetsAllowed => {
+            incoming.input.clear();
+            incoming.output = None;
+            new.prompt = None;
+            for evidence in &mut new.evidence {
+                evidence.document_label = None;
+            }
+            canonicalize_span_names(&mut new.spans);
+        }
+        TraceIngestionPrivacyMode::FullLocalOnly => {}
+    }
+
     let mut limitations = old
         .limitations
         .iter()
@@ -402,6 +464,12 @@ pub fn merge_imported_trace(existing: &Trace, mut incoming: Trace) -> Result<Tra
     }
     incoming.status = worst_status(existing.status, incoming.status);
     Ok(incoming)
+}
+
+fn canonicalize_span_names(spans: &mut [ImportedSpan]) {
+    for span in spans {
+        span.name = span.operation.canonical_label().to_owned();
+    }
 }
 
 fn evidence_strength(score: f32) -> crate::EvidenceStrength {
