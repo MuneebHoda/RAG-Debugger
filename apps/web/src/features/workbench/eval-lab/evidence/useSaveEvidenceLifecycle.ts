@@ -173,7 +173,7 @@ export function useSaveEvidenceLifecycle({
       controller,
       payload: {
         name: activeDraft.caseName.trim() || source.query.trim(),
-        query: source.query.trim(),
+        query: source.query,
         top_k: source.topK,
         expected_chunk_ids: normalizedSelection.chunkIds,
         expected_document_ids: normalizedSelection.documentIds,

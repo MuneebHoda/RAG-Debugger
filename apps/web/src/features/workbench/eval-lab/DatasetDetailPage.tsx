@@ -384,7 +384,7 @@ function EditableCase({
       );
       return updateEvalLabCase(evalCase.id, {
         name: name.trim(),
-        query: query.trim(),
+        query: evalCase.provenance ? query : query.trim(),
         top_k: topK,
         notes: notes.trim() || null,
         ...evidencePayload,
@@ -434,9 +434,16 @@ function EditableCase({
           <label>
             Question
             <textarea
+              readOnly={Boolean(evalCase.provenance)}
               value={query}
               onChange={(event) => setQuery(event.currentTarget.value)}
             />
+            {evalCase.provenance ? (
+              <small>
+                The source trace query is immutable to preserve local-only
+                provenance.
+              </small>
+            ) : null}
           </label>
           <label>
             Results per question
@@ -521,6 +528,12 @@ function EditableCase({
             expected document · {evalCase.expected_chunk_ids.length} expected
             chunk
           </small>
+          {evalCase.provenance ? (
+            <small>
+              Imported {evalCase.provenance.source.replaceAll("_", "/")} trace ·
+              full local only · local evaluation only
+            </small>
+          ) : null}
           <EvidenceStateList
             context={{ kind: "expectation_only" }}
             selection={selectionFromCase(evalCase)}

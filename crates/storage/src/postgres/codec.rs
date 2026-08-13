@@ -236,6 +236,42 @@ pub(super) fn retrieval_eval_case_from_row(
         .into_iter()
         .map(DocumentId)
         .collect();
+    let provenance = match (
+        row.try_get::<Option<Uuid>, _>("source_trace_id")?,
+        row.try_get::<Option<String>, _>("source_ingestion_source")?,
+        row.try_get::<Option<String>, _>("source_privacy_mode")?,
+    ) {
+        (None, None, None) => None,
+        (Some(source_trace_id), Some(source), Some(privacy_mode)) => {
+            Some(RetrievalEvalCaseProvenance {
+                source_trace_id: TraceId(source_trace_id),
+                source: match source.as_str() {
+                    "native" => TraceIngestionSource::Native,
+                    "otlp_http" => TraceIngestionSource::OtlpHttp,
+                    _ => {
+                        return Err(StorageError::InvalidData(
+                            "invalid eval source ingestion type".to_owned(),
+                        ));
+                    }
+                },
+                privacy_mode: match privacy_mode.as_str() {
+                    "metadata_only" => TraceIngestionPrivacyMode::MetadataOnly,
+                    "snippets_allowed" => TraceIngestionPrivacyMode::SnippetsAllowed,
+                    "full_local_only" => TraceIngestionPrivacyMode::FullLocalOnly,
+                    _ => {
+                        return Err(StorageError::InvalidData(
+                            "invalid eval source privacy mode".to_owned(),
+                        ));
+                    }
+                },
+            })
+        }
+        _ => {
+            return Err(StorageError::InvalidData(
+                "incomplete eval source provenance".to_owned(),
+            ));
+        }
+    };
 
     Ok(RetrievalEvalCase {
         id: RetrievalEvalCaseId(row.try_get("id")?),
@@ -245,6 +281,7 @@ pub(super) fn retrieval_eval_case_from_row(
         expected_chunk_ids,
         expected_document_ids,
         notes: row.try_get("notes")?,
+        provenance,
         created_at: row.try_get("created_at")?,
     })
 }

@@ -11,10 +11,12 @@ const reportId = "018f7a2a-6e2e-7000-a000-000000000801";
 const traceId = "018f7a2a-6e2e-7000-a000-000000000802";
 const experimentId = "018f7a2a-6e2e-7000-a000-000000000803";
 let ciRuns: unknown[] = [];
+let experiments: unknown[] = [];
 
 describe("audit reports workbench", () => {
   beforeEach(() => {
     ciRuns = [];
+    experiments = [experimentSummary];
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -36,7 +38,7 @@ describe("audit reports workbench", () => {
           return responseJson([traceSummary]);
         }
         if (url.endsWith("/api/v1/eval-lab/experiments")) {
-          return responseJson([experimentSummary]);
+          return responseJson(experiments);
         }
         if (url.endsWith("/api/v1/eval-lab/ci/runs")) {
           return responseJson(ciRuns);
@@ -174,6 +176,41 @@ describe("audit reports workbench", () => {
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
     ).toBeInTheDocument();
+  });
+
+  it("keeps full-local imported experiments out of report creation", async () => {
+    experiments = [
+      {
+        ...experimentSummary,
+        mode_results: [
+          {
+            case_results: [
+              {
+                provenance: {
+                  source_trace_id: traceId,
+                  source: "native",
+                  privacy_mode: "full_local_only",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ];
+    renderWithClient(
+      <MemoryRouter>
+        <ReportsPage />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(await screen.findByLabelText("Report source"), {
+      target: { value: "experiment" },
+    });
+    expect(
+      await screen.findByRole("option", {
+        name: /Hybrid baseline — local only, reports blocked/i,
+      }),
+    ).toBeDisabled();
   });
 });
 

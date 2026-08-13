@@ -270,6 +270,7 @@ pub fn merge_imported_trace(
     mut incoming: Trace,
 ) -> Result<Trace, TraceMergeError> {
     let incoming_had_diagnosis = incoming.diagnosis.is_some();
+    let incoming_premerge_status = incoming.status;
     let old = existing
         .ingestion
         .as_ref()
@@ -278,7 +279,8 @@ pub fn merge_imported_trace(
         .ingestion
         .as_mut()
         .ok_or(TraceMergeError::IncomingNotImported)?;
-    let incoming_status_signal = new.status_supplied
+    let incoming_status_was_supplied = new.status_supplied;
+    let incoming_status_signal = incoming_status_was_supplied
         || !new.known_failure_labels.is_empty()
         || new.evaluation_passed == Some(false)
         || new
@@ -494,11 +496,42 @@ pub fn merge_imported_trace(
         labels.extend(existing.failure_labels.iter().copied());
     }
     incoming.failure_labels = labels.into_iter().collect();
-    if !incoming_status_signal {
-        incoming.status = existing.status;
+    let incoming_explicit_or_diagnosed_status =
+        (incoming_status_was_supplied || incoming_had_diagnosis).then_some(incoming.status);
+    let incoming_status = derive_imported_trace_status(new, incoming_explicit_or_diagnosed_status);
+    incoming.status = worst_status(existing.status, incoming_status);
+    if existing.status != incoming_premerge_status
+        && worst_status(existing.status, incoming_premerge_status) == existing.status
+    {
+        incoming.summary.clone_from(&existing.summary);
     }
-    incoming.status = worst_status(existing.status, incoming.status);
     Ok(incoming)
+}
+
+pub fn derive_imported_trace_status(
+    metadata: &TraceIngestionMetadata,
+    explicit_or_diagnosed_status: Option<TraceStatus>,
+) -> TraceStatus {
+    if explicit_or_diagnosed_status == Some(TraceStatus::Failed)
+        || metadata.evaluation_passed == Some(false)
+        || metadata
+            .spans
+            .iter()
+            .any(|span| span.status == ImportedSpanStatus::Failed)
+    {
+        TraceStatus::Failed
+    } else if explicit_or_diagnosed_status == Some(TraceStatus::Warning)
+        || !metadata.known_failure_labels.is_empty()
+        || metadata.mapping_status == TraceMappingStatus::PartiallyMapped
+        || metadata
+            .spans
+            .iter()
+            .any(|span| span.status == ImportedSpanStatus::Warning)
+    {
+        TraceStatus::Warning
+    } else {
+        TraceStatus::Completed
+    }
 }
 
 fn canonicalize_span_names(spans: &mut [ImportedSpan]) {

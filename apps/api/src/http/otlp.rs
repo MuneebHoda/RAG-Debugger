@@ -955,7 +955,11 @@ mod tests {
         assert_eq!(metadata.spans[0].status, ImportedSpanStatus::Succeeded);
         assert_eq!(metadata.spans[1].kind, ImportedSpanKind::Client);
         assert_eq!(metadata.spans[1].status, ImportedSpanStatus::Succeeded);
-        assert_eq!(batch.traces[0].status, TraceStatus::Completed);
+        assert_eq!(batch.traces[0].status, TraceStatus::Warning);
+        assert_eq!(
+            batch.traces[0].summary,
+            "Imported trace is only partially mapped; diagnosis is limited."
+        );
         assert!(metadata
             .limitations
             .iter()

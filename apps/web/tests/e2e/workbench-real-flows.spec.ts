@@ -390,7 +390,7 @@ test("ingests privacy-scoped external traces through Debugger and permitted repo
 
   await page.getByRole("tab", { name: "Summary" }).click();
   await expect(
-    page.getByText(/this imported trace cannot become an Eval Lab case/i),
+    page.getByText(/evidence snippets were retained, but the query was not/i),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Choose evidence" }),
@@ -431,8 +431,43 @@ test("ingests privacy-scoped external traces through Debugger and permitted repo
     ),
   ).toBeVisible();
   await expect(
-    page.getByText(/privacy classification cannot yet be preserved/i),
+    page.getByRole("button", { name: "Choose evidence" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Choose evidence" }).click();
+  const qualityDataset = page.getByLabel("Quality dataset");
+  await qualityDataset.selectOption({ index: 1 });
+  const selectedDatasetId = await qualityDataset.inputValue();
+  await page
+    .getByLabel("Search corpus evidence")
+    .fill(`collector-guide-${suffix}.md`);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const evidenceResults = page.getByLabel("Evidence search results");
+  await evidenceResults
+    .getByRole("button", { name: "Expect this exact chunk" })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Save quality case" }).click();
+  await expect(page.getByText("Quality case saved.")).toBeVisible();
+
+  await page.goto(`/app/evals/datasets/${selectedDatasetId}`);
+  await expect(
+    page.getByText(/imported native trace · full local only/i),
+  ).toBeVisible();
+  await page.getByLabel("Experiment name").fill(`Local import ${suffix}`);
+  await page.getByRole("button", { name: "Run experiment" }).click();
+  await expect(page).toHaveURL(/\/app\/evals\/experiments\/[0-9a-f-]+$/);
+  await expect(
+    page.getByRole("button", { name: "Create audit report" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/full-local imported Eval content cannot create/i),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy Markdown" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("link", { name: "Download Markdown" }),
+  ).toHaveCount(0);
   await page.setViewportSize({ width: 390, height: 844 });
   await expectNoHorizontalOverflow(page);
 });

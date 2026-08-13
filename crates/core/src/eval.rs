@@ -13,6 +13,7 @@ use crate::{
     retrieval::{RetrievalMode, DEFAULT_RETRIEVAL_TOP_K},
     source::{DocumentId, DocumentProfile, DocumentWarning, ExtractionQuality, SourceId},
     trace::TraceId,
+    trace_ingestion::{TraceIngestionPrivacyMode, TraceIngestionSource},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
@@ -78,8 +79,23 @@ pub struct RetrievalEvalCase {
     pub expected_chunk_ids: Vec<ChunkId>,
     pub expected_document_ids: Vec<DocumentId>,
     pub notes: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<RetrievalEvalCaseProvenance>,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalCaseProvenance {
+    pub source_trace_id: TraceId,
+    pub source: TraceIngestionSource,
+    pub privacy_mode: TraceIngestionPrivacyMode,
+}
+
+impl RetrievalEvalCaseProvenance {
+    pub const fn is_full_local(&self) -> bool {
+        matches!(self.privacy_mode, TraceIngestionPrivacyMode::FullLocalOnly)
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -310,6 +326,8 @@ pub struct RetrievalEvalCaseEvaluation {
     pub latency_ms: u64,
     pub failures: Vec<RetrievalEvalFailure>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<RetrievalEvalCaseProvenance>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnosis: Option<EvidenceDiagnosisSummary>,
 }
 
@@ -342,8 +360,20 @@ pub struct RetrievalEvalExperimentSummary {
     pub latency_p50_ms: u64,
     pub latency_p95_ms: u64,
     pub failure_count: u32,
+    #[serde(default)]
+    pub contains_full_local_data: bool,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
+}
+
+pub fn experiment_contains_full_local_data(experiment: &RetrievalEvalExperiment) -> bool {
+    experiment.mode_results.iter().any(|mode| {
+        mode.case_results.iter().any(|case| {
+            case.provenance
+                .as_ref()
+                .is_some_and(RetrievalEvalCaseProvenance::is_full_local)
+        })
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

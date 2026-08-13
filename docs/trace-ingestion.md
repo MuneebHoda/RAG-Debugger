@@ -21,6 +21,8 @@ Send `POST /api/v1/traces/ingest` with `Content-Type: application/json`. A brows
 
 Schema version `1` requires `project_id`, `external_trace_id`, and `privacy_mode`. It accepts bounded query/prompt/answer fields, retrieval configuration, model labels, evidence, spans, known failure labels, evaluation state, timestamps, latency, and status. Unknown fields are rejected. The response reports the internal trace ID, `created`, `updated`, or `unchanged`, mapping status, accepted span count, and stable limitation codes.
 
+Stored status is derived deterministically. A failed span, failed evaluation, or explicit failed status makes the trace failed. Warning spans, failure labels, partial mapping, or an explicit warning make it at least warning. Completed is used only when no failure or warning signal exists, and retries cannot downgrade an existing aggregate status.
+
 ## Direct OTLP/HTTP export
 
 CorpusLab v1 accepts protobuf only at `POST /api/v1/otel/v1/traces`:
@@ -62,15 +64,15 @@ Known content attributes—including query, prompt, completion, messages, docume
 
 ## Privacy and downstream use
 
-| Import mode        | Stored                                                                                  | Eval Lab                                                           | Reports                           |
-| ------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | --------------------------------- |
-| `metadata_only`    | IDs, structure, timing, status, ranks, scores, citations, and safe configuration labels | Disabled because no reproducible query is retained                 | Metadata only                     |
-| `snippets_allowed` | The same metadata plus explicitly supplied bounded evidence snippets                    | Disabled because raw query/answer text is not an approved snippet  | Metadata or evidence snippets     |
-| `full_local_only`  | Explicit bounded local query, prompt, answer, labels, span names, and evidence snippets | Disabled until Eval Lab can preserve source privacy classification | Report creation and export denied |
+| Import mode        | Stored                                                                                  | Eval Lab                                                                | Reports                           |
+| ------------------ | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------- |
+| `metadata_only`    | IDs, structure, timing, status, ranks, scores, citations, and safe configuration labels | Disabled because no reproducible query is retained                      | Metadata only                     |
+| `snippets_allowed` | The same metadata plus explicitly supplied bounded evidence snippets                    | Disabled because raw query/answer text is not an approved snippet       | Metadata or evidence snippets     |
+| `full_local_only`  | Explicit bounded local query, prompt, answer, labels, span names, and evidence snippets | Allowed locally after selecting workspace-authorized CorpusLab evidence | Report creation and export denied |
 
 Native metadata/snippet imports replace submitted span names with the canonical operation label and record `span_names_not_retained`; full-local imports retain the validated, trimmed original name. Control characters and names longer than 256 characters are rejected. React renders names as text, never trusted HTML, and imported span names are not included in report Markdown. Native span kind is optional for backward compatibility and defaults to `unspecified`.
 
-Imported traces therefore cannot currently be converted directly into Eval Lab cases: metadata and snippet modes do not retain the query, while full-local content cannot safely lose its provenance. The API rejects every imported trace source with `imported_trace_eval_not_permitted`; this is enforced server-side as well as explained in Trace Debugger. Users may still create an ordinary Eval Lab case manually from separate, non-sensitive input and must select workspace-authorized CorpusLab evidence.
+Metadata and snippet imports cannot become Eval Lab cases because they retain no reproducible query. A full-local native import can become a local Eval case after the user selects workspace-authorized CorpusLab evidence. The API resolves the source trace inside the authenticated workspace, requires an exact query match, and derives immutable source, trace, and `full_local_only` provenance server-side. That provenance is stored with the case and copied into experiment snapshots/results. Local evaluation and comparison remain available, but CI evaluation and audit-report creation reject any affected dataset or experiment before persistence. Because no report can be created, Markdown, clipboard, download, and report API export paths receive none of that imported content.
 
 The project policy is an upper bound: `LocalOnly` permits all native modes, `ExplicitSnippetSync` permits metadata/snippets, and `RedactedCloudSync` permits metadata only. CorpusLab rejects attempts to exceed it rather than silently downgrading. Privacy mode and schema version are immutable for an imported identity; use a new external trace ID to change either. The internal mapper version may advance on an incremental delivery; memory and PostgreSQL update the serialized trace and relational mapper-version column together.
 
@@ -87,7 +89,7 @@ Request-wide authentication, project, content-type, encoding, decoding, or globa
 | Authentication and project  | `unauthorized`, `insufficient_scope`, `project_header_required`, `invalid_project_id`, `project_not_found`                                                                                                                                                          |
 | Transport and body          | `unsupported_content_type`, `unsupported_content_encoding`, `payload_limit_exceeded`, `malformed_json`, `malformed_protobuf`                                                                                                                                        |
 | Native validation           | `invalid_native_trace`, `unsupported_schema_version`, `privacy_mode_not_permitted`, `invalid_identifier`, `invalid_label`, `invalid_content`, `invalid_number`, `collection_limit_exceeded`, `duplicate_evidence_id`, `duplicate_span_id`, `invalid_span_hierarchy` |
-| Import identity and service | `import_identity_conflict`, `imported_trace_eval_not_permitted`, `mapping_error`, `service_not_ready`, `storage_error`                                                                                                                                              |
+| Import identity and service | `import_identity_conflict`, `imported_trace_eval_not_permitted`, `trace_query_mismatch`, `imported_trace_query_immutable`, `full_local_eval_ci_not_permitted`, `full_local_eval_report_not_permitted`, `mapping_error`, `service_not_ready`, `storage_error`        |
 | OTLP global limits          | `resource_span_limit_exceeded`, `scope_span_limit_exceeded`, `span_limit_exceeded`, `trace_limit_exceeded`, `resource_attribute_limit_exceeded`, `scope_attribute_limit_exceeded`                                                                                   |
 
 Per-trace OTLP mapping failures are returned only as stable codes and counts in `partial_success.error_message`; they include invalid or conflicting IDs, timestamps, bounded numeric attributes, labels, nested attributes, hierarchy, and per-trace span limits. Error bodies and operational events never echo credentials, IDs, labels, or content.

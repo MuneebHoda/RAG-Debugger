@@ -376,8 +376,8 @@ describe("guided run workflow", () => {
     expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
   });
 
-  it("explains imported and queryless Eval restrictions separately", () => {
-    const imported = importedTrace();
+  it("explains imported privacy restrictions and queryless legacy traces separately", () => {
+    const imported = { ...importedTrace(), input: "" };
     imported.ingestion!.privacy_mode = "metadata_only";
     const view = render(<SaveToQualityPanel trace={imported} />);
 
@@ -385,11 +385,51 @@ describe("guided run workflow", () => {
       screen.getByText(/this imported trace cannot become an Eval Lab case/i),
     ).toBeInTheDocument();
 
+    imported.ingestion!.privacy_mode = "snippets_allowed";
+    view.rerender(<SaveToQualityPanel trace={imported} />);
+    expect(screen.getByText(/query was not/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Choose evidence" }),
+    ).not.toBeInTheDocument();
+
     view.rerender(<SaveToQualityPanel trace={{ ...trace, input: "" }} />);
     expect(
       screen.getByText(/this trace has no retained query/i),
     ).toBeInTheDocument();
     expect(screen.queryByText(/imported trace/i)).not.toBeInTheDocument();
+  });
+
+  it("saves a full-local imported query with authorized corpus evidence", async () => {
+    const imported = importedTrace();
+    renderWithClient(<SaveToQualityPanel trace={imported} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose evidence" }));
+    const datasetSelect = await screen.findByLabelText("Quality dataset");
+    await screen.findByRole("option", { name: "Critical questions" });
+    fireEvent.change(datasetSelect, {
+      target: { value: datasetId },
+    });
+    expect(datasetSelect).toHaveValue(datasetId);
+    const results = await screen.findByLabelText("Evidence search results");
+    fireEvent.click(
+      within(results).getAllByRole("button", {
+        name: "Expect this exact chunk",
+      })[0],
+    );
+    const saveButton = screen.getByRole("button", {
+      name: "Save quality case",
+    });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toMatchObject({
+      query: imported.input,
+      source_trace_id: imported.id,
+      expected_chunk_ids: [chunkId],
+    });
+    expect(createdCaseBody).not.toHaveProperty("provenance");
+    expect(createdCaseBody).not.toHaveProperty("privacy_mode");
   });
 
   it("keeps legacy traces readable when structured diagnosis is absent", async () => {
@@ -432,9 +472,7 @@ describe("guided run workflow", () => {
     expect(screen.getByText("demo.tracer · 1.0")).toBeInTheDocument();
     expect(screen.queryByText("0 ms")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("heading", {
-        name: /query withheld by privacy policy/i,
-      }),
+      screen.getByRole("heading", { name: importedTrace().input }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Create audit report" }),
@@ -443,7 +481,7 @@ describe("guided run workflow", () => {
       screen.getByText(/full-local imported traces cannot be reported/i),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/privacy classification cannot yet be preserved/i),
+      screen.getByRole("button", { name: "Choose evidence" }),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
@@ -531,7 +569,7 @@ describe("guided run workflow", () => {
 function importedTrace(): Trace {
   return {
     ...trace,
-    input: "",
+    input: "When do collector workers publish a trace batch?",
     output: null,
     retrieval: null,
     diagnosis: null,
@@ -551,7 +589,7 @@ function importedTrace(): Trace {
       instrumentation_scope_version: "1.0",
       known_failure_labels: ["weak_evidence"],
       status_supplied: true,
-      limitations: ["query_not_retained"],
+      limitations: [],
       prompt: null,
       retrieval_mode: "hybrid",
       top_k: 1,

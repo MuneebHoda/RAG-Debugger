@@ -83,6 +83,7 @@ pub async fn create_report_from_experiment(
         .get_retrieval_eval_experiment(workspace_id, request.experiment_id)
         .await
         .map_err(source_storage_error("eval experiment"))?;
+    reject_full_local_experiment(&experiment)?;
     let dataset_experiments = repository
         .list_retrieval_eval_experiments_for_dataset(workspace_id, experiment.dataset_id)
         .await?;
@@ -115,6 +116,7 @@ pub async fn create_report_from_ci_run(
     if run.workspace_id != user.workspace.id {
         return Err(ApiError::NotFound("CI eval run not found".to_owned()));
     }
+    reject_full_local_experiment(&run.report.experiment)?;
     let project = repository.ensure_default_project(workspace_id).await?;
     let report = build_ci_eval_debug_report(
         build_context(user.workspace.id, project.id, request.privacy_mode),
@@ -124,6 +126,20 @@ pub async fn create_report_from_ci_run(
         StatusCode::CREATED,
         Json(repository.save_debug_report(report).await?),
     ))
+}
+
+fn reject_full_local_experiment(
+    experiment: &rag_debugger_core::RetrievalEvalExperiment,
+) -> Result<(), ApiError> {
+    if rag_debugger_core::experiment_contains_full_local_data(experiment) {
+        Err(ApiError::Coded {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "full_local_eval_report_not_permitted",
+            message: "full-local imported Eval content cannot create or enter reports",
+        })
+    } else {
+        Ok(())
+    }
 }
 
 pub async fn export_report_markdown(

@@ -9,14 +9,15 @@ use rag_debugger_core::{
     CreateRetrievalEvalDatasetRequest, CreateRetrievalEvalLabCaseRequest, DocumentId,
     EvalLabEvidenceSearchQuery, EvalLabEvidenceSearchRequest, QueryEvalLabEvidenceRequest,
     QueryEvalLabEvidenceResponse, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
-    RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
-    RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
-    RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQueryRequest,
-    RunRetrievalEvalExperimentRequest, UpdateRetrievalEvalCaseRequest, WorkspaceId,
-    EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
-    EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS,
-    EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS, EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
+    RetrievalEvalCaseProvenance, RetrievalEvalConfigSnapshot, RetrievalEvalDataset,
+    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
+    RetrievalEvalExperimentId, RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison,
+    RetrievalEvalRun, RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode,
+    RetrievalQueryRequest, RunRetrievalEvalExperimentRequest, TraceIngestionPrivacyMode,
+    UpdateRetrievalEvalCaseRequest, WorkspaceId, EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT,
+    EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS,
+    EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS,
+    EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
@@ -115,26 +116,44 @@ pub async fn create_case(
         .get_retrieval_eval_dataset(workspace_id, RetrievalEvalDatasetId(dataset_id))
         .await
         .map_err(not_found_to_api("eval dataset"))?;
-    if let Some(trace_id) = request.source_trace_id {
+    let provenance = if let Some(trace_id) = request.source_trace_id {
         let trace = repository
             .get_trace_detail(workspace_id, trace_id)
             .await
             .map_err(not_found_to_api("trace"))?;
-        if trace.ingestion.is_some() {
-            return Err(ApiError::Coded {
-                status: axum::http::StatusCode::UNPROCESSABLE_ENTITY,
-                code: "imported_trace_eval_not_permitted",
-                message: "imported traces cannot create Eval Lab cases",
-            });
+        if let Some(ingestion) = trace.ingestion {
+            if ingestion.privacy_mode != TraceIngestionPrivacyMode::FullLocalOnly {
+                return Err(ApiError::Coded {
+                    status: axum::http::StatusCode::UNPROCESSABLE_ENTITY,
+                    code: "imported_trace_eval_not_permitted",
+                    message: "this imported trace cannot create an Eval Lab case",
+                });
+            }
+            if trace.input != request.query {
+                return Err(ApiError::Coded {
+                    status: axum::http::StatusCode::BAD_REQUEST,
+                    code: "trace_query_mismatch",
+                    message: "eval query does not match the source trace",
+                });
+            }
+            Some(RetrievalEvalCaseProvenance {
+                source_trace_id: trace.id,
+                source: ingestion.source,
+                privacy_mode: ingestion.privacy_mode,
+            })
+        } else {
+            if trace.input.trim() != request.query.trim() {
+                return Err(ApiError::Coded {
+                    status: axum::http::StatusCode::BAD_REQUEST,
+                    code: "trace_query_mismatch",
+                    message: "eval query does not match the source trace",
+                });
+            }
+            None
         }
-        if trace.input.trim() != request.query.trim() {
-            return Err(ApiError::Coded {
-                status: axum::http::StatusCode::BAD_REQUEST,
-                code: "trace_query_mismatch",
-                message: "eval query does not match the source trace",
-            });
-        }
-    }
+    } else {
+        None
+    };
     validate_evidence_request_counts(
         Some(&request.expected_document_ids),
         Some(&request.expected_chunk_ids),
@@ -143,6 +162,7 @@ pub async fn create_case(
     request.expected_document_ids = dedupe_document_ids(request.expected_document_ids);
     let eval_case = eval_case_from_request(
         request,
+        provenance,
         state.config().product.retrieval.default_top_k,
         state.config().product.retrieval.max_top_k,
     )?;
@@ -181,6 +201,18 @@ pub async fn update_case(
         .get_retrieval_eval_case(workspace_id, case_id)
         .await
         .map_err(not_found_to_api("eval case"))?;
+    if current.provenance.is_some()
+        && request
+            .query
+            .as_ref()
+            .is_some_and(|query| query != &current.query)
+    {
+        return Err(ApiError::Coded {
+            status: axum::http::StatusCode::BAD_REQUEST,
+            code: "imported_trace_query_immutable",
+            message: "an imported trace Eval query cannot be changed",
+        });
+    }
     let submitted_evidence = SubmittedExpectedEvidence {
         document_ids: request.expected_document_ids.clone(),
         chunk_ids: request.expected_chunk_ids.clone(),
@@ -308,42 +340,44 @@ pub async fn run_experiment(
     let saved = repository
         .save_retrieval_eval_experiment(workspace_id, experiment)
         .await?;
-    if let Some(best_result) = saved.mode_results.iter().max_by(|left, right| {
-        left.average_recall_at_k
-            .partial_cmp(&right.average_recall_at_k)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    }) {
-        repository
-            .save_retrieval_eval_run(
-                workspace_id,
-                &RetrievalEvalRun {
-                    id: RetrievalEvalRunId(Uuid::now_v7()),
-                    retrieval_mode: best_result.retrieval_mode,
-                    case_count: best_result.case_count,
-                    passed_count: best_result.passed_count,
-                    average_recall_at_k: best_result.average_recall_at_k,
-                    average_precision_at_k: best_result.average_precision_at_k,
-                    created_at: saved.created_at,
-                    results: best_result
-                        .case_results
-                        .iter()
-                        .map(|result| rag_debugger_core::RetrievalEvalResult {
-                            case_id: result.case_id,
-                            query: result.query.clone(),
-                            top_k: result.top_k,
-                            recall_at_k: result.recall_at_k,
-                            precision_at_k: result.precision_at_k,
-                            top_hit_rank: result.top_hit_rank,
-                            passed: result.passed,
-                            expected_chunk_ids: result.expected_chunk_ids.clone(),
-                            expected_document_ids: result.expected_document_ids.clone(),
-                            retrieved_chunk_ids: result.retrieved_chunk_ids.clone(),
-                            latency_ms: result.latency_ms,
-                        })
-                        .collect(),
-                },
-            )
-            .await?;
+    if !rag_debugger_core::experiment_contains_full_local_data(&saved) {
+        if let Some(best_result) = saved.mode_results.iter().max_by(|left, right| {
+            left.average_recall_at_k
+                .partial_cmp(&right.average_recall_at_k)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        }) {
+            repository
+                .save_retrieval_eval_run(
+                    workspace_id,
+                    &RetrievalEvalRun {
+                        id: RetrievalEvalRunId(Uuid::now_v7()),
+                        retrieval_mode: best_result.retrieval_mode,
+                        case_count: best_result.case_count,
+                        passed_count: best_result.passed_count,
+                        average_recall_at_k: best_result.average_recall_at_k,
+                        average_precision_at_k: best_result.average_precision_at_k,
+                        created_at: saved.created_at,
+                        results: best_result
+                            .case_results
+                            .iter()
+                            .map(|result| rag_debugger_core::RetrievalEvalResult {
+                                case_id: result.case_id,
+                                query: result.query.clone(),
+                                top_k: result.top_k,
+                                recall_at_k: result.recall_at_k,
+                                precision_at_k: result.precision_at_k,
+                                top_hit_rank: result.top_hit_rank,
+                                passed: result.passed,
+                                expected_chunk_ids: result.expected_chunk_ids.clone(),
+                                expected_document_ids: result.expected_document_ids.clone(),
+                                retrieved_chunk_ids: result.retrieved_chunk_ids.clone(),
+                                latency_ms: result.latency_ms,
+                            })
+                            .collect(),
+                    },
+                )
+                .await?;
+        }
     }
 
     Ok(Json(saved))
@@ -599,11 +633,16 @@ fn candidate_limit(specific: Option<u32>, legacy: Option<u32>) -> u32 {
 
 fn eval_case_from_request(
     request: CreateRetrievalEvalLabCaseRequest,
+    provenance: Option<RetrievalEvalCaseProvenance>,
     default_top_k: u32,
     max_top_k: u32,
 ) -> Result<RetrievalEvalCase, ApiError> {
-    let query = request.query.trim().to_owned();
-    if query.is_empty() {
+    let query = if provenance.is_some() {
+        request.query.clone()
+    } else {
+        request.query.trim().to_owned()
+    };
+    if query.trim().is_empty() {
         return Err(ApiError::BadRequest(
             "eval query must not be empty".to_owned(),
         ));
@@ -625,6 +664,7 @@ fn eval_case_from_request(
         expected_chunk_ids: dedupe_chunk_ids(request.expected_chunk_ids),
         expected_document_ids: dedupe_document_ids(request.expected_document_ids),
         notes: request.notes,
+        provenance,
         created_at: OffsetDateTime::now_utc(),
     })
 }

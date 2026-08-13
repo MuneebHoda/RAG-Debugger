@@ -1,15 +1,16 @@
 use std::collections::{BTreeSet, HashSet};
 
 use rag_debugger_core::{
-    DebuggerConfig, DocumentId, EvidenceStrength, RetrievalEmbeddingReadiness, RetrievalEvalCase,
-    RetrievalEvalCaseEvaluation, RetrievalEvalCaseId, RetrievalEvalCaseRegression,
-    RetrievalEvalComparison, RetrievalEvalDatasetId, RetrievalEvalExperiment,
-    RetrievalEvalExperimentSummary, RetrievalEvalFailure, RetrievalEvalFailureLabel,
-    RetrievalEvalFailureSeverity, RetrievalEvalGate, RetrievalEvalGateStatus,
-    RetrievalEvalMetricDelta, RetrievalEvalModeResult, RetrievalEvalRegressionClassification,
-    RetrievalEvalRegressionComparison, RetrievalEvalRegressionMetric, RetrievalEvalResult,
-    RetrievalEvalTrendPoint, RetrievalEvalTrendSummary, RetrievalMode, RetrievalQualityFlag,
-    RetrievalQueryResponse, SearchableChunk,
+    experiment_contains_full_local_data, DebuggerConfig, DocumentId, EvidenceStrength,
+    RetrievalEmbeddingReadiness, RetrievalEvalCase, RetrievalEvalCaseEvaluation,
+    RetrievalEvalCaseId, RetrievalEvalCaseRegression, RetrievalEvalComparison,
+    RetrievalEvalDatasetId, RetrievalEvalExperiment, RetrievalEvalExperimentSummary,
+    RetrievalEvalFailure, RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity,
+    RetrievalEvalGate, RetrievalEvalGateStatus, RetrievalEvalMetricDelta, RetrievalEvalModeResult,
+    RetrievalEvalRegressionClassification, RetrievalEvalRegressionComparison,
+    RetrievalEvalRegressionMetric, RetrievalEvalResult, RetrievalEvalTrendPoint,
+    RetrievalEvalTrendSummary, RetrievalMode, RetrievalQualityFlag, RetrievalQueryResponse,
+    SearchableChunk,
 };
 
 use crate::diagnosis::{diagnose_retrieval, ExpectedEvidence};
@@ -250,6 +251,7 @@ pub fn evaluate_retrieval_eval_case_with_context(
         retrieved_chunk_ids,
         latency_ms: response.run.latency_ms,
         failures,
+        provenance: case.provenance.clone(),
         diagnosis: Some(diagnose_retrieval(
             response,
             debugger_config,
@@ -457,6 +459,7 @@ pub fn summarize_experiment(
         latency_p50_ms: best.map_or(0, |result| result.latency_p50_ms),
         latency_p95_ms: best.map_or(0, |result| result.latency_p95_ms),
         failure_count: experiment.failures.len() as u32,
+        contains_full_local_data: experiment_contains_full_local_data(experiment),
         created_at: experiment.created_at,
     }
 }
@@ -1050,6 +1053,7 @@ mod tests {
             expected_chunk_ids: vec![chunk_id],
             expected_document_ids: Vec::new(),
             notes: None,
+            provenance: None,
             created_at: OffsetDateTime::now_utc(),
         };
         let response = RetrievalQueryResponse {
@@ -1318,6 +1322,7 @@ mod tests {
             expected_chunk_ids: vec![expected_chunk_id],
             expected_document_ids: expected_document_id.into_iter().collect(),
             notes: Some("Deterministic regression fixture".to_owned()),
+            provenance: None,
             created_at: OffsetDateTime::now_utc(),
         }
     }
@@ -1526,6 +1531,7 @@ mod tests {
             retrieved_chunk_ids: vec![retrieved_chunk],
             latency_ms: if passed { 20 } else { 35 },
             failures,
+            provenance: None,
             diagnosis: None,
         }
     }

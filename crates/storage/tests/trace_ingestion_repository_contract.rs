@@ -124,6 +124,27 @@ where
         summaries[0].mapping_status,
         Some(TraceMappingStatus::PartiallyMapped)
     );
+    let mut failed_evaluation = imported_trace(project.id, "external-1", "span-2");
+    failed_evaluation
+        .ingestion
+        .as_mut()
+        .expect("failed evaluation metadata")
+        .evaluation_passed = Some(false);
+    failed_evaluation.status = TraceStatus::Failed;
+    let failed = repository
+        .upsert_imported_trace(first_workspace, failed_evaluation)
+        .await
+        .expect("failed evaluation raises aggregate status");
+    assert_eq!(failed.trace.status, TraceStatus::Failed);
+
+    let harmless_retry = repository
+        .upsert_imported_trace(
+            first_workspace,
+            imported_trace(project.id, "external-1", "span-2"),
+        )
+        .await
+        .expect("incomplete retry cannot lower aggregate status");
+    assert_eq!(harmless_retry.trace.status, TraceStatus::Failed);
     let mut privacy_conflict = first.clone();
     privacy_conflict
         .ingestion

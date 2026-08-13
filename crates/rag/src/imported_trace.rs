@@ -96,21 +96,7 @@ pub fn build_native_trace(
             EvidenceStrength::Weak => 2,
         })
         .unwrap_or(EvidenceStrength::Weak);
-    let requested_status = request.status.unwrap_or_else(|| {
-        if request
-            .spans
-            .iter()
-            .any(|span| span.status == ImportedSpanStatus::Failed)
-        {
-            TraceStatus::Failed
-        } else if request.failure_labels.is_empty()
-            && mapping_status == TraceMappingStatus::Complete
-        {
-            TraceStatus::Completed
-        } else {
-            TraceStatus::Warning
-        }
-    });
+    let requested_status = request.status;
     let status_supplied = request.status.is_some();
     let known_failure_labels = request.failure_labels.clone();
     let metadata = TraceIngestionMetadata {
@@ -138,6 +124,7 @@ pub fn build_native_trace(
         evaluation_label: request.evaluation_label,
         timestamps_supplied,
     };
+    let derived_status = derive_imported_trace_status(&metadata, requested_status);
     let mut trace = Trace {
         id: TraceId(Uuid::now_v7()),
         project_id: project.id,
@@ -149,8 +136,8 @@ pub fn build_native_trace(
         generation: None,
         failure_labels: request.failure_labels,
         source_run_id: None,
-        summary: imported_summary(requested_status, mapping_status),
-        status: requested_status,
+        summary: String::new(),
+        status: derived_status,
         evidence_strength: Some(evidence_strength),
         spans: Vec::new(),
         retrieval: None,
@@ -158,6 +145,7 @@ pub fn build_native_trace(
         diagnosis: None,
         ingestion: Some(metadata),
     };
+    trace.summary = imported_summary(trace.status, mapping_status);
     add_diagnosis(&mut trace, retrieval_config, debugger_config);
     Ok(trace)
 }
@@ -196,15 +184,17 @@ pub fn add_diagnosis(
         .collect::<std::collections::BTreeSet<_>>();
     failure_labels.extend(legacy_failure_labels(&diagnosis));
     trace.failure_labels = failure_labels.into_iter().collect();
-    trace.status = retain_worst_status(
-        trace.status,
-        match diagnosis.outcome {
-            DiagnosisOutcome::Strong => TraceStatus::Completed,
-            DiagnosisOutcome::Mixed | DiagnosisOutcome::Weak => TraceStatus::Warning,
-            DiagnosisOutcome::Failing => TraceStatus::Failed,
-        },
-    );
-    trace.summary = diagnosis.summary.clone();
+    let diagnosis_status = match diagnosis.outcome {
+        DiagnosisOutcome::Strong => TraceStatus::Completed,
+        DiagnosisOutcome::Mixed | DiagnosisOutcome::Weak => TraceStatus::Warning,
+        DiagnosisOutcome::Failing => TraceStatus::Failed,
+    };
+    trace.status = retain_worst_status(trace.status, diagnosis_status);
+    trace.summary = if trace.status == diagnosis_status {
+        diagnosis.summary.clone()
+    } else {
+        imported_summary(trace.status, metadata.mapping_status)
+    };
     trace.diagnosis = Some(diagnosis);
 }
 
@@ -671,6 +661,61 @@ mod tests {
     }
 
     #[test]
+    fn failed_evaluation_makes_a_new_import_failed() {
+        let mut request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        request.evaluation_passed = Some(false);
+
+        let trace = build_native_trace(
+            &project(PrivacyMode::LocalOnly),
+            request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("failed evaluation import");
+
+        assert_eq!(trace.status, TraceStatus::Failed);
+        assert_eq!(trace.summary, "Imported trace contains a failed operation.");
+    }
+
+    #[test]
+    fn warning_span_makes_a_new_import_warning() {
+        let mut request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        let mut warning = span("warning-span", None);
+        warning.status = ImportedSpanStatus::Warning;
+        request.spans = vec![warning];
+
+        let trace = build_native_trace(
+            &project(PrivacyMode::LocalOnly),
+            request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("warning span import");
+
+        assert_eq!(trace.status, TraceStatus::Warning);
+        assert_eq!(trace.summary, "Imported trace contains warning signals.");
+    }
+
+    #[test]
+    fn explicit_completed_status_cannot_hide_failure_signals() {
+        let mut request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        let mut failed = span("failed-span", None);
+        failed.status = ImportedSpanStatus::Failed;
+        request.spans = vec![failed];
+        request.status = Some(TraceStatus::Completed);
+
+        let trace = build_native_trace(
+            &project(PrivacyMode::LocalOnly),
+            request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("contradictory status import");
+
+        assert_eq!(trace.status, TraceStatus::Failed);
+    }
+
+    #[test]
     fn supported_import_keeps_weak_candidates_as_secondary_warnings() {
         let mut request = request(TraceIngestionPrivacyMode::FullLocalOnly);
         request.top_k = Some(2);
@@ -831,6 +876,64 @@ mod tests {
             &DebuggerConfig::default(),
         );
         assert!(merged.diagnosis.is_some());
+    }
+
+    #[test]
+    fn retries_raise_status_monotonically_and_harmless_retries_are_unchanged() {
+        let project = project(PrivacyMode::LocalOnly);
+        let existing = build_native_trace(
+            &project,
+            request(TraceIngestionPrivacyMode::FullLocalOnly),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("initial import");
+        assert_eq!(
+            merge_imported_trace(&existing, existing.clone()).expect("harmless retry"),
+            existing
+        );
+
+        let mut failed_eval_request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        failed_eval_request.evaluation_passed = Some(false);
+        let failed_eval = build_native_trace(
+            &project,
+            failed_eval_request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("failed evaluation retry");
+        let failed = merge_imported_trace(&existing, failed_eval).expect("merge failed eval");
+        assert_eq!(failed.status, TraceStatus::Failed);
+
+        let completed = build_native_trace(
+            &project,
+            request(TraceIngestionPrivacyMode::FullLocalOnly),
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("completed retry");
+        let retained_failure =
+            merge_imported_trace(&failed, completed).expect("failed aggregate remains failed");
+        assert_eq!(retained_failure.status, TraceStatus::Failed);
+        assert_eq!(retained_failure.summary, failed.summary);
+
+        let mut warning_request = request(TraceIngestionPrivacyMode::FullLocalOnly);
+        let mut warning = span("warning-span", None);
+        warning.status = ImportedSpanStatus::Warning;
+        warning_request.spans = vec![warning];
+        let warning = build_native_trace(
+            &project,
+            warning_request,
+            &RetrievalConfig::default(),
+            &DebuggerConfig::default(),
+        )
+        .expect("warning retry");
+        assert_eq!(
+            merge_imported_trace(&existing, warning)
+                .expect("merge warning span")
+                .status,
+            TraceStatus::Warning
+        );
     }
 
     #[test]

@@ -1,16 +1,20 @@
 use rag_debugger_core::{
     ApiKey, ApiKeyId, ApiKeyRecord, ApiKeyScope, CiEvalReport, CiEvalRun, CiEvalRunId,
     CiEvalRunStatus, EmbeddingModelInfo, Organization, OrganizationId, RetrievalEvalCase,
-    RetrievalEvalCaseId, RetrievalEvalComparison, RetrievalEvalConfigSnapshot,
-    RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalExperiment,
-    RetrievalEvalExperimentId, RetrievalEvalGate, RetrievalEvalGateStatus, RetrievalEvalRun,
-    RetrievalEvalRunId, RetrievalMode, RetrievalWeights, User, UserId, Workspace, WorkspaceId,
-    WorkspaceRole,
+    RetrievalEvalCaseId, RetrievalEvalCaseProvenance, RetrievalEvalComparison,
+    RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
+    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalGate, RetrievalEvalGateStatus,
+    RetrievalEvalRun, RetrievalEvalRunId, RetrievalMode, RetrievalWeights, Trace, TraceId,
+    TraceIngestionMetadata, TraceIngestionPrivacyMode, TraceIngestionSource, TraceMappingStatus,
+    TraceStatus, User, UserId, Workspace, WorkspaceId, WorkspaceRole,
 };
 use rag_debugger_storage::{
     memory::MemoryStore,
     postgres::PostgresStore,
-    repository::{AuthRepository, CiEvalRepository, EvalRepository, SubmittedExpectedEvidence},
+    repository::{
+        AuthRepository, CiEvalRepository, EvalRepository, ProjectRepository,
+        SubmittedExpectedEvidence, TraceRepository,
+    },
     StorageError,
 };
 use time::OffsetDateTime;
@@ -33,7 +37,7 @@ async fn postgres_eval_repository_enforces_workspace_ownership() {
 
 async fn run_eval_workspace_contract<R>(repository: &R)
 where
-    R: AuthRepository + CiEvalRepository + EvalRepository,
+    R: AuthRepository + CiEvalRepository + EvalRepository + ProjectRepository + TraceRepository,
 {
     let workspace_a = create_workspace(repository, "alpha").await;
     let workspace_b = create_workspace(repository, "beta").await;
@@ -47,6 +51,56 @@ where
         .create_retrieval_eval_dataset(workspace_b, dataset_b.clone())
         .await
         .expect("create beta dataset");
+
+    let project_a = repository
+        .ensure_default_project(workspace_a)
+        .await
+        .expect("alpha project");
+    let imported_trace = full_local_trace(project_a.id);
+    repository
+        .upsert_imported_trace(workspace_a, imported_trace.clone())
+        .await
+        .expect("save full-local source trace");
+    let mut imported_case = eval_case("Imported alpha case");
+    imported_case.query.clone_from(&imported_trace.input);
+    imported_case.provenance = Some(RetrievalEvalCaseProvenance {
+        source_trace_id: imported_trace.id,
+        source: TraceIngestionSource::Native,
+        privacy_mode: TraceIngestionPrivacyMode::FullLocalOnly,
+    });
+    let saved_imported_case = repository
+        .create_retrieval_eval_case_in_dataset(workspace_a, dataset_a.id, imported_case.clone())
+        .await
+        .expect("save imported eval provenance");
+    assert_eq!(saved_imported_case.provenance, imported_case.provenance);
+    assert_eq!(
+        repository
+            .get_retrieval_eval_case(workspace_a, imported_case.id)
+            .await
+            .expect("read imported eval provenance")
+            .provenance,
+        imported_case.provenance
+    );
+    let mut mismatched_query = eval_case("Mismatched imported case");
+    mismatched_query.provenance = saved_imported_case.provenance.clone();
+    assert!(matches!(
+        repository
+            .create_retrieval_eval_case_in_dataset(workspace_a, dataset_a.id, mismatched_query)
+            .await,
+        Err(StorageError::NotFound)
+    ));
+    let mut cross_workspace_provenance = eval_case("Forged imported case");
+    cross_workspace_provenance.provenance = saved_imported_case.provenance;
+    assert!(matches!(
+        repository
+            .create_retrieval_eval_case_in_dataset(
+                workspace_b,
+                dataset_b.id,
+                cross_workspace_provenance,
+            )
+            .await,
+        Err(StorageError::NotFound)
+    ));
 
     let case_a = eval_case("Alpha case");
     let case_b = eval_case("Beta case");
@@ -274,7 +328,56 @@ fn eval_case(name: &str) -> RetrievalEvalCase {
         expected_chunk_ids: Vec::new(),
         expected_document_ids: Vec::new(),
         notes: None,
+        provenance: None,
         created_at: OffsetDateTime::now_utc(),
+    }
+}
+
+fn full_local_trace(project_id: rag_debugger_core::ProjectId) -> Trace {
+    let now = OffsetDateTime::now_utc();
+    Trace {
+        id: TraceId(Uuid::now_v7()),
+        project_id,
+        input: "private local query".to_owned(),
+        output: None,
+        started_at: now,
+        completed_at: Some(now),
+        retrieval_runs: Vec::new(),
+        generation: None,
+        failure_labels: Vec::new(),
+        source_run_id: None,
+        summary: "Imported trace".to_owned(),
+        status: TraceStatus::Completed,
+        evidence_strength: None,
+        spans: Vec::new(),
+        retrieval: None,
+        reruns: Vec::new(),
+        diagnosis: None,
+        ingestion: Some(TraceIngestionMetadata {
+            source: TraceIngestionSource::Native,
+            external_trace_id: format!("eval-source-{}", Uuid::now_v7()),
+            schema_version: "1".to_owned(),
+            mapper_version: "1".to_owned(),
+            mapping_status: TraceMappingStatus::Complete,
+            privacy_mode: TraceIngestionPrivacyMode::FullLocalOnly,
+            service_name: None,
+            service_version: None,
+            deployment_environment: None,
+            instrumentation_scope_name: None,
+            instrumentation_scope_version: None,
+            known_failure_labels: Vec::new(),
+            status_supplied: false,
+            limitations: Vec::new(),
+            prompt: None,
+            retrieval_mode: Some(RetrievalMode::Hybrid),
+            top_k: Some(5),
+            model_config: None,
+            evidence: Vec::new(),
+            spans: Vec::new(),
+            evaluation_passed: None,
+            evaluation_label: None,
+            timestamps_supplied: true,
+        }),
     }
 }
 

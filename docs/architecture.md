@@ -132,4 +132,4 @@ The current local machine path should support Apple Silicon experiments through 
 
 ## External Trace Boundary
 
-Native JSON and OTLP/HTTP protobuf receivers are trust boundaries. Generated OTLP types exist only in `apps/api`; they map into versioned core contracts before reaching RAG behavior or storage. Both receivers authenticate, resolve the workspace from trusted state, verify the explicit project, enforce bounds and privacy, then atomically merge by external identity. See [ADR 0007](adr/0007-local-trace-ingestion.md).
+Native JSON and OTLP/HTTP protobuf receivers are trust boundaries. Generated OTLP types exist only in `apps/api`; they map into versioned core contracts before reaching RAG behavior or storage. Both receivers authenticate, resolve the workspace from trusted state, verify the explicit project, enforce bounds and privacy, then atomically merge by external identity. Full-local Eval conversion derives immutable provenance from a workspace-owned source trace and propagates it through experiment results so CI and report boundaries can reject outward use. See [ADR 0007](adr/0007-local-trace-ingestion.md).

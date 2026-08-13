@@ -158,4 +158,4 @@ PDF export, billing, hosted sync, external LLM calls, and broad Reports-page red
 
 ## Imported Trace Reports
 
-Imported traces cannot exceed their ingestion policy: metadata imports create only metadata reports; snippet imports create metadata or snippet reports; and `full_local_only` imports cannot create a report. Imported evidence uses its external evidence ID for lineage and never fabricates CorpusLab corpus IDs.
+Imported traces cannot exceed their ingestion policy: metadata imports create only metadata reports; snippet imports create metadata or snippet reports; and `full_local_only` imports cannot create a report. Eval cases derived from full-local imports retain server-derived provenance in every experiment result, and experiment/CI report creation rejects that provenance before building or persisting a report. Therefore Markdown, clipboard, download, and report API export cannot receive the imported query. Imported evidence uses its external evidence ID for lineage and never fabricates CorpusLab corpus IDs.

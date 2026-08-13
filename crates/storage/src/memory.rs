@@ -568,6 +568,12 @@ impl EvalRepository for MemoryStore {
             &eval_case.expected_document_ids,
             &eval_case.expected_chunk_ids,
         )?;
+        validate_eval_case_provenance_owned(
+            &inner,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
+        )?;
         let dataset_id = ensure_default_eval_dataset(&mut inner, workspace_id)?.id;
         inner
             .retrieval_eval_case_datasets
@@ -725,6 +731,12 @@ impl EvalRepository for MemoryStore {
             &eval_case.expected_document_ids,
             &eval_case.expected_chunk_ids,
         )?;
+        validate_eval_case_provenance_owned(
+            &inner,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
+        )?;
         inner
             .retrieval_eval_case_datasets
             .insert(eval_case.id, dataset_id);
@@ -745,6 +757,13 @@ impl EvalRepository for MemoryStore {
         if !eval_case_owned_by(&inner, workspace_id, eval_case.id) {
             return Err(StorageError::NotFound);
         }
+        if inner
+            .retrieval_eval_cases
+            .get(&eval_case.id)
+            .is_none_or(|current| current.provenance != eval_case.provenance)
+        {
+            return Err(StorageError::NotFound);
+        }
         validate_expected_evidence_owned(
             &inner,
             workspace_id,
@@ -753,6 +772,12 @@ impl EvalRepository for MemoryStore {
                 .as_deref()
                 .unwrap_or_default(),
             submitted_evidence.chunk_ids.as_deref().unwrap_or_default(),
+        )?;
+        validate_eval_case_provenance_owned(
+            &inner,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
         )?;
         inner
             .retrieval_eval_cases
@@ -1520,6 +1545,33 @@ fn validate_expected_evidence_owned(
     } else {
         Err(StorageError::UnavailableEvidence)
     }
+}
+
+fn validate_eval_case_provenance_owned(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    provenance: &Option<rag_debugger_core::RetrievalEvalCaseProvenance>,
+    query: &str,
+) -> Result<(), StorageError> {
+    let Some(provenance) = provenance else {
+        return Ok(());
+    };
+    let valid = provenance.privacy_mode
+        == rag_debugger_core::TraceIngestionPrivacyMode::FullLocalOnly
+        && inner.trace_workspaces.get(&provenance.source_trace_id) == Some(&workspace_id)
+        && inner
+            .traces
+            .get(&provenance.source_trace_id)
+            .and_then(|trace| trace.ingestion.as_ref())
+            .is_some_and(|ingestion| {
+                ingestion.source == provenance.source
+                    && ingestion.privacy_mode == provenance.privacy_mode
+            })
+        && inner
+            .traces
+            .get(&provenance.source_trace_id)
+            .is_some_and(|trace| trace.input == query);
+    valid.then_some(()).ok_or(StorageError::NotFound)
 }
 
 fn claim_unowned_legacy_data(inner: &mut MemoryStoreInner, workspace_id: WorkspaceId) {

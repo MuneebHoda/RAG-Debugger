@@ -2,7 +2,10 @@ import { FilePlus2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 
 import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
-import type { RetrievalEvalExperiment } from "../../../../lib/api/evalLab";
+import {
+  experimentContainsFullLocalData,
+  type RetrievalEvalExperiment,
+} from "../../../../lib/api/evalLab";
 import type { DebugReportPrivacyMode } from "../../../../lib/api/reports";
 import type { TraceSummary } from "../../../../lib/api/traces";
 import { useCreateDebugReport } from "../hooks/useReports";
@@ -27,6 +30,13 @@ export function ReportCreationPanel({
     useState<DebugReportPrivacyMode>("metadata_only");
   const createReport = useCreateDebugReport();
   const options = sourceType === "trace" ? traces : experiments;
+  const selectedExperiment =
+    sourceType === "experiment"
+      ? experiments.find((experiment) => experiment.id === sourceId)
+      : undefined;
+  const exportBlocked = selectedExperiment
+    ? experimentContainsFullLocalData(selectedExperiment)
+    : false;
 
   function changeSourceType(nextType: "trace" | "experiment") {
     setSourceType(nextType);
@@ -81,8 +91,19 @@ export function ReportCreationPanel({
               {sourcesLoading ? "Loading sources…" : "Select a source"}
             </option>
             {options.map((option) => (
-              <option key={option.id} value={option.id}>
+              <option
+                disabled={
+                  "mode_results" in option &&
+                  experimentContainsFullLocalData(option)
+                }
+                key={option.id}
+                value={option.id}
+              >
                 {"query" in option ? option.query : option.name}
+                {"mode_results" in option &&
+                experimentContainsFullLocalData(option)
+                  ? " — local only, reports blocked"
+                  : ""}
               </option>
             ))}
           </select>
@@ -101,12 +122,20 @@ export function ReportCreationPanel({
             <option value="full_local_only">Full local diagnostics</option>
           </select>
         </div>
-        <button type="submit" disabled={!sourceId || createReport.isPending}>
+        <button
+          type="submit"
+          disabled={!sourceId || exportBlocked || createReport.isPending}
+        >
           <FilePlus2 aria-hidden="true" size={16} />
           {createReport.isPending ? "Creating…" : "Create report"}
         </button>
       </form>
       <p className={styles.privacyHint}>{privacyDescription(privacyMode)}</p>
+      {exportBlocked ? (
+        <p className={styles.formError} role="status">
+          Full-local imported Eval content cannot create or enter reports.
+        </p>
+      ) : null}
       {createReport.isError ? (
         <p className={styles.formError} role="alert">
           {createReport.error instanceof Error
