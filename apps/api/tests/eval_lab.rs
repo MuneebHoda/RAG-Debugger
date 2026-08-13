@@ -256,6 +256,7 @@ async fn imported_traces_cannot_be_copied_into_eval_lab() {
         .expect("metadata trace id")
         .to_owned();
     let metadata_response = app
+        .clone()
         .oneshot(json_request(
             Method::POST,
             &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
@@ -271,6 +272,12 @@ async fn imported_traces_cannot_be_copied_into_eval_lab() {
     assert_eq!(
         json_body(metadata_response).await["error"]["code"],
         "imported_trace_eval_not_permitted"
+    );
+    assert!(
+        get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await["cases"]
+            .as_array()
+            .expect("cases")
+            .is_empty()
     );
 }
 

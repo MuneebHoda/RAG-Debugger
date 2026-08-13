@@ -5,12 +5,11 @@ set -eu
 : "${CORPUSLAB_API_KEY:?Create a trace-ingestion API key in Settings}"
 : "${CORPUSLAB_PROJECT_ID:?Copy the project ID from Settings > API keys}"
 
-case "${CORPUSLAB_PROJECT_ID}" in
-  *[!0-9a-fA-F-]*)
-    echo "CORPUSLAB_PROJECT_ID must be a UUID." >&2
-    exit 1
-    ;;
-esac
+if ! printf '%s\n' "${CORPUSLAB_PROJECT_ID}" |
+  grep -Eq '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'; then
+  echo "CORPUSLAB_PROJECT_ID must be a UUID." >&2
+  exit 1
+fi
 
 header_file=$(mktemp "${TMPDIR:-/tmp}/corpuslab-ingest.XXXXXX")
 trap 'rm -f "${header_file}"' EXIT HUP INT TERM
