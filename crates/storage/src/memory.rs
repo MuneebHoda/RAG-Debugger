@@ -9,9 +9,9 @@ use rag_debugger_core::{
     ApiKey, ApiKeyId, ApiKeyRecord, AuthSessionRecord, AuthenticatedUser, Chunk, ChunkEmbedding,
     ChunkId, CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
     DocumentSummary, EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo,
-    EmbeddingStatus, IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals,
-    Organization, PrivacyMode, Project, ProjectId, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
+    EmbeddingStatus, ImportedTraceUpsertResult, IngestionRun, IngestionRunId, IngestionRunStatus,
+    IngestionTotals, Organization, PrivacyMode, Project, ProjectId, RetrievalEvalCase,
+    RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
     RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
     RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
     TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
@@ -106,6 +106,22 @@ impl ProjectRepository for MemoryStore {
         inner.projects.insert(project.id, project.clone());
         inner.project_workspaces.insert(project.id, workspace_id);
         Ok(project)
+    }
+
+    async fn get_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project_id: ProjectId,
+    ) -> Result<Project, StorageError> {
+        let inner = self.lock()?;
+        if inner.project_workspaces.get(&project_id) != Some(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
+        inner
+            .projects
+            .get(&project_id)
+            .cloned()
+            .ok_or(StorageError::NotFound)
     }
 }
 
@@ -364,6 +380,78 @@ impl TraceRepository for MemoryStore {
         Ok(trace)
     }
 
+    async fn upsert_imported_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<ImportedTraceUpsertResult, StorageError> {
+        let mut inner = self.lock()?;
+        if !workspace_owns_project(&inner, workspace_id, trace.project_id) {
+            return Err(StorageError::NotFound);
+        }
+        let identity = trace.ingestion.as_ref().ok_or_else(|| {
+            StorageError::InvalidData("imported trace metadata is required".to_owned())
+        })?;
+        let existing = inner
+            .traces
+            .values()
+            .find(|candidate| {
+                inner.trace_workspaces.get(&candidate.id) == Some(&workspace_id)
+                    && candidate.project_id == trace.project_id
+                    && candidate.ingestion.as_ref().is_some_and(|metadata| {
+                        metadata.source == identity.source
+                            && metadata.external_trace_id == identity.external_trace_id
+                    })
+            })
+            .cloned();
+        let (saved, disposition) = if let Some(existing) = existing {
+            let merged =
+                rag_debugger_core::merge_imported_trace(&existing, trace).map_err(|error| {
+                    match error {
+                        rag_debugger_core::TraceMergeError::IdentityImmutable => {
+                            StorageError::Conflict(error.to_string())
+                        }
+                        _ => StorageError::TraceMerge(error),
+                    }
+                })?;
+            let disposition = if merged == existing {
+                rag_debugger_core::TraceIngestionDisposition::Unchanged
+            } else {
+                rag_debugger_core::TraceIngestionDisposition::Updated
+            };
+            (merged, disposition)
+        } else {
+            (trace, rag_debugger_core::TraceIngestionDisposition::Created)
+        };
+        if let Some(existing) = inner.traces.get(&saved.id) {
+            if inner.trace_workspaces.get(&saved.id) != Some(&workspace_id) {
+                return Err(StorageError::NotFound);
+            }
+            let identity_matches = existing.project_id == saved.project_id
+                && existing
+                    .ingestion
+                    .as_ref()
+                    .is_some_and(|existing_metadata| {
+                        saved.ingestion.as_ref().is_some_and(|saved_metadata| {
+                            existing_metadata.source == saved_metadata.source
+                                && existing_metadata.external_trace_id
+                                    == saved_metadata.external_trace_id
+                        })
+                    });
+            if !identity_matches {
+                return Err(StorageError::Conflict(
+                    "trace ID is already assigned to another trace identity".to_owned(),
+                ));
+            }
+        }
+        inner.trace_workspaces.insert(saved.id, workspace_id);
+        inner.traces.insert(saved.id, saved.clone());
+        Ok(ImportedTraceUpsertResult {
+            trace: saved,
+            disposition,
+        })
+    }
+
     async fn list_traces(
         &self,
         workspace_id: WorkspaceId,
@@ -487,6 +575,12 @@ impl EvalRepository for MemoryStore {
             workspace_id,
             &eval_case.expected_document_ids,
             &eval_case.expected_chunk_ids,
+        )?;
+        validate_eval_case_provenance_owned(
+            &inner,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
         )?;
         let dataset_id = ensure_default_eval_dataset(&mut inner, workspace_id)?.id;
         inner
@@ -645,6 +739,12 @@ impl EvalRepository for MemoryStore {
             &eval_case.expected_document_ids,
             &eval_case.expected_chunk_ids,
         )?;
+        validate_eval_case_provenance_owned(
+            &inner,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
+        )?;
         inner
             .retrieval_eval_case_datasets
             .insert(eval_case.id, dataset_id);
@@ -665,6 +765,13 @@ impl EvalRepository for MemoryStore {
         if !eval_case_owned_by(&inner, workspace_id, eval_case.id) {
             return Err(StorageError::NotFound);
         }
+        if inner
+            .retrieval_eval_cases
+            .get(&eval_case.id)
+            .is_none_or(|current| current.provenance != eval_case.provenance)
+        {
+            return Err(StorageError::NotFound);
+        }
         validate_expected_evidence_owned(
             &inner,
             workspace_id,
@@ -673,6 +780,12 @@ impl EvalRepository for MemoryStore {
                 .as_deref()
                 .unwrap_or_default(),
             submitted_evidence.chunk_ids.as_deref().unwrap_or_default(),
+        )?;
+        validate_eval_case_provenance_owned(
+            &inner,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
         )?;
         inner
             .retrieval_eval_cases
@@ -1442,6 +1555,33 @@ fn validate_expected_evidence_owned(
     }
 }
 
+fn validate_eval_case_provenance_owned(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    provenance: &Option<rag_debugger_core::RetrievalEvalCaseProvenance>,
+    query: &str,
+) -> Result<(), StorageError> {
+    let Some(provenance) = provenance else {
+        return Ok(());
+    };
+    let valid = provenance.privacy_mode
+        == rag_debugger_core::TraceIngestionPrivacyMode::FullLocalOnly
+        && inner.trace_workspaces.get(&provenance.source_trace_id) == Some(&workspace_id)
+        && inner
+            .traces
+            .get(&provenance.source_trace_id)
+            .and_then(|trace| trace.ingestion.as_ref())
+            .is_some_and(|ingestion| {
+                ingestion.source == provenance.source
+                    && ingestion.privacy_mode == provenance.privacy_mode
+            })
+        && inner
+            .traces
+            .get(&provenance.source_trace_id)
+            .is_some_and(|trace| trace.input == query);
+    valid.then_some(()).ok_or(StorageError::NotFound)
+}
+
 fn claim_unowned_legacy_data(inner: &mut MemoryStoreInner, workspace_id: WorkspaceId) {
     if inner.workspaces.len() != 1 {
         return;
@@ -1596,8 +1736,17 @@ fn trace_summary_from_trace(trace: &Trace) -> TraceSummary {
             })
             .unwrap_or(rag_debugger_core::EvidenceStrength::Weak),
         failure_labels: trace.failure_labels.clone(),
-        span_count: trace.spans.len() as u32,
+        span_count: trace
+            .ingestion
+            .as_ref()
+            .map_or(trace.spans.len(), |metadata| metadata.spans.len()) as u32,
         rerun_count: trace.reruns.len() as u32,
         created_at: trace.started_at,
+        ingestion_source: trace.ingestion.as_ref().map(|value| value.source),
+        external_trace_id: trace
+            .ingestion
+            .as_ref()
+            .map(|value| value.external_trace_id.clone()),
+        mapping_status: trace.ingestion.as_ref().map(|value| value.mapping_status),
     }
 }

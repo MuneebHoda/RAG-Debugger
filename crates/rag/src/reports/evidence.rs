@@ -32,6 +32,7 @@ pub(super) fn experiment_evidence(
                     DebugReportEvidenceRef {
                         label: String::new(),
                         role: DebugReportEvidenceRole::Retrieved,
+                        external_evidence_id: None,
                         source_id: None,
                         document_id: None,
                         chunk_id: Some(*chunk_id),
@@ -62,6 +63,7 @@ pub(super) fn experiment_evidence(
                     DebugReportEvidenceRef {
                         label: String::new(),
                         role,
+                        external_evidence_id: None,
                         source_id: None,
                         document_id: None,
                         chunk_id: Some(*chunk_id),
@@ -96,6 +98,7 @@ pub(super) fn experiment_evidence(
                     DebugReportEvidenceRef {
                         label: String::new(),
                         role,
+                        external_evidence_id: None,
                         source_id: None,
                         document_id: Some(*document_id),
                         chunk_id: None,

@@ -48,6 +48,7 @@ async fn eval_lab_manages_datasets_and_cases() {
         case["expected_chunk_ids"].as_array().expect("chunks").len(),
         1
     );
+    assert!(case["provenance"].is_null());
 
     let evidence = request_json(
         &app,
@@ -159,6 +160,303 @@ async fn eval_lab_manages_datasets_and_cases() {
 
     let detail = get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
     assert!(detail["cases"].as_array().expect("cases").is_empty());
+}
+
+#[tokio::test]
+async fn full_local_imports_create_provenance_locked_local_eval_cases() {
+    let app = test_app().await;
+    let project = get_json(&app, "/api/v1/projects/current").await;
+    let upload = upload_text_file(&app, "safe-evidence.md", "Authorized local evidence.").await;
+    let chunk_id = upload["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("chunk id");
+    let dataset = create_dataset(&app, "Private import guard").await;
+    let dataset_id = dataset["id"].as_str().expect("dataset id");
+    let marker = "FULL_LOCAL_QUERY_MUST_NOT_ESCAPE";
+    let source_query = format!(" {marker} ");
+    let ingest = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/traces/ingest",
+            json!({
+                "schema_version": "1",
+                "project_id": project["id"],
+                "external_trace_id": "full-local-eval-guard",
+                "privacy_mode": "full_local_only",
+                "query": source_query.clone()
+            }),
+        ))
+        .await
+        .expect("ingestion response");
+    assert_eq!(ingest.status(), StatusCode::CREATED);
+    let trace_id = json_body(ingest).await["trace_id"]
+        .as_str()
+        .expect("trace id")
+        .to_owned();
+
+    let inaccessible_trace = "00000000-0000-0000-0000-000000000099";
+    let inaccessible = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "safe query",
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": inaccessible_trace
+            }),
+        ))
+        .await
+        .expect("inaccessible source response");
+    assert_eq!(inaccessible.status(), StatusCode::NOT_FOUND);
+    assert!(!json_body(inaccessible)
+        .await
+        .to_string()
+        .contains(inaccessible_trace));
+
+    let mismatch = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "different query",
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": trace_id
+            }),
+        ))
+        .await
+        .expect("query mismatch response");
+    assert_eq!(mismatch.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json_body(mismatch).await["error"]["code"],
+        "trace_query_mismatch"
+    );
+
+    let created = create_case(
+        &app,
+        dataset_id,
+        json!({
+            "query": source_query.clone(),
+            "expected_chunk_ids": [chunk_id],
+            "source_trace_id": trace_id,
+            "provenance": {
+                "source_trace_id": "00000000-0000-0000-0000-000000000001",
+                "source": "otlp_http",
+                "privacy_mode": "metadata_only"
+            }
+        }),
+    )
+    .await;
+    assert_eq!(created["provenance"]["source_trace_id"], trace_id);
+    assert_eq!(created["provenance"]["source"], "native");
+    assert_eq!(created["provenance"]["privacy_mode"], "full_local_only");
+    assert_eq!(created["query"], source_query);
+
+    let immutable = app
+        .clone()
+        .oneshot(json_request(
+            Method::PATCH,
+            &format!(
+                "/api/v1/eval-lab/cases/{}",
+                created["id"].as_str().expect("case id")
+            ),
+            json!({ "query": "laundered query" }),
+        ))
+        .await
+        .expect("immutable query response");
+    assert_eq!(immutable.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json_body(immutable).await["error"]["code"],
+        "imported_trace_query_immutable"
+    );
+
+    let metadata_ingest = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/traces/ingest",
+            json!({
+                "schema_version": "1",
+                "project_id": project["id"],
+                "external_trace_id": "metadata-eval-guard",
+                "privacy_mode": "metadata_only"
+            }),
+        ))
+        .await
+        .expect("metadata ingestion response");
+    let metadata_trace_id = json_body(metadata_ingest).await["trace_id"]
+        .as_str()
+        .expect("metadata trace id")
+        .to_owned();
+    let metadata_response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "separate safe query",
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": metadata_trace_id
+            }),
+        ))
+        .await
+        .expect("metadata eval guard response");
+    assert_eq!(metadata_response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        json_body(metadata_response).await["error"]["code"],
+        "imported_trace_eval_not_permitted"
+    );
+    let snippets_ingest = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/traces/ingest",
+            json!({
+                "schema_version": "1",
+                "project_id": project["id"],
+                "external_trace_id": "snippets-eval-guard",
+                "privacy_mode": "snippets_allowed",
+                "query": "discarded query",
+                "retrieved_evidence": [{
+                    "external_chunk_id": "external-1",
+                    "rank": 1,
+                    "score": 0.5,
+                    "snippet": "bounded snippet"
+                }]
+            }),
+        ))
+        .await
+        .expect("snippets ingestion response");
+    let snippets_trace_id = json_body(snippets_ingest).await["trace_id"]
+        .as_str()
+        .expect("snippets trace id")
+        .to_owned();
+    let snippets_response = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/eval-lab/datasets/{dataset_id}/cases"),
+            json!({
+                "query": "separate safe query",
+                "expected_chunk_ids": [chunk_id],
+                "source_trace_id": snippets_trace_id
+            }),
+        ))
+        .await
+        .expect("snippets eval guard response");
+    assert_eq!(snippets_response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        json_body(snippets_response).await["error"]["code"],
+        "imported_trace_eval_not_permitted"
+    );
+
+    let experiment = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/eval-lab/experiments",
+        json!({ "dataset_id": dataset_id, "modes": ["lexical"] }),
+    )
+    .await;
+    assert_eq!(
+        experiment["mode_results"][0]["case_results"][0]["provenance"]["privacy_mode"],
+        "full_local_only"
+    );
+    assert_eq!(
+        get_json(
+            &app,
+            &format!(
+                "/api/v1/eval-lab/experiments/{}",
+                experiment["id"].as_str().expect("experiment id")
+            )
+        )
+        .await["mode_results"][0]["case_results"][0]["provenance"],
+        experiment["mode_results"][0]["case_results"][0]["provenance"]
+    );
+
+    let report = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/reports/from-experiment",
+            json!({
+                "experiment_id": experiment["id"],
+                "privacy_mode": "metadata_only"
+            }),
+        ))
+        .await
+        .expect("full-local report rejection");
+    assert_eq!(report.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let report_error = json_body(report).await;
+    assert_eq!(
+        report_error["error"]["code"],
+        "full_local_eval_report_not_permitted"
+    );
+    assert!(!report_error.to_string().contains(marker));
+
+    let key = request_json(
+        &app,
+        Method::POST,
+        "/api/v1/api-keys",
+        json!({ "name": "Local provenance CI guard" }),
+    )
+    .await;
+    let ci = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/eval-lab/ci/runs")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", key["secret"].as_str().expect("key secret")),
+                )
+                .body(Body::from(json!({ "dataset_id": dataset_id }).to_string()))
+                .expect("CI request"),
+        )
+        .await
+        .expect("full-local CI rejection");
+    assert_eq!(ci.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let ci_error = json_body(ci).await;
+    assert_eq!(
+        ci_error["error"]["code"],
+        "full_local_eval_ci_not_permitted"
+    );
+    assert!(!ci_error.to_string().contains(marker));
+
+    let ci_runs = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/eval-lab/ci/runs")
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {}", key["secret"].as_str().expect("key secret")),
+                )
+                .body(Body::empty())
+                .expect("CI list request"),
+        )
+        .await
+        .expect("CI list response");
+    assert!(json_body(ci_runs)
+        .await
+        .as_array()
+        .expect("CI runs")
+        .is_empty());
+    let reports = get_json(&app, "/api/v1/reports").await;
+    assert!(reports.as_array().expect("reports").is_empty());
+    assert!(!reports.to_string().contains(marker));
+
+    assert_eq!(
+        get_json(&app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await["cases"]
+            .as_array()
+            .expect("cases")
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]

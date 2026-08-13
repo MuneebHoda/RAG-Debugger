@@ -31,6 +31,18 @@ export function TraceRerunPanel({ trace }: { trace: Trace }) {
     },
   });
 
+  if (trace.ingestion) {
+    return (
+      <section className={styles.panel}>
+        <h2>External trace comparisons</h2>
+        <p>
+          CorpusLab cannot rerun an external application. Re-ingest a trace from
+          the candidate configuration, then compare its Eval Lab results.
+        </p>
+      </section>
+    );
+  }
+
   return (
     <div className={styles.stack}>
       <section className={styles.panel}>

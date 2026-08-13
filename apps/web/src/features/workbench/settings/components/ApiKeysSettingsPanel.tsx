@@ -6,20 +6,28 @@ import {
   createApiKey,
   revokeApiKey,
   type ApiKey,
+  type ApiKeyScope,
 } from "../../../../lib/api/apiKeys";
+import type { CurrentProject } from "../../../../lib/api/projects";
 import { WorkbenchPanel } from "../../../../components/workbench/WorkbenchPanel";
 import { formatDateTime } from "../../../../lib/dateTime";
 import styles from "../SettingsPage.module.css";
 
-export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
+export function ApiKeysSettingsPanel({
+  apiKeys,
+  project,
+}: {
+  apiKeys: ApiKey[];
+  project?: CurrentProject;
+}) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("GitHub Actions");
+  const [scope, setScope] = useState<ApiKeyScope>("ci_eval_runs");
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState<string | null>(null);
   const createMutation = useMutation({
-    mutationFn: () =>
-      createApiKey({ name: name.trim(), scopes: ["ci_eval_runs"] }),
+    mutationFn: () => createApiKey({ name: name.trim(), scopes: [scope] }),
     onSuccess: (created) => {
       setCreatedSecret(created.secret);
       setCopied(false);
@@ -36,7 +44,7 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
   return (
     <WorkbenchPanel
       className={styles.panel}
-      description="Create workspace-scoped credentials for CI quality gates."
+      description="Create workspace-scoped credentials for CI gates or trace ingestion."
       icon={KeyRound}
       title="API keys"
       titleId="api-keys-title"
@@ -52,6 +60,23 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
           again after you leave this page.
         </p>
       </div>
+
+      {project ? (
+        <div className={styles.keyGuidance}>
+          <strong>Trace ingestion project</strong>
+          <p>
+            Use project ID <code>{project.id}</code> with the native contract or{" "}
+            <code>x-corpuslab-project-id</code> OTLP header.
+          </p>
+          <p>
+            Project privacy policy:{" "}
+            {project.privacy_mode
+              .replaceAll(/([a-z])([A-Z])/g, "$1 $2")
+              .toLowerCase()}
+            .
+          </p>
+        </div>
+      ) : null}
 
       {createdSecret ? (
         <div
@@ -105,6 +130,18 @@ export function ApiKeysSettingsPanel({ apiKeys }: { apiKeys: ApiKey[] }) {
             value={name}
             onChange={(event) => setName(event.currentTarget.value)}
           />
+        </label>
+        <label>
+          Key purpose
+          <select
+            value={scope}
+            onChange={(event) =>
+              setScope(event.currentTarget.value as ApiKeyScope)
+            }
+          >
+            <option value="ci_eval_runs">CI Eval Lab gates</option>
+            <option value="trace_ingest">Trace ingestion</option>
+          </select>
         </label>
         <button
           className={styles.primaryButton}

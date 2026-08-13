@@ -32,6 +32,27 @@ export type TraceSpanKind =
   | "eval_check"
   | "generation";
 export type TraceSpanStatus = "succeeded" | "warning" | "failed";
+export type TraceIngestionSource = "native" | "otlp_http";
+export type TraceMappingStatus = "complete" | "partially_mapped";
+export type TraceIngestionPrivacyMode =
+  | "metadata_only"
+  | "snippets_allowed"
+  | "full_local_only";
+export type ImportedSpanOperation =
+  | "retrieval"
+  | "embedding"
+  | "reranking"
+  | "generation"
+  | "tool"
+  | "eval"
+  | "other";
+export type ImportedSpanKind =
+  | "internal"
+  | "server"
+  | "client"
+  | "producer"
+  | "consumer"
+  | "unspecified";
 
 export interface TraceSummary {
   id: string;
@@ -43,6 +64,71 @@ export interface TraceSummary {
   span_count: number;
   rerun_count: number;
   created_at: string;
+  ingestion_source?: TraceIngestionSource | null;
+  external_trace_id?: string | null;
+  mapping_status?: TraceMappingStatus | null;
+}
+
+export interface ImportedEvidence {
+  external_chunk_id: string;
+  document_label: string | null;
+  rank: number;
+  score: number;
+  lexical_score: number | null;
+  semantic_score: number | null;
+  citation_label: string | null;
+  snippet: string | null;
+  answer_support_status: "supported" | "unsupported" | "unassessed";
+  answer_support_reason: string;
+}
+
+export interface ImportedSpan {
+  external_span_id: string;
+  parent_span_id: string | null;
+  operation: ImportedSpanOperation;
+  kind: ImportedSpanKind;
+  name: string;
+  started_at: string;
+  completed_at: string | null;
+  latency_ms: number;
+  status: TraceSpanStatus;
+  provider: string | null;
+  model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  error_type: string | null;
+}
+
+export interface TraceIngestionMetadata {
+  source: TraceIngestionSource;
+  external_trace_id: string;
+  schema_version: string;
+  mapper_version: string;
+  mapping_status: TraceMappingStatus;
+  privacy_mode: TraceIngestionPrivacyMode;
+  service_name: string | null;
+  service_version: string | null;
+  deployment_environment: string | null;
+  instrumentation_scope_name: string | null;
+  instrumentation_scope_version: string | null;
+  known_failure_labels: FailureLabel[];
+  status_supplied: boolean;
+  limitations: string[];
+  prompt: string | null;
+  retrieval_mode: RetrievalMode | null;
+  top_k: number | null;
+  model_config: {
+    provider: string | null;
+    generation_model: string | null;
+    embedding_model: string | null;
+    ranker: string | null;
+    configuration_label: string | null;
+  } | null;
+  evidence: ImportedEvidence[];
+  spans: ImportedSpan[];
+  evaluation_passed: boolean | null;
+  evaluation_label: string | null;
+  timestamps_supplied: boolean;
 }
 
 export interface TraceSpan {
@@ -129,6 +215,7 @@ export interface Trace {
   retrieval: RetrievalQueryResponse | null;
   reruns: TraceRerunComparison[];
   diagnosis?: EvidenceDiagnosisSummary | null;
+  ingestion?: TraceIngestionMetadata | null;
 }
 
 export interface CreateTraceFromRetrievalRunRequest {

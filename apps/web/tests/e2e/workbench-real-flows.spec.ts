@@ -32,7 +32,7 @@ test("completes the real guided workflow against the memory API", async ({
 
   await page.goto("/app/retrieval");
   await page.getByText("Advanced", { exact: true }).click();
-  await page.getByRole("button", { name: "Index" }).click();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
   await expect(page.getByText(/indexed · local-hash-v1/i)).toBeVisible();
   await page
     .getByLabel("What should the corpus answer?")
@@ -255,6 +255,221 @@ test("completes the real guided workflow against the memory API", async ({
       ),
     ).toBeTruthy();
   }
+});
+
+test("ingests privacy-scoped external traces through Debugger and permitted reports", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const apiUrl = "http://127.0.0.1:18080/api/v1";
+  const suffix = crypto.randomUUID();
+
+  await page.goto("/login");
+  await page.getByLabel("Email").fill(testCredentials.email);
+  await page.getByLabel("Password").fill(testCredentials.password);
+  await page.getByRole("button", { name: /open workbench/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+
+  await page.goto("/app/sources");
+  await page.getByLabel("Choose files").setInputFiles({
+    name: `collector-guide-${suffix}.md`,
+    mimeType: "text/markdown",
+    buffer: Buffer.from(
+      "# Collector reliability\n\nCollector workers validate trace batches before publishing them to the local index.",
+    ),
+  });
+  await page.getByRole("button", { name: "Ingest files" }).click();
+  await expect(
+    page.getByRole("link").filter({
+      hasText: `collector-guide-${suffix}.md`,
+    }),
+  ).toBeVisible();
+  await page.goto("/app/retrieval");
+  await page.getByText("Advanced", { exact: true }).click();
+  await page.getByRole("button", { name: "Index", exact: true }).click();
+  await expect(page.getByText(/indexed · local-hash-v1/i)).toBeVisible();
+
+  const projectResponse = await page.request.get(`${apiUrl}/projects/current`);
+  expect(projectResponse.ok()).toBeTruthy();
+  const project = (await projectResponse.json()) as { id: string };
+
+  await page.goto("/app/settings?tab=api-keys");
+  await expect(page.getByText(project.id)).toBeVisible();
+  await page.getByLabel("Key name").fill(`Trace collector ${suffix}`);
+  await page.getByLabel("Key purpose").selectOption("trace_ingest");
+  await page.getByRole("button", { name: "Create key" }).click();
+  const secretRegion = page.getByLabel("Created API key secret");
+  const apiKey = await secretRegion.locator("code").textContent();
+  expect(apiKey).toBeTruthy();
+
+  const ingest = async (
+    externalTraceId: string,
+    privacyMode: "metadata_only" | "snippets_allowed" | "full_local_only",
+  ) => {
+    const response = await page.request.post(`${apiUrl}/traces/ingest`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      data: {
+        schema_version: "1",
+        project_id: project.id,
+        external_trace_id: externalTraceId,
+        privacy_mode: privacyMode,
+        query: "When do collector workers publish a trace batch?",
+        prompt: "SECRET_PLAYWRIGHT_PROMPT",
+        answer: "After validation.",
+        retrieval_mode: "hybrid",
+        top_k: 1,
+        failure_labels: ["weak_evidence"],
+        retrieved_evidence: [
+          {
+            external_chunk_id: "collector-evidence-1",
+            document_label: "collector-guide.md",
+            rank: 1,
+            score: 0.82,
+            citation_label: "E1",
+            snippet:
+              "Collector workers validate trace batches before publishing them.",
+            answer_support_status: "supported",
+            answer_support_reason: "direct_body_support",
+          },
+        ],
+        spans: [
+          {
+            external_span_id: "retrieve-1",
+            operation: "retrieval",
+            name: "Retrieve local evidence",
+            started_at: "2026-08-12T08:00:00Z",
+            completed_at: "2026-08-12T08:00:00.010Z",
+            latency_ms: 10,
+            status: "succeeded",
+          },
+          {
+            external_span_id: "generate-1",
+            parent_span_id: "retrieve-1",
+            operation: "generation",
+            name: "Generate answer",
+            started_at: "2026-08-12T08:00:00.010Z",
+            completed_at: "2026-08-12T08:00:00.020Z",
+            latency_ms: 10,
+            status: "warning",
+          },
+        ],
+      },
+    });
+    expect(response.status()).toBe(201);
+    return (await response.json()) as { trace_id: string };
+  };
+
+  const imported = await ingest(
+    `playwright-snippets-${suffix}`,
+    "snippets_allowed",
+  );
+  await page.goto(`/app/traces/${imported.trace_id}`);
+  await expect(
+    page.getByRole("heading", {
+      name: "Query withheld by privacy policy",
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("snippets allowed", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "Timeline" }).click();
+  const hierarchy = page.getByRole("list", { name: "Imported span hierarchy" });
+  await expect(hierarchy.getByText("Retrieval", { exact: true })).toBeVisible();
+  await expect(
+    hierarchy.getByText("Generation", { exact: true }),
+  ).toBeVisible();
+  await expect(hierarchy.getByText("unspecified")).toHaveCount(2);
+
+  await page.getByRole("tab", { name: "Evidence" }).click();
+  await expect(
+    page.getByText(
+      "Collector workers validate trace batches before publishing them.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("collector-guide.md")).toHaveCount(0);
+
+  await page.getByRole("tab", { name: "Summary" }).click();
+  await expect(
+    page.getByText(/evidence snippets were retained, but the query was not/i),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Choose evidence" }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Create audit report" }).click();
+  await page
+    .getByLabel("Privacy", { exact: true })
+    .selectOption("snippets_allowed");
+  await page.getByRole("button", { name: "Create report" }).click();
+  await expect(page).toHaveURL(/\/app\/reports\/[0-9a-f-]+$/);
+  await expect(
+    page.getByRole("heading", { name: /imported rag trace audit/i }),
+  ).toBeVisible();
+
+  const metadata = await ingest(
+    `playwright-metadata-${suffix}`,
+    "metadata_only",
+  );
+  await page.goto(`/app/traces/${metadata.trace_id}`);
+  await expect(
+    page.getByRole("heading", { name: "Query withheld by privacy policy" }),
+  ).toBeVisible();
+  await expect(page.getByText(/query was not retained/i)).toBeVisible();
+  await expect(page.getByText("SECRET_PLAYWRIGHT_PROMPT")).toHaveCount(0);
+
+  const fullLocal = await ingest(
+    `playwright-full-${suffix}`,
+    "full_local_only",
+  );
+  await page.goto(`/app/traces/${fullLocal.trace_id}`);
+  await expect(
+    page.getByRole("button", { name: "Create audit report" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(
+      /full-local imported traces cannot be reported or exported/i,
+    ),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Choose evidence" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Choose evidence" }).click();
+  const qualityDataset = page.getByLabel("Quality dataset");
+  await qualityDataset.selectOption({ index: 1 });
+  const selectedDatasetId = await qualityDataset.inputValue();
+  await page
+    .getByLabel("Search corpus evidence")
+    .fill(`collector-guide-${suffix}.md`);
+  await page.getByRole("button", { name: "Search", exact: true }).click();
+  const evidenceResults = page.getByLabel("Evidence search results");
+  await evidenceResults
+    .getByRole("button", { name: "Expect this exact chunk" })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "Save quality case" }).click();
+  await expect(page.getByText("Quality case saved.")).toBeVisible();
+
+  await page.goto(`/app/evals/datasets/${selectedDatasetId}`);
+  await expect(
+    page.getByText(/imported native trace · full local only/i),
+  ).toBeVisible();
+  await page.getByLabel("Experiment name").fill(`Local import ${suffix}`);
+  await page.getByRole("button", { name: "Run experiment" }).click();
+  await expect(page).toHaveURL(/\/app\/evals\/experiments\/[0-9a-f-]+$/);
+  await expect(
+    page.getByRole("button", { name: "Create audit report" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByText(/full-local imported Eval content cannot create/i),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Copy Markdown" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("link", { name: "Download Markdown" }),
+  ).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expectNoHorizontalOverflow(page);
 });
 
 test("completes the versioned sample demo through Markdown audit export", async ({

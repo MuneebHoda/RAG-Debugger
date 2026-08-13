@@ -212,3 +212,7 @@ just docs-pdf
 6. Update docs or ADRs when the architecture changes.
 
 Read `docs/frontend-architecture.md` before adding or reorganizing frontend code. Route wrappers should compose or re-export feature pages; server state and workflow actions belong in domain hooks when page orchestration becomes complex.
+
+## External Trace Ingestion
+
+External traces enter through `POST /api/v1/traces/ingest` or protobuf OTLP at `POST /api/v1/otel/v1/traces`. Create a `trace_ingest` key and copy the current project ID from Settings. The complete native, SDK, Collector, and troubleshooting workflow is in [Local trace ingestion](trace-ingestion.md).

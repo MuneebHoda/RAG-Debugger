@@ -10,7 +10,7 @@ use tower_http::cors::CorsLayer;
 
 use super::{
     api_keys, auth_routes, ci_eval, config, demo, embeddings, eval_lab, evals, health, overview,
-    reports, retrieval, sources, traces,
+    projects, reports, retrieval, sources, trace_ingestion, traces,
 };
 use crate::{auth, error::ApiError, state::AppState};
 
@@ -47,6 +47,16 @@ fn public_routes() -> Router<AppState> {
         .route(
             "/eval-lab/ci/runs/:run_id/report",
             get(ci_eval::get_ci_eval_report),
+        )
+        .route(
+            "/traces/ingest",
+            post(trace_ingestion::ingest_native)
+                .layer(DefaultBodyLimit::max(trace_ingestion::MAX_BODY_BYTES)),
+        )
+        .route(
+            "/otel/v1/traces",
+            post(trace_ingestion::ingest_otlp)
+                .layer(DefaultBodyLimit::max(trace_ingestion::MAX_BODY_BYTES)),
         )
 }
 
@@ -133,6 +143,7 @@ fn protected_routes(state: AppState) -> Router<AppState> {
             get(sources::list_document_chunks),
         )
         .route("/workspaces/current", get(auth_routes::current_workspace))
+        .route("/projects/current", get(projects::current_project))
         .route(
             "/api-keys",
             get(api_keys::list_api_keys).post(api_keys::create_api_key),
@@ -164,6 +175,10 @@ fn cors_layer(state: &AppState) -> CorsLayer {
     CorsLayer::new()
         .allow_origin(origin)
         .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::DELETE])
-        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("x-corpuslab-project-id"),
+        ])
         .allow_credentials(true)
 }

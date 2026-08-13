@@ -20,6 +20,7 @@ export interface SaveEvidenceSource {
   query: string;
   topK: number;
   note: string;
+  traceId?: string;
 }
 
 interface SourceDraft {
@@ -172,11 +173,12 @@ export function useSaveEvidenceLifecycle({
       controller,
       payload: {
         name: activeDraft.caseName.trim() || source.query.trim(),
-        query: source.query.trim(),
+        query: source.query,
         top_k: source.topK,
         expected_chunk_ids: normalizedSelection.chunkIds,
         expected_document_ids: normalizedSelection.documentIds,
         notes: activeDraft.notes.trim() || null,
+        source_trace_id: source.traceId,
       },
     });
   }

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   RetrievalEvalCase,
+  RetrievalEvalExperiment,
   RetrievalEvalRegressionComparison,
 } from "../../../lib/api/evalLab";
 import { CiRunDetailPage } from "./CiRunDetailPage";
@@ -35,7 +36,8 @@ const ciRunId = "018f7a2a-6e2e-7000-a000-000000000314";
 let historyShouldFail = false;
 let regressionShouldFail = false;
 let ciRunShouldFail = false;
-let experimentResponse: ReturnType<typeof experiment> | null = null;
+let datasetResponse: ReturnType<typeof dataset> | null = null;
+let experimentResponse: RetrievalEvalExperiment | null = null;
 type CiRunFixtureBase = ReturnType<typeof ciRun>;
 type CiRunFixture = Omit<
   CiRunFixtureBase,
@@ -61,6 +63,7 @@ describe("guided Eval Lab workflow", () => {
     historyShouldFail = false;
     regressionShouldFail = false;
     ciRunShouldFail = false;
+    datasetResponse = null;
     experimentResponse = null;
     ciRunResponse = null;
     ciRunsResponse = [];
@@ -69,7 +72,7 @@ describe("guided Eval Lab workflow", () => {
       vi.fn(async (input: RequestInfo | URL) => {
         const url = input.toString();
         if (url.endsWith(`/api/v1/eval-lab/datasets/${datasetId}`)) {
-          return responseJson(dataset());
+          return responseJson(datasetResponse ?? dataset());
         }
         if (
           url.includes(`/api/v1/eval-lab/datasets/${datasetId}/experiments`)
@@ -433,6 +436,50 @@ describe("guided Eval Lab workflow", () => {
     expect(screen.queryByText("Expected but missing")).not.toBeInTheDocument();
   });
 
+  it("keeps imported full-local Eval provenance visible and non-reportable", async () => {
+    const provenance = {
+      source_trace_id: "018f7a2a-6e2e-7000-a000-000000000399",
+      source: "native" as const,
+      privacy_mode: "full_local_only" as const,
+    };
+    datasetResponse = dataset();
+    (datasetResponse.cases[0] as RetrievalEvalCase).provenance = provenance;
+
+    const datasetView = renderRoute(
+      `/app/evals/datasets/${datasetId}`,
+      <Route
+        path="/app/evals/datasets/:datasetId"
+        element={<DatasetDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/imported native trace · full local only/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /run experiment/i }),
+    ).toBeEnabled();
+    datasetView.unmount();
+
+    const fullLocalExperiment = experiment() as RetrievalEvalExperiment;
+    fullLocalExperiment.mode_results[0].case_results[0].provenance = provenance;
+    experimentResponse = fullLocalExperiment;
+    renderRoute(
+      `/app/evals/experiments/${experimentId}`,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Create audit report" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/full-local imported Eval content cannot create/i),
+    ).toBeInTheDocument();
+  });
+
   it("shows gate failures before the detailed mode metrics", async () => {
     renderRoute(
       `/app/evals/experiments/${experimentId}`,
@@ -483,7 +530,9 @@ describe("guided Eval Lab workflow", () => {
   });
 
   it("shows missing expectations for a completed experiment with zero hits", async () => {
-    experimentResponse = experimentWithRetrievedChunks([]);
+    experimentResponse = experimentWithRetrievedChunks(
+      [],
+    ) as RetrievalEvalExperiment;
     renderRoute(
       `/app/evals/experiments/${experimentId}`,
       <Route
@@ -734,6 +783,33 @@ describe("stale expected evidence repair", () => {
   });
 
   afterEach(() => vi.unstubAllGlobals());
+
+  it("keeps a full-local imported query exact and read-only during edits", async () => {
+    persistedCase.query = " private imported query ";
+    persistedCase.provenance = {
+      source_trace_id: "018f7a2a-6e2e-7000-a000-000000000399",
+      source: "native",
+      privacy_mode: "full_local_only",
+    };
+    renderDatasetDetail();
+
+    const caseCard = await openCaseEditor();
+    expect(within(caseCard).getByLabelText(/^Question/)).toHaveAttribute(
+      "readonly",
+    );
+    expect(
+      within(caseCard).getByText(/source trace query is immutable/i),
+    ).toBeInTheDocument();
+    fireEvent.change(within(caseCard).getByLabelText("Case name"), {
+      target: { value: "Renamed private case" },
+    });
+    fireEvent.click(
+      within(caseCard).getByRole("button", { name: "Save changes" }),
+    );
+
+    await waitFor(() => expect(updateBodies).toHaveLength(1));
+    expect(updateBodies[0].query).toBe(" private imported query ");
+  });
 
   it("omits evidence fields for name, notes, and top_k-only edits", async () => {
     renderDatasetDetail();

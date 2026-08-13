@@ -7,11 +7,14 @@ mod embeddings;
 mod eval_lab;
 mod evals;
 mod health;
+mod otlp;
 mod overview;
+mod projects;
 mod reports;
 mod retrieval;
 mod routing;
 mod sources;
+mod trace_ingestion;
 mod traces;
 
 pub use routing::router;

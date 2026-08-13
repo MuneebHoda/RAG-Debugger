@@ -45,6 +45,17 @@ pub async fn run_ci_eval(
             "eval dataset needs at least one case".to_owned(),
         ));
     }
+    if dataset.cases.iter().any(|case| {
+        case.provenance
+            .as_ref()
+            .is_some_and(rag_debugger_core::RetrievalEvalCaseProvenance::is_full_local)
+    }) {
+        return Err(ApiError::Coded {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "full_local_eval_ci_not_permitted",
+            message: "datasets containing full-local imported cases cannot run in CI",
+        });
+    }
 
     let modes = normalized_modes(request.modes);
     let top_k = normalized_top_k(

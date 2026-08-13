@@ -1,6 +1,6 @@
 import { jsonRequest, requestJson } from "./client";
 
-export type ApiKeyScope = "ci_eval_runs";
+export type ApiKeyScope = "ci_eval_runs" | "trace_ingest";
 
 export interface ApiKey {
   id: string;

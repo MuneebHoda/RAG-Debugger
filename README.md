@@ -96,10 +96,12 @@ The current implementation is local-first: ingestion, embeddings, retrieval, tra
 - Reopen traces without losing the evidence and ranking context that produced the diagnosis.
 - Rerun the same trace with lexical, vector, or hybrid retrieval and a different `top_k` value.
 - Compare primary issues, secondary candidate warnings, evidence coverage, and ranked results across reruns.
+- Import external RAG traces through versioned native JSON or authenticated OTLP/HTTP protobuf, with privacy filtering before storage. See [Local trace ingestion](docs/trace-ingestion.md).
 
 ### Eval Lab and Release Gates
 
 - Create golden datasets and expected-evidence cases manually or directly from Retrieval and Trace workflows.
+- Convert full-local native imports into local-only Eval cases with server-derived provenance; metadata/snippet imports remain unavailable, and imported full-local content is excluded from CI and reports.
 - Run experiments across lexical, vector, and hybrid modes.
 - Measure recall@k, precision@k, MRR, citation coverage, latency p50/p95, and case-level outcomes.
 - Detect missing evidence, wrong chunks, low precision, weak evidence, missing embeddings, heading-only evidence, and duplicate evidence with deterministic labels.

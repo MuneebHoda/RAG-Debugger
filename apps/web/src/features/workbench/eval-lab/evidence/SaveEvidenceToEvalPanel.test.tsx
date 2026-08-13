@@ -183,6 +183,22 @@ describe("SaveEvidenceToEvalPanel", () => {
     expect(datasetSelect).toHaveValue(datasetB);
   });
 
+  it("sends trace provenance when saving from a trace", async () => {
+    renderPanel({
+      ...sourceProps("trace-a", "alpha retrieval", 5, hitA),
+      sourceTraceId: "018f7a2a-6e2e-7000-a000-000000000799",
+    });
+    await selectDataset(datasetA);
+    chooseCandidate("Expect this exact chunk");
+    fireEvent.click(screen.getByRole("button", { name: "Save quality case" }));
+
+    await waitFor(() => expect(createBodies).toHaveLength(1));
+    expect(createBodies[0]).toMatchObject({
+      query: "alpha retrieval",
+      source_trace_id: "018f7a2a-6e2e-7000-a000-000000000799",
+    });
+  });
+
   it("announces dataset loading and failure without enabling save", async () => {
     const datasetsResponse = deferred<Response>();
     vi.stubGlobal(

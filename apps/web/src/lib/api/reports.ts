@@ -53,6 +53,7 @@ export interface DebugReportRecommendation {
 export interface DebugReportEvidenceRef {
   label: string;
   role: DebugReportEvidenceRole;
+  external_evidence_id?: string | null;
   source_id: string | null;
   document_id: string | null;
   chunk_id: string | null;

@@ -16,6 +16,7 @@ pub mod report;
 pub mod retrieval;
 pub mod source;
 pub mod trace;
+pub mod trace_ingestion;
 pub mod wire_time;
 
 pub use auth::*;
@@ -35,3 +36,4 @@ pub use report::*;
 pub use retrieval::*;
 pub use source::*;
 pub use trace::*;
+pub use trace_ingestion::*;

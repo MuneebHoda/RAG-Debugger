@@ -1,0 +1,19 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 127.0.0.1:4318
+
+exporters:
+  otlphttp/corpuslab:
+    endpoint: ${env:CORPUSLAB_API_URL}/api/v1/otel
+    compression: none
+    headers:
+      Authorization: Bearer ${env:CORPUSLAB_API_KEY}
+      x-corpuslab-project-id: ${env:CORPUSLAB_PROJECT_ID}
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlphttp/corpuslab]

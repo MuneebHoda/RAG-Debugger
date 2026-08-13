@@ -70,6 +70,14 @@ impl ProjectRepository for PostgresStore {
     ) -> Result<Project, StorageError> {
         PostgresStore::ensure_default_project(self, workspace_id).await
     }
+
+    async fn get_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project_id: ProjectId,
+    ) -> Result<Project, StorageError> {
+        PostgresStore::get_project(self, workspace_id, project_id).await
+    }
 }
 
 #[async_trait]
@@ -244,6 +252,14 @@ impl TraceRepository for PostgresStore {
         trace: Trace,
     ) -> Result<Trace, StorageError> {
         PostgresStore::save_trace(self, workspace_id, trace).await
+    }
+
+    async fn upsert_imported_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<ImportedTraceUpsertResult, StorageError> {
+        PostgresStore::upsert_imported_trace(self, workspace_id, trace).await
     }
 
     async fn list_traces(

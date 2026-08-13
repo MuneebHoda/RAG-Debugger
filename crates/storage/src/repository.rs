@@ -4,12 +4,12 @@ use rag_debugger_core::{
     ChunkId, CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
     EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus,
     EvalLabEvidenceChunk, EvalLabEvidenceDocument, EvalLabEvidenceSearchRequest,
-    EvalLabEvidenceSearchResult, IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals,
-    Organization, Project, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset,
-    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
-    RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse,
-    RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary,
-    User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
+    EvalLabEvidenceSearchResult, ImportedTraceUpsertResult, IngestionRun, IngestionRunId,
+    IngestionRunStatus, IngestionTotals, Organization, Project, ProjectId, RetrievalEvalCase,
+    RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
+    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
+    RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
+    TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
 };
 
 use crate::StorageError;
@@ -30,6 +30,11 @@ pub trait ProjectRepository: Send + Sync {
     async fn ensure_default_project(
         &self,
         workspace_id: WorkspaceId,
+    ) -> Result<Project, StorageError>;
+    async fn get_project(
+        &self,
+        workspace_id: WorkspaceId,
+        project_id: ProjectId,
     ) -> Result<Project, StorageError>;
 }
 
@@ -142,6 +147,11 @@ pub trait TraceRepository: Send + Sync {
         workspace_id: WorkspaceId,
         trace: Trace,
     ) -> Result<Trace, StorageError>;
+    async fn upsert_imported_trace(
+        &self,
+        workspace_id: WorkspaceId,
+        trace: Trace,
+    ) -> Result<ImportedTraceUpsertResult, StorageError>;
     async fn list_traces(
         &self,
         workspace_id: WorkspaceId,

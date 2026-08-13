@@ -69,3 +69,5 @@ Chunk text, query text, prompts, answers, citations, document paths, and trace s
 As of the current quality baseline, the API emits one structured startup event containing bind address, environment, and storage backend kind. The API does not log request bodies, query text, document/chunk text, credentials, headers, cookies, vectors, prompts, answers, or provider payloads.
 
 Add request tracing only with explicit sensitive-header marking and route-template logging. Any new logging or telemetry path triggers the privacy checklist.
+
+Trace-ingestion handlers emit one fixed structured event per request. Allowed fields are source, outcome, stable rejection code, accepted/rejected request and span counts, complete/partial trace counts, mapping status, payload bytes, and parse/mapping latency. Request bodies, authorization/project headers, trace/span IDs, resource attributes, labels, queries, prompts, answers, snippets, exception messages, and stack traces are prohibited. OTLP partial-success messages contain stable reason-code counts only.

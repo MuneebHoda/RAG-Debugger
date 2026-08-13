@@ -4,6 +4,7 @@ import type {
   RetrievalEvalRegressionComparison,
   RetrievalEvalRegressionMetric,
 } from "../../../lib/api/evalLab";
+import { experimentContainsFullLocalData } from "../../../lib/api/evalLab";
 
 export interface BaselineCompatibility {
   level: "fully_compatible" | "partially_compatible" | "incompatible";
@@ -100,6 +101,7 @@ export function summarizeExperimentForComparison(
     latency_p50_ms: bestResult?.latency_p50_ms ?? 0,
     latency_p95_ms: bestResult?.latency_p95_ms ?? 0,
     failure_count: experiment.failures.length,
+    contains_full_local_data: experimentContainsFullLocalData(experiment),
     created_at: experiment.created_at,
   };
 }

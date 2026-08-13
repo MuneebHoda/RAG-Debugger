@@ -61,6 +61,7 @@ pub async fn create_retrieval_eval_case(
         expected_chunk_ids: request.expected_chunk_ids,
         expected_document_ids: request.expected_document_ids,
         notes: request.notes,
+        provenance: None,
         created_at: OffsetDateTime::now_utc(),
     };
 

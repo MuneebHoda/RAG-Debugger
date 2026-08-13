@@ -154,6 +154,8 @@ pub enum DebugReportRecommendationArea {
 pub struct DebugReportEvidenceRef {
     pub label: String,
     pub role: DebugReportEvidenceRole,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_evidence_id: Option<String>,
     pub source_id: Option<SourceId>,
     pub document_id: Option<DocumentId>,
     pub chunk_id: Option<ChunkId>,

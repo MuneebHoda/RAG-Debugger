@@ -370,9 +370,66 @@ describe("guided run workflow", () => {
       expected_chunk_ids: [secondChunkId],
       expected_document_ids: [secondDocumentId],
       notes: `Saved from trace ${secondTraceId.slice(0, 8)}.`,
+      source_trace_id: secondTraceId,
     });
     expect(JSON.stringify(createdCaseBody)).not.toContain(chunkId);
     expect(JSON.stringify(createdCaseBody)).not.toContain(documentId);
+  });
+
+  it("explains imported privacy restrictions and queryless legacy traces separately", () => {
+    const imported = { ...importedTrace(), input: "" };
+    imported.ingestion!.privacy_mode = "metadata_only";
+    const view = render(<SaveToQualityPanel trace={imported} />);
+
+    expect(
+      screen.getByText(/this imported trace cannot become an Eval Lab case/i),
+    ).toBeInTheDocument();
+
+    imported.ingestion!.privacy_mode = "snippets_allowed";
+    view.rerender(<SaveToQualityPanel trace={imported} />);
+    expect(screen.getByText(/query was not/i)).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Choose evidence" }),
+    ).not.toBeInTheDocument();
+
+    view.rerender(<SaveToQualityPanel trace={{ ...trace, input: "" }} />);
+    expect(
+      screen.getByText(/this trace has no retained query/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/imported trace/i)).not.toBeInTheDocument();
+  });
+
+  it("saves a full-local imported query with authorized corpus evidence", async () => {
+    const imported = importedTrace();
+    renderWithClient(<SaveToQualityPanel trace={imported} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Choose evidence" }));
+    const datasetSelect = await screen.findByLabelText("Quality dataset");
+    await screen.findByRole("option", { name: "Critical questions" });
+    fireEvent.change(datasetSelect, {
+      target: { value: datasetId },
+    });
+    expect(datasetSelect).toHaveValue(datasetId);
+    const results = await screen.findByLabelText("Evidence search results");
+    fireEvent.click(
+      within(results).getAllByRole("button", {
+        name: "Expect this exact chunk",
+      })[0],
+    );
+    const saveButton = screen.getByRole("button", {
+      name: "Save quality case",
+    });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(createdCaseBody).toBeDefined());
+    expect(createdCaseBody).toMatchObject({
+      query: imported.input,
+      source_trace_id: imported.id,
+      expected_chunk_ids: [chunkId],
+    });
+    expect(createdCaseBody).not.toHaveProperty("provenance");
+    expect(createdCaseBody).not.toHaveProperty("privacy_mode");
   });
 
   it("keeps legacy traces readable when structured diagnosis is absent", async () => {
@@ -394,7 +451,203 @@ describe("guided run workflow", () => {
       screen.getByText(/too weak for a confident answer/i),
     ).toBeInTheDocument();
   });
+
+  it("shows imported metadata, evidence hierarchy, and privacy-gated actions", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => responseJson(importedTrace())),
+    );
+    renderWithClient(
+      <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>
+        <Routes>
+          <Route path="/app/traces/:traceId" element={<TraceDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText("Limited diagnosis")).toBeInTheDocument();
+    expect(screen.getAllByText("native")).toHaveLength(2);
+    expect(screen.getByText("external-otel-1")).toBeInTheDocument();
+    expect(screen.getByText("collector-demo · 1.2.3")).toBeInTheDocument();
+    expect(screen.getByText("demo.tracer · 1.0")).toBeInTheDocument();
+    expect(screen.queryByText("0 ms")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: importedTrace().input }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Create audit report" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByText(/full-local imported traces cannot be reported/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Choose evidence" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
+    expect(screen.getAllByText(/external-chunk-1/).length).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/content withheld by privacy policy/i),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
+    const hierarchy = screen.getByRole("list", {
+      name: /imported span hierarchy/i,
+    });
+    expect(
+      within(hierarchy).getByText("<img src=x onerror=alert(1)>"),
+    ).toBeInTheDocument();
+    expect(document.querySelector('img[src="x"]')).toBeNull();
+    expect(within(hierarchy).getByText("Generation")).toBeInTheDocument();
+    expect(within(hierarchy).getByText("server")).toBeInTheDocument();
+    expect(within(hierarchy).getByText("client")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /compare/i }));
+    expect(
+      screen.getByText(/cannot rerun an external application/i),
+    ).toBeInTheDocument();
+  });
+
+  it("shows precise empty imported evidence and span states", async () => {
+    const imported = importedTrace();
+    imported.ingestion = {
+      ...imported.ingestion!,
+      source: "otlp_http",
+      privacy_mode: "metadata_only",
+      evidence: [],
+      spans: [],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => responseJson(imported)),
+    );
+    renderWithClient(
+      <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>
+        <Routes>
+          <Route path="/app/traces/:traceId" element={<TraceDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Limited diagnosis");
+    fireEvent.click(screen.getByRole("tab", { name: /evidence/i }));
+    expect(
+      screen.getByText(/no retrieval evidence metadata was mapped/i),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: /timeline/i }));
+    expect(screen.getByText(/no spans were mapped/i)).toBeInTheDocument();
+  });
+
+  it("uses the same safe state for missing and inaccessible traces", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              error: { code: "not_found", message: "trace not found" },
+            }),
+            { status: 404, headers: { "Content-Type": "application/json" } },
+          ),
+        ),
+      ),
+    );
+    renderWithClient(
+      <MemoryRouter initialEntries={[`/app/traces/${traceId}`]}>
+        <Routes>
+          <Route path="/app/traces/:traceId" element={<TraceDetailPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /may have been removed or its data may be unavailable/i,
+    );
+  });
 });
+
+function importedTrace(): Trace {
+  return {
+    ...trace,
+    input: "When do collector workers publish a trace batch?",
+    output: null,
+    retrieval: null,
+    diagnosis: null,
+    summary: "Imported trace is only partially mapped; diagnosis is limited.",
+    spans: [],
+    ingestion: {
+      source: "native",
+      external_trace_id: "external-otel-1",
+      schema_version: "1",
+      mapper_version: "1",
+      mapping_status: "partially_mapped",
+      privacy_mode: "full_local_only",
+      service_name: "collector-demo",
+      service_version: "1.2.3",
+      deployment_environment: "local",
+      instrumentation_scope_name: "demo.tracer",
+      instrumentation_scope_version: "1.0",
+      known_failure_labels: ["weak_evidence"],
+      status_supplied: true,
+      limitations: [],
+      prompt: null,
+      retrieval_mode: "hybrid",
+      top_k: 1,
+      model_config: null,
+      evidence: [
+        {
+          external_chunk_id: "external-chunk-1",
+          document_label: null,
+          rank: 1,
+          score: 0.7,
+          lexical_score: 0.5,
+          semantic_score: 0.7,
+          citation_label: "E1",
+          snippet: null,
+          answer_support_status: "unassessed",
+          answer_support_reason: "unassessed",
+        },
+      ],
+      spans: [
+        {
+          external_span_id: "span-parent",
+          parent_span_id: null,
+          operation: "retrieval",
+          kind: "server",
+          name: "<img src=x onerror=alert(1)>",
+          started_at: "2026-06-27T10:46:19Z",
+          completed_at: "2026-06-27T10:46:20Z",
+          latency_ms: 10,
+          status: "succeeded",
+          provider: "local",
+          model: null,
+          input_tokens: null,
+          output_tokens: null,
+          error_type: null,
+        },
+        {
+          external_span_id: "span-child",
+          parent_span_id: "span-parent",
+          operation: "generation",
+          kind: "client",
+          name: "Generation",
+          started_at: "2026-06-27T10:46:20Z",
+          completed_at: "2026-06-27T10:46:20Z",
+          latency_ms: 4,
+          status: "warning",
+          provider: "local",
+          model: "demo",
+          input_tokens: 3,
+          output_tokens: 2,
+          error_type: null,
+        },
+      ],
+      evaluation_passed: null,
+      evaluation_label: null,
+      timestamps_supplied: true,
+    },
+  };
+}
 
 function selectTraceCandidate(name: string) {
   const candidateRegion = screen.getByRole("region", {

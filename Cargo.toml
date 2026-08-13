@@ -21,7 +21,9 @@ hex = "0.4"
 html2text = "0.17"
 http = "1"
 mime_guess = "2"
+opentelemetry-proto = { version = "0.32.0", default-features = false, features = ["gen-tonic-messages", "trace"] }
 pdf-extract = "0.12"
+prost = "0.14.4"
 rand = "0.8"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

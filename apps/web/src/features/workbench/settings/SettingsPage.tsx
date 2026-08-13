@@ -14,6 +14,7 @@ import { WorkbenchWorkflowGuide } from "../../../components/workbench/WorkbenchW
 import { listApiKeys } from "../../../lib/api/apiKeys";
 import { getCurrentUser } from "../../../lib/api/auth";
 import { getProductConfig } from "../../../lib/api/config";
+import { getCurrentProject } from "../../../lib/api/projects";
 import { ApiKeysSettingsPanel } from "./components/ApiKeysSettingsPanel";
 import {
   PrivacySettingsPanel,
@@ -44,7 +45,16 @@ export function SettingsPage() {
     queryFn: ({ signal }) => listApiKeys(signal),
     enabled: activeTab === "api-keys",
   });
-  const error = configQuery.error ?? userQuery.error ?? keysQuery.error;
+  const projectQuery = useQuery({
+    queryKey: ["current-project"],
+    queryFn: ({ signal }) => getCurrentProject(signal),
+    enabled: activeTab === "api-keys",
+  });
+  const error =
+    configQuery.error ??
+    userQuery.error ??
+    keysQuery.error ??
+    projectQuery.error;
 
   return (
     <section className={styles.page} aria-labelledby="settings-title">
@@ -112,7 +122,10 @@ export function SettingsPage() {
         <WorkspaceSettingsPanel user={userQuery.data?.user} />
       ) : null}
       {activeTab === "api-keys" ? (
-        <ApiKeysSettingsPanel apiKeys={keysQuery.data ?? []} />
+        <ApiKeysSettingsPanel
+          apiKeys={keysQuery.data ?? []}
+          project={projectQuery.data}
+        />
       ) : null}
       {activeTab === "runtime" ? (
         <RuntimeSettingsPanel config={configQuery.data} />

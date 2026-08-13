@@ -24,6 +24,20 @@
   font-size: 0.7rem;
 }
 
+.triggerGroup {
+  display: grid;
+  justify-items: end;
+  gap: 0.2rem;
+}
+
+.disabledReason {
+  max-width: 22rem;
+  color: var(--color-ink-600);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  text-align: right;
+}
+
 .panel,
 .compactPanel {
   display: grid;

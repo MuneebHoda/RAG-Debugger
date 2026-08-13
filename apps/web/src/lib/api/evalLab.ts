@@ -15,6 +15,7 @@ export interface CreateRetrievalEvalCaseRequest {
   expected_chunk_ids?: string[];
   expected_document_ids?: string[];
   notes?: string | null;
+  source_trace_id?: string;
 }
 
 export interface RetrievalEvalCase {
@@ -25,7 +26,14 @@ export interface RetrievalEvalCase {
   expected_chunk_ids: string[];
   expected_document_ids: string[];
   notes: string | null;
+  provenance?: RetrievalEvalCaseProvenance;
   created_at: string;
+}
+
+export interface RetrievalEvalCaseProvenance {
+  source_trace_id: string;
+  source: "native" | "otlp_http";
+  privacy_mode: "metadata_only" | "snippets_allowed" | "full_local_only";
 }
 
 export interface RunRetrievalEvalRequest {
@@ -211,6 +219,7 @@ export interface RetrievalEvalCaseEvaluation {
   retrieved_chunk_ids: string[];
   latency_ms: number;
   failures: RetrievalEvalFailure[];
+  provenance?: RetrievalEvalCaseProvenance;
 }
 
 export interface RetrievalEvalComparison {
@@ -254,7 +263,18 @@ export interface RetrievalEvalExperimentSummary {
   latency_p50_ms: number;
   latency_p95_ms: number;
   failure_count: number;
+  contains_full_local_data: boolean;
   created_at: string;
+}
+
+export function experimentContainsFullLocalData(
+  experiment: RetrievalEvalExperiment,
+): boolean {
+  return experiment.mode_results.some((mode) =>
+    mode.case_results.some(
+      (evalCase) => evalCase.provenance?.privacy_mode === "full_local_only",
+    ),
+  );
 }
 
 export interface RetrievalEvalTrendSummary {

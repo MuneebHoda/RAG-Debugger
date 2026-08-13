@@ -43,6 +43,8 @@ pub struct Trace {
     pub reruns: Vec<TraceRerunComparison>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub diagnosis: Option<EvidenceDiagnosisSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingestion: Option<crate::trace_ingestion::TraceIngestionMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -57,6 +59,12 @@ pub struct TraceSummary {
     pub rerun_count: u32,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ingestion_source: Option<crate::trace_ingestion::TraceIngestionSource>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_trace_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mapping_status: Option<crate::trace_ingestion::TraceMappingStatus>,
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, Eq, PartialEq)]
@@ -185,7 +193,7 @@ pub struct GenerationSpan {
     pub cost_micros_usd: Option<u64>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
 #[serde(rename_all = "snake_case")]
 pub enum FailureLabel {
     MissingDocument,
@@ -199,6 +207,24 @@ pub enum FailureLabel {
     MissingEmbeddingIndex,
     DuplicateEvidence,
     HeadingOnlyEvidence,
+}
+
+impl FailureLabel {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MissingDocument => "missing_document",
+            Self::BadChunking => "bad_chunking",
+            Self::BadEmbedding => "bad_embedding",
+            Self::BadRanking => "bad_ranking",
+            Self::BadPrompt => "bad_prompt",
+            Self::UnsupportedQuestion => "unsupported_question",
+            Self::HallucinatedAnswer => "hallucinated_answer",
+            Self::WeakEvidence => "weak_evidence",
+            Self::MissingEmbeddingIndex => "missing_embedding_index",
+            Self::DuplicateEvidence => "duplicate_evidence",
+            Self::HeadingOnlyEvidence => "heading_only_evidence",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]

@@ -66,6 +66,10 @@ ci-check: governance-check rust-check web-check
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test runtime_workspace_contract postgres_runtime_repository_enforces_workspace_ownership -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test workspace_migration workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage postgres_evidence_query_plans_are_index_compatible -- --ignored
+    DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test trace_ingestion_repository_contract postgres_trace_ingestion_repository_contract -- --ignored
+
+trace-ingestion-smoke:
+    cargo test -p rag-debugger-api --test trace_ingestion trace_key_authorizes_protobuf_otlp_and_invalid_bearer_never_uses_session
 
 check: governance-check rust-check web-check
 

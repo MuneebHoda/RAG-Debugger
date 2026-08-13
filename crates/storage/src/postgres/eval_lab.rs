@@ -32,11 +32,19 @@ impl PostgresStore {
             &expected_chunk_ids,
         )
         .await?;
+        validate_eval_case_provenance(
+            &mut transaction,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
+        )
+        .await?;
         sqlx::query(
             "INSERT INTO retrieval_eval_cases (
-                id, dataset_id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes, created_at
+                id, dataset_id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
+                source_trace_id, source_ingestion_source, source_privacy_mode, created_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(eval_case.id.0)
         .bind(dataset_id.0)
@@ -46,6 +54,9 @@ impl PostgresStore {
         .bind(expected_chunk_ids)
         .bind(expected_document_ids)
         .bind(&eval_case.notes)
+        .bind(eval_case.provenance.as_ref().map(|value| value.source_trace_id.0))
+        .bind(eval_case.provenance.as_ref().map(|value| value.source.as_str()))
+        .bind(eval_case.provenance.as_ref().map(|value| value.privacy_mode.as_str()))
         .bind(eval_case.created_at)
         .execute(&mut *transaction)
         .await?;
@@ -60,7 +71,8 @@ impl PostgresStore {
     ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
         let rows = sqlx::query(
             "SELECT c.id, c.name, c.query, c.top_k, c.expected_chunk_ids,
-                    c.expected_document_ids, c.notes, c.created_at
+                    c.expected_document_ids, c.notes, c.source_trace_id,
+                    c.source_ingestion_source, c.source_privacy_mode, c.created_at
              FROM retrieval_eval_cases c
              INNER JOIN retrieval_eval_datasets d ON d.id = c.dataset_id
              WHERE d.workspace_id = $1
@@ -81,7 +93,8 @@ impl PostgresStore {
         let ids = case_ids.iter().map(|case_id| case_id.0).collect::<Vec<_>>();
         let rows = sqlx::query(
             "SELECT c.id, c.name, c.query, c.top_k, c.expected_chunk_ids,
-                    c.expected_document_ids, c.notes, c.created_at
+                    c.expected_document_ids, c.notes, c.source_trace_id,
+                    c.source_ingestion_source, c.source_privacy_mode, c.created_at
              FROM retrieval_eval_cases c
              INNER JOIN retrieval_eval_datasets d ON d.id = c.dataset_id
              WHERE d.workspace_id = $1 AND c.id = ANY($2)
@@ -102,7 +115,8 @@ impl PostgresStore {
     ) -> Result<RetrievalEvalCase, StorageError> {
         let row = sqlx::query(
             "SELECT c.id, c.name, c.query, c.top_k, c.expected_chunk_ids,
-                    c.expected_document_ids, c.notes, c.created_at
+                    c.expected_document_ids, c.notes, c.source_trace_id,
+                    c.source_ingestion_source, c.source_privacy_mode, c.created_at
              FROM retrieval_eval_cases c
              INNER JOIN retrieval_eval_datasets d ON d.id = c.dataset_id
              WHERE d.workspace_id = $1 AND c.id = $2",
@@ -330,7 +344,8 @@ impl PostgresStore {
         .ok_or(StorageError::NotFound)?;
 
         let case_rows = sqlx::query(
-            "SELECT id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes, created_at
+            "SELECT id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
+                    source_trace_id, source_ingestion_source, source_privacy_mode, created_at
              FROM retrieval_eval_cases
              WHERE dataset_id = $1
              ORDER BY created_at DESC",
@@ -389,12 +404,20 @@ impl PostgresStore {
             &expected_chunk_ids,
         )
         .await?;
+        validate_eval_case_provenance(
+            &mut transaction,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
+        )
+        .await?;
 
         sqlx::query(
             "INSERT INTO retrieval_eval_cases (
-                id, dataset_id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes, created_at
+                id, dataset_id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
+                source_trace_id, source_ingestion_source, source_privacy_mode, created_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
         )
         .bind(eval_case.id.0)
         .bind(dataset_id.0)
@@ -404,6 +427,9 @@ impl PostgresStore {
         .bind(expected_chunk_ids)
         .bind(expected_document_ids)
         .bind(&eval_case.notes)
+        .bind(eval_case.provenance.as_ref().map(|value| value.source_trace_id.0))
+        .bind(eval_case.provenance.as_ref().map(|value| value.source.as_str()))
+        .bind(eval_case.provenance.as_ref().map(|value| value.privacy_mode.as_str()))
         .bind(eval_case.created_at)
         .execute(&mut *transaction)
         .await?;
@@ -454,6 +480,13 @@ impl PostgresStore {
             &submitted_chunk_ids,
         )
         .await?;
+        validate_eval_case_provenance(
+            &mut transaction,
+            workspace_id,
+            &eval_case.provenance,
+            &eval_case.query,
+        )
+        .await?;
         let row = sqlx::query(
             "UPDATE retrieval_eval_cases
              SET name = $2, query = $3, top_k = $4, expected_chunk_ids = $5,
@@ -465,6 +498,9 @@ impl PostgresStore {
                    WHERE d.id = retrieval_eval_cases.dataset_id
                      AND d.workspace_id = $8
                )
+               AND source_trace_id IS NOT DISTINCT FROM $9
+               AND source_ingestion_source IS NOT DISTINCT FROM $10
+               AND source_privacy_mode IS NOT DISTINCT FROM $11
              RETURNING dataset_id",
         )
         .bind(eval_case.id.0)
@@ -475,6 +511,24 @@ impl PostgresStore {
         .bind(expected_document_ids)
         .bind(&eval_case.notes)
         .bind(workspace_id.0)
+        .bind(
+            eval_case
+                .provenance
+                .as_ref()
+                .map(|value| value.source_trace_id.0),
+        )
+        .bind(
+            eval_case
+                .provenance
+                .as_ref()
+                .map(|value| value.source.as_str()),
+        )
+        .bind(
+            eval_case
+                .provenance
+                .as_ref()
+                .map(|value| value.privacy_mode.as_str()),
+        )
         .fetch_optional(&mut *transaction)
         .await?
         .ok_or(StorageError::NotFound)?;
@@ -725,4 +779,33 @@ async fn validate_expected_evidence(
     } else {
         Err(StorageError::UnavailableEvidence)
     }
+}
+
+async fn validate_eval_case_provenance(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: WorkspaceId,
+    provenance: &Option<RetrievalEvalCaseProvenance>,
+    query: &str,
+) -> Result<(), StorageError> {
+    let Some(provenance) = provenance else {
+        return Ok(());
+    };
+    if provenance.privacy_mode != TraceIngestionPrivacyMode::FullLocalOnly {
+        return Err(StorageError::NotFound);
+    }
+    let matches = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM debug_traces
+         WHERE id = $1 AND workspace_id = $2
+           AND ingestion_source = $3 AND ingestion_privacy_mode = $4
+           AND trace_json ->> 'input' = $5
+         FOR SHARE",
+    )
+    .bind(provenance.source_trace_id.0)
+    .bind(workspace_id.0)
+    .bind(provenance.source.as_str())
+    .bind(provenance.privacy_mode.as_str())
+    .bind(query)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    matches.map(|_| ()).ok_or(StorageError::NotFound)
 }

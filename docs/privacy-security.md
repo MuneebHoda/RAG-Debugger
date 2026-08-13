@@ -37,3 +37,7 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 - Audit report creation defaults to `metadata_only`; `full_local_only` reports cannot use Markdown export.
 
 Changes that move data, add external providers, alter auth/retention/export behavior, or add telemetry must complete the [`Privacy Review Checklist`](privacy-review-checklist.md). Hosted sync and external model-provider boundaries require an ADR.
+
+## Imported Trace Boundary
+
+Trace ingestion applies the project policy and requested import mode after bounded parsing but before persistence, diagnosis, UI projection, reports, Eval Lab, operational events, or errors. `metadata_only` strips query, prompt, answer, document labels, snippets, and original span names. `snippets_allowed` additionally retains only explicitly supplied bounded evidence snippets; it still strips query, prompt, answer, document labels, and original span names. OTLP is always metadata-only in v1. Telemetry attributes cannot choose a workspace, project, or weaker privacy policy. `full_local_only` may retain local detail and create a local Eval case only from an authenticated workspace-owned source trace with an exact query match and server-derived provenance. That provenance is immutable and retained in experiment results; affected content is rejected from CI and audit-report creation, so report, Markdown, clipboard, download, and API export paths cannot serialize it. See [Local trace ingestion](trace-ingestion.md).

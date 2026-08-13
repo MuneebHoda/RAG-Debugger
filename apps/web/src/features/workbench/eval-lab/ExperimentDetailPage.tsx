@@ -6,6 +6,7 @@ import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPage
 import {
   getEvalLabExperiment,
   getEvalLabExperimentRegression,
+  experimentContainsFullLocalData,
   listEvalLabDatasetExperiments,
 } from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
@@ -123,7 +124,15 @@ export function ExperimentDetailPage() {
       <WorkbenchPageHeader
         actions={
           <CreateAuditReportAction
+            allowedPrivacyModes={
+              experimentContainsFullLocalData(experiment) ? [] : undefined
+            }
             compact
+            disabledReason={
+              experimentContainsFullLocalData(experiment)
+                ? "Full-local imported Eval content cannot create or enter reports."
+                : undefined
+            }
             source={{ sourceType: "experiment", sourceId: experiment.id }}
           />
         }
