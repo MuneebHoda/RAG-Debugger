@@ -115,7 +115,7 @@ Never put the key in a committed file, screenshot, issue, recording, shell scrip
 
 Use the repository's versioned example rather than creating a parallel contract:
 
-```sh
+```bash
 export CORPUSLAB_API_URL=http://127.0.0.1:8080
 export CORPUSLAB_PROJECT_ID='the project UUID shown in Settings'
 read -r -s CORPUSLAB_API_KEY

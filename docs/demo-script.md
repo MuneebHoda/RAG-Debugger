@@ -108,7 +108,7 @@ The workflow evaluates the configured CorpusLab instance and dataset. It does no
 
 In **Settings -> API keys**, select **Trace ingestion**, create a key, and copy the current project ID. Set the non-secret values, then enter the key through a silent prompt so it does not appear in shell history:
 
-```sh
+```bash
 export CORPUSLAB_API_URL=http://127.0.0.1:8080
 export CORPUSLAB_PROJECT_ID='the project UUID shown in Settings'
 read -r -s CORPUSLAB_API_KEY
@@ -150,4 +150,4 @@ See [Known Limitations](known-limitations.md) before discussing deployment, host
 
 ## Screenshot Provenance
 
-The three screenshots in this guide were captured at `1440x1000` from the real workbench on the issue #30 branch, using the memory-backed API, checked-in `corpuslab-guided-demo-v1` fixtures, the repository's test-only identity, and reduced motion. The capture followed login, sample loading, local indexing, the recommended retrieval, trace creation, and metadata-only report creation. The images were visually inspected at full resolution and contain no API key, cookie, password, database value, proprietary content, browser extension, or unrelated desktop content.
+The three screenshots in this guide were captured at `1440x1000` from the real workbench at commit `3de0dcc159d9da423922690a8080dbeace293c4c`, using the memory-backed API, checked-in `corpuslab-guided-demo-v1` fixtures, the repository's test-only identity, and reduced motion. The capture followed login, sample loading, local indexing, the recommended retrieval, trace creation, and metadata-only report creation. The images were visually inspected at full resolution and contain no API key, cookie, password, database value, proprietary content, browser extension, or unrelated desktop content.

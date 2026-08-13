@@ -11,7 +11,6 @@ CorpusLab is a RAG debugging, evaluation, and audit platform for teams building 
 
 > [!IMPORTANT]
 > CorpusLab currently runs locally in the user's environment. Hosted access, public SaaS signup, and billing are not available. The current offering is controlled local-first design-partner validation, not a public SaaS launch. Sensitive data does not need to leave the machine running CorpusLab.
->
 > CorpusLab is public pre-release software. `main` receives best-effort security support, but APIs and compatibility may evolve before a stable release.
 > The repository does not currently include a software license.
 
@@ -20,6 +19,7 @@ CorpusLab is a RAG debugging, evaluation, and audit platform for teams building 
 After installing the [prerequisites](#prerequisites), copy `.env.example` to `.env`, set a generated local bootstrap password, and run:
 
 ```sh
+npm --prefix apps/web ci
 just db-up
 just db-migrate
 just api
