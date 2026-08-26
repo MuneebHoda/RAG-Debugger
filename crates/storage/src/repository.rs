@@ -20,6 +20,12 @@ pub struct SubmittedExpectedEvidence {
     pub chunk_ids: Option<Vec<ChunkId>>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct RetrievalEvalCorpusSnapshot {
+    pub sources: Vec<SourceSummary>,
+    pub candidates: Vec<SearchableChunk>,
+}
+
 #[async_trait]
 pub trait HealthRepository: Send + Sync {
     async fn ping(&self) -> Result<(), StorageError>;
@@ -165,6 +171,10 @@ pub trait TraceRepository: Send + Sync {
 
 #[async_trait]
 pub trait EvalRepository: Send + Sync {
+    async fn retrieval_eval_corpus_snapshot(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<RetrievalEvalCorpusSnapshot, StorageError>;
     async fn create_retrieval_eval_case(
         &self,
         workspace_id: WorkspaceId,

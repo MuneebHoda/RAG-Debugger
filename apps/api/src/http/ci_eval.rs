@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 
 use axum::{
     extract::{Path, State},
@@ -7,24 +7,22 @@ use axum::{
 };
 use rag_debugger_core::{
     ApiKeyScope, CiEvalPrincipal, CiEvalRegressionSummary, CiEvalReport, CiEvalRun, CiEvalRunId,
-    CiEvalRunReportResponse, CiEvalRunStatus, RetrievalEvalConfigSnapshot, RetrievalEvalExperiment,
-    RetrievalEvalExperimentId, RetrievalEvalGateStatus, RetrievalEvalModeResult, RetrievalEvalRun,
-    RetrievalEvalRunId, RetrievalMode, RetrievalQueryRequest, RunCiEvalRequest,
+    CiEvalRunReportResponse, CiEvalRunStatus, RetrievalEvalCompatibilityClassification,
+    RetrievalEvalExperiment, RetrievalEvalGateStatus, RetrievalEvalModeResult, RetrievalEvalRun,
+    RetrievalEvalRunId, RetrievalMode, RunCiEvalRequest,
 };
 use rag_debugger_rag::{
-    embedding::LocalHashEmbeddingProvider,
-    evals::{
-        compare_experiment_regression, compare_mode_results, evaluate_gate,
-        evaluate_retrieval_eval_case_with_context, expected_chunk_parent_document_ids,
-        summarize_mode_result,
-    },
-    retrieval::LocalHybridRetriever,
-    RagError,
+    evals::compare_experiment_regression, provenance::experiment_compatibility,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{auth, error::ApiError, state::AppState};
+use crate::{
+    auth,
+    error::ApiError,
+    eval_experiment::{run_experiment_for_dataset, CiProvenanceMetadata},
+    state::AppState,
+};
 
 pub async fn run_ci_eval(
     State(state): State<AppState>,
@@ -69,23 +67,37 @@ pub async fn run_ci_eval(
         .config_label
         .filter(|label| !label.trim().is_empty())
         .unwrap_or_else(|| "default".to_owned());
-    let baseline = repository
-        .latest_ci_eval_run_for_dataset(workspace_id, dataset.id, &config_label)
-        .await?
-        .filter(|run| compatible_ci_baseline(run, top_k, &modes));
+    let name = request
+        .name
+        .clone()
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| format!("{} CI gate", dataset.name));
+    let mut labels = BTreeMap::new();
+    labels.insert("config_label".to_owned(), config_label.clone());
     let experiment = run_experiment_for_dataset(
         &state,
         workspace_id,
         dataset.clone(),
         modes,
         top_k,
-        request.name,
+        name,
+        CiProvenanceMetadata {
+            branch: request.branch.clone(),
+            commit_sha: request.commit_sha.clone(),
+            base_ref: request.base_ref.clone(),
+            head_ref: request.head_ref.clone(),
+            labels,
+        },
     )
     .await?;
     let saved_experiment = repository
         .save_retrieval_eval_experiment(workspace_id, experiment)
         .await?;
     save_legacy_best_run(repository.as_ref(), workspace_id, &saved_experiment).await?;
+
+    let prior_runs = repository.list_ci_eval_runs(workspace_id).await?;
+    let baseline =
+        previous_compatible_ci_baseline(&saved_experiment, &prior_runs, dataset.id, &config_label);
 
     let report = build_report(&saved_experiment);
     let regression = baseline
@@ -190,82 +202,6 @@ async fn authorize_ci_read(
     Ok(CiEvalPrincipal {
         workspace_id: api_key.workspace_id,
         role: None,
-    })
-}
-
-async fn run_experiment_for_dataset(
-    state: &AppState,
-    workspace_id: rag_debugger_core::WorkspaceId,
-    dataset: rag_debugger_core::RetrievalEvalDataset,
-    modes: Vec<RetrievalMode>,
-    top_k: u32,
-    name: Option<String>,
-) -> Result<RetrievalEvalExperiment, ApiError> {
-    let repository = state.repository().ok_or(ApiError::NotReady)?;
-    let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
-    let retriever = LocalHybridRetriever::new(provider, state.config().product.retrieval.clone())
-        .with_debugger_config(state.config().product.debugger.clone());
-    let mut mode_results = Vec::with_capacity(modes.len());
-
-    for mode in &modes {
-        let mut case_results = Vec::with_capacity(dataset.cases.len());
-        for eval_case in &dataset.cases {
-            let case = rag_debugger_core::RetrievalEvalCase {
-                top_k,
-                ..eval_case.clone()
-            };
-            let query_request = RetrievalQueryRequest {
-                query: case.query.clone(),
-                top_k,
-                retrieval_mode: *mode,
-                source_ids: Vec::new(),
-                document_ids: Vec::new(),
-            };
-            let candidates = repository
-                .list_searchable_chunks(workspace_id, &query_request)
-                .await?;
-            let expected_chunk_document_ids =
-                expected_chunk_parent_document_ids(&case, &candidates);
-            let response = retriever
-                .retrieve(query_request, candidates)
-                .map_err(rag_error_to_api_error)?;
-            case_results.push(evaluate_retrieval_eval_case_with_context(
-                &case,
-                &response,
-                &state.config().product.debugger,
-                &expected_chunk_document_ids,
-            ));
-        }
-        mode_results.push(summarize_mode_result(*mode, case_results));
-    }
-
-    let comparison = compare_mode_results(&mode_results);
-    let gate = evaluate_gate(&mode_results);
-    let failures = mode_results
-        .iter()
-        .flat_map(|result| result.case_results.iter())
-        .flat_map(|result| result.failures.iter().cloned())
-        .collect::<Vec<_>>();
-    Ok(RetrievalEvalExperiment {
-        id: RetrievalEvalExperimentId(Uuid::now_v7()),
-        dataset_id: dataset.id,
-        dataset_name: dataset.name.clone(),
-        name: name
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| format!("{} CI gate", dataset.name)),
-        modes,
-        top_k,
-        config_snapshot: RetrievalEvalConfigSnapshot {
-            top_k,
-            scoring_weights: state.config().product.retrieval.weights.clone(),
-            embedding_model: state.config().product.embedding.model.clone(),
-            dataset_case_count: dataset.cases.len() as u32,
-        },
-        mode_results,
-        comparison,
-        gate,
-        failures,
-        created_at: OffsetDateTime::now_utc(),
     })
 }
 
@@ -401,9 +337,20 @@ fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
     normalized
 }
 
-fn compatible_ci_baseline(run: &CiEvalRun, top_k: u32, modes: &[RetrievalMode]) -> bool {
-    run.report.experiment.top_k == top_k
-        && normalized_modes(run.report.experiment.modes.clone()) == modes
+fn previous_compatible_ci_baseline<'a>(
+    current: &RetrievalEvalExperiment,
+    runs: &'a [CiEvalRun],
+    dataset_id: rag_debugger_core::RetrievalEvalDatasetId,
+    config_label: &str,
+) -> Option<&'a CiEvalRun> {
+    runs.iter()
+        .filter(|run| run.dataset_id == dataset_id && run.config_label == config_label)
+        .filter(|run| run.report.experiment.created_at < current.created_at)
+        .filter(|run| {
+            experiment_compatibility(current, Some(&run.report.experiment), false).classification
+                == RetrievalEvalCompatibilityClassification::Compatible
+        })
+        .max_by_key(|run| run.created_at)
 }
 
 fn validate_ci_request(mut request: RunCiEvalRequest) -> Result<RunCiEvalRequest, ApiError> {
@@ -434,13 +381,6 @@ fn normalized_metadata(
         )));
     }
     Ok(Some(value.to_owned()))
-}
-
-fn rag_error_to_api_error(error: RagError) -> ApiError {
-    match error {
-        RagError::InvalidConfig(message) => ApiError::BadRequest(message.to_owned()),
-        RagError::NotImplemented(_) => ApiError::Internal,
-    }
 }
 
 fn not_found_to_api(

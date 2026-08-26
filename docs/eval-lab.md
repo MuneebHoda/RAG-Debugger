@@ -96,7 +96,13 @@ Failed gates store human-readable reasons. Mission Control surfaces failed gates
 
 ## Regression History
 
-Eval Lab v2 treats saved experiments as release-history snapshots. The system compares a current experiment with the latest earlier experiment that has the same dataset, `top_k`, and sorted retrieval-mode set. Users can also request an explicit baseline by ID.
+Every new Eval Lab experiment includes a versioned, immutable provenance snapshot. Before evaluation starts, the API acquires sources, documents, searchable chunks, and embeddings through one storage snapshot operation, then evaluates every case/mode against that exact frozen candidate set. MemoryStore holds one mutex while cloning the snapshot; Postgres uses one read-only `REPEATABLE READ` transaction, so concurrent ingestion, reindexing, deletion, or source mutation cannot mix states between acquisition phases. Provenance records identity-defining dataset revision, source/project/document IDs, document checksums and path fingerprints, per-source chunking configuration, chunk text/section/quality fingerprints, chunk-set identity, embedding provider/model/dimension and index fingerprint, retrieval modes, `top_k`, scoring policy, filters, and runtime flags. Build, runtime, storage, and available CI revision values are informational.
+
+Canonical JSON object keys and identity collections are sorted before SHA-256 hashing. Equivalent inputs therefore receive the same fingerprint regardless of incidental map, source, document, chunk, mode, or metadata ordering. Provenance never copies query text, document paths, chunk text, section titles, embedding vectors, credentials, or provider payloads; privacy-sensitive retrieval inputs contribute only SHA-256 fingerprints. Document checksums and aggregate fingerprints remain workspace-owned metadata.
+
+The additive `provenance` property is stored inside the existing experiment JSON. No table rewrite or backfill is performed. Legacy experiments remain readable with no provenance and are classified as `legacy_unknown`, never fully compatible.
+
+Eval Lab compares a current experiment with the latest earlier experiment whose complete identity-defining provenance is identical. Users can also request an earlier baseline explicitly by ID for a directional cross-configuration comparison.
 
 Regression comparison tracks:
 
@@ -115,11 +121,14 @@ Trend summaries default to the latest 10 experiments and clamp requests to 50 po
 
 Experiment Detail exposes the baseline choice so the comparison can be reviewed and revisited. The selector marks each candidate as:
 
-- `fully compatible`: earlier experiment with the same dataset, `top_k`, and sorted retrieval-mode set;
-- `partially compatible`: earlier experiment from the same dataset with different `top_k` or modes, selectable with a warning;
-- `incompatible`: the current experiment or a newer experiment, visible but disabled.
+- `compatible`: earlier experiment with the same identity fingerprint;
+- `partially compatible`: earlier experiment with different identity-defining provenance, selectable only as an intentional directional comparison;
+- `legacy compatibility unknown`: earlier experiment with no immutable provenance, selectable only with a warning;
+- `incompatible` in the selector: the current experiment or a newer experiment, visible but disabled.
 
-The selected baseline is stored in the local URL as `baseline_id`. If no explicit baseline is selected, the API keeps using the automatic previous compatible run. When no baseline exists, the UI shows `No comparable baseline` instead of implying that the experiment is meaningfully unchanged.
+The API returns `compatible`, `partially_compatible`, `incompatible`, or `legacy_unknown` plus stable reason codes, field classes, privacy/legacy annotations, and changed-field paths. Identity changes include dataset, corpus/document checksums, chunking, chunk set, embedding model/index, retrieval modes, `top_k`, scoring, filters, and runtime flags. Informational build or CI changes do not invalidate an otherwise identical experiment.
+
+The selected baseline is stored in the local URL as `baseline_id`. If no explicit baseline is selected, the API uses only a fully compatible prior run. An explicit different-configuration baseline remains comparable but is marked `partially_compatible` with a warning and changed fields. When no compatible baseline exists, the UI shows `No comparable baseline` instead of implying that the experiment is meaningfully unchanged.
 
 ## UI Workflow
 
@@ -172,7 +181,7 @@ If metadata lookup fails or a retrieved ID cannot be resolved, CorpusLab shows `
 
 Experiment Detail uses the same Reports-owned creation action as Trace Debugger. Metadata-only is the default; snippets or unrestricted local diagnostics require an explicit privacy selection before the report is generated.
 
-When a comparable baseline exists, experiment-sourced audit reports include regression classification, baseline experiment ID, newly failed case counts, recovered case counts, and metric deltas. Metadata-only reports keep this to IDs, labels, and metrics.
+When a baseline exists, experiment-sourced audit reports include regression classification, compatibility classification, changed configuration fields, baseline experiment ID, newly failed case counts, recovered case counts, and metric deltas. Privacy-safe aggregate provenance includes schema/fingerprints, counts, embedding identity, and index identity. Reports never include provenance document checksums, raw queries, paths, chunk text, section titles, or embedding vectors.
 
 ## Storage Model
 
@@ -184,7 +193,7 @@ Postgres stores:
 
 Existing `retrieval_eval_cases` remain valid. A default dataset named `Default retrieval dataset` is created by migration and legacy cases are backfilled into it.
 
-The in-memory repository mirrors the same behavior for tests and local no-Postgres sessions.
+Experiment provenance is additive inside `retrieval_eval_experiments.experiment_json`; no migration or destructive rewrite is required. Saves are append-only by experiment ID, and provenance workspace/project ownership is validated before persistence. The in-memory repository mirrors the same behavior for tests and local no-Postgres sessions.
 
 ## Writing Good Eval Cases
 

@@ -496,6 +496,12 @@ describe("guided Eval Lab workflow", () => {
       screen.getByRole("heading", { name: /gate failed/i }),
     ).toBeInTheDocument();
     expect(
+      screen.getByRole("heading", { name: /immutable provenance/i }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("experiment-fingerprint-v1")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Show provenance configuration"));
+    expect(screen.getByText("embedding-index-v1")).toBeInTheDocument();
+    expect(
       screen.getByText(/expected evidence was not retrieved/i),
     ).toBeInTheDocument();
     expect(
@@ -563,7 +569,11 @@ describe("guided Eval Lab workflow", () => {
     expect(await screen.findByText(/Partial baseline/i)).toBeInTheDocument();
     expect(selector).toHaveValue(partialBaselineId);
     expect(
-      await screen.findByText(/top_k changed from 10 to 5/i),
+      (await screen.findAllByText(/identity-defining provenance differs/i))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getByText(/Changed configuration: retrieval.top_k/i),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/Partial baseline comparison is unchanged/i),
@@ -620,6 +630,26 @@ describe("guided Eval Lab workflow", () => {
     expect(
       screen.getByText(/Run another compatible experiment/i),
     ).toBeInTheDocument();
+  });
+
+  it("keeps legacy experiments readable without claiming compatibility", async () => {
+    const legacy = experiment() as RetrievalEvalExperiment;
+    delete legacy.provenance;
+    experimentResponse = legacy;
+    renderRoute(
+      "/app/evals/experiments/" + experimentId,
+      <Route
+        path="/app/evals/experiments/:experimentId"
+        element={<ExperimentDetailPage />}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Legacy experiment: provenance is unavailable/i),
+    ).toHaveAttribute("role", "status");
+    expect(
+      (await screen.findAllByText(/legacy compatibility unknown/i)).length,
+    ).toBeGreaterThan(0);
   });
 
   it("keeps the current experiment identity when experiment history fails", async () => {
@@ -1111,6 +1141,7 @@ function experimentHistory() {
       name: "Partial retrieval gate",
       modes: ["hybrid"],
       top_k: 10,
+      provenance: { schema_version: 1, fingerprint: "identity-v2" },
       created_at: "2026-06-24T00:00:00Z",
       gate_status: "passed",
     }),
@@ -1148,6 +1179,11 @@ function baseExperimentSummary() {
     latency_p50_ms: 20,
     latency_p95_ms: 20,
     failure_count: 1,
+    contains_full_local_data: false,
+    provenance: {
+      schema_version: 1,
+      fingerprint: "experiment-fingerprint-v1",
+    },
     created_at: "2026-06-25T00:00:00Z",
   };
 }
@@ -1168,6 +1204,7 @@ function regression(): RetrievalEvalRegressionComparison {
   return {
     current_experiment_id: experimentId,
     baseline_experiment_id: baselineId,
+    compatibility: compatibility("compatible"),
     classification: "regressed",
     current_gate_status: "failed",
     baseline_gate_status: "passed",
@@ -1403,6 +1440,7 @@ function experiment() {
       },
       dataset_case_count: 1,
     },
+    provenance: experimentProvenance(),
     mode_results: [
       modeResult("hybrid", 0.5, 0.4, 20, [caseEvaluation([retrievedChunkId])]),
       modeResult("vector", 0.25, 0.2, 18),
@@ -1528,6 +1566,7 @@ function regressionForUrl(url: string) {
     return {
       ...regression(),
       baseline_experiment_id: partialBaselineId,
+      compatibility: compatibility("partially_compatible", ["retrieval.top_k"]),
       classification: "unchanged",
       newly_failed_cases: [],
       recovered_cases: [],
@@ -1581,6 +1620,7 @@ function noBaselineRegression(): RetrievalEvalRegressionComparison {
   return {
     current_experiment_id: firstExperimentId,
     baseline_experiment_id: null,
+    compatibility: compatibility("legacy_unknown"),
     classification: "unchanged",
     current_gate_status: "passed",
     baseline_gate_status: null,
@@ -1598,6 +1638,105 @@ function noBaselineRegression(): RetrievalEvalRegressionComparison {
     changed_top_evidence_cases: [],
     changed_failure_label_cases: [],
     summary: "No comparable baseline exists.",
+  };
+}
+
+function compatibility(
+  classification:
+    | "compatible"
+    | "partially_compatible"
+    | "incompatible"
+    | "legacy_unknown",
+  changedFields: string[] = [],
+) {
+  return {
+    classification,
+    intentional_cross_configuration: classification === "partially_compatible",
+    changed_fields: changedFields,
+    reasons:
+      classification === "compatible"
+        ? []
+        : [
+            {
+              code:
+                classification === "legacy_unknown"
+                  ? ("no_baseline" as const)
+                  : ("identity_changed" as const),
+              field: changedFields[0] ?? null,
+              field_class: "identity_defining" as const,
+              privacy_sensitive: false,
+              legacy_optional: classification === "legacy_unknown",
+              message:
+                classification === "legacy_unknown"
+                  ? "Immutable provenance is unavailable."
+                  : "An identity-defining experiment input changed.",
+            },
+          ],
+  };
+}
+
+function experimentProvenance() {
+  return {
+    schema_version: 1,
+    fingerprint: "experiment-fingerprint-v1",
+    identity: {
+      workspace_id: "018f7a2a-6e2e-7000-a000-000000000320",
+      project_ids: ["project-1"],
+      dataset: {
+        dataset_id: datasetId,
+        revision_fingerprint: "dataset-revision-v1",
+        case_count: 1,
+      },
+      corpus: {
+        source_ids: [sourceId],
+        document_count: 1,
+        document_set_fingerprint: "document-set-v1",
+        documents: [
+          {
+            document_id: documentId,
+            source_id: sourceId,
+            checksum: "document-checksum-v1",
+          },
+        ],
+      },
+      chunking: {
+        fingerprint: "chunking-v1",
+        sources: [
+          {
+            source_id: sourceId,
+            config: {
+              target_tokens: 512,
+              overlap_tokens: 64,
+              strategy: "structured",
+            },
+          },
+        ],
+      },
+      chunk_set: { fingerprint: "chunk-set-v1", chunk_count: 1 },
+      embedding: {
+        provider: "local",
+        model_name: "local-hash-v1",
+        dimension: 384,
+        index_fingerprint: "embedding-index-v1",
+        indexed_chunk_count: 1,
+        missing_chunk_count: 0,
+        stale_chunk_count: 0,
+      },
+      retrieval: {
+        modes: ["hybrid", "vector", "lexical"],
+        top_k: 5,
+        scoring: {},
+        filters: { source_ids: [], document_ids: [] },
+        runtime_flags: {},
+      },
+    },
+    informational: {
+      application_version: "0.1.0",
+      deployment_mode: "hybrid",
+      runtime_environment: "test",
+      storage_backend: "memory",
+      labels: {},
+    },
   };
 }
 

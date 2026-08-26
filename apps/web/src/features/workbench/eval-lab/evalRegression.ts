@@ -7,7 +7,11 @@ import type {
 import { experimentContainsFullLocalData } from "../../../lib/api/evalLab";
 
 export interface BaselineCompatibility {
-  level: "fully_compatible" | "partially_compatible" | "incompatible";
+  level:
+    | "compatible"
+    | "partially_compatible"
+    | "legacy_unknown"
+    | "unavailable";
   label: string;
   reason: string;
 }
@@ -19,7 +23,7 @@ export function findAutomaticBaseline(
   return (
     experiments.find((candidate) => {
       const compatibility = classifyBaselineCompatibility(candidate, current);
-      return compatibility.level === "fully_compatible";
+      return compatibility.level === "compatible";
     }) ?? null
   );
 }
@@ -32,7 +36,7 @@ export function classifyBaselineCompatibility(
   const currentTime = Date.parse(current.created_at);
   if (candidate.id === current.id) {
     return {
-      level: "incompatible",
+      level: "unavailable",
       label: "incompatible",
       reason: "The current experiment cannot be compared with itself.",
     };
@@ -40,36 +44,35 @@ export function classifyBaselineCompatibility(
   if (Number.isFinite(candidateTime) && Number.isFinite(currentTime)) {
     if (candidateTime >= currentTime) {
       return {
-        level: "incompatible",
+        level: "unavailable",
         label: "incompatible",
         reason: "Only earlier experiments can be used as baselines.",
       };
     }
   }
 
-  const sameTopK = candidate.top_k === current.top_k;
-  const sameModes = sortedModes(candidate.modes) === sortedModes(current.modes);
-  if (sameTopK && sameModes) {
+  if (!candidate.provenance || !current.provenance) {
     return {
-      level: "fully_compatible",
-      label: "fully compatible",
-      reason: "Same dataset, top_k, and retrieval modes.",
+      level: "legacy_unknown",
+      label: "legacy compatibility unknown",
+      reason:
+        "Immutable provenance is missing. Select intentionally and interpret deltas directionally.",
+    };
+  }
+
+  if (candidate.provenance.fingerprint === current.provenance.fingerprint) {
+    return {
+      level: "compatible",
+      label: "compatible",
+      reason: "Identity-defining provenance is identical.",
     };
   }
 
   return {
     level: "partially_compatible",
     label: "partially compatible",
-    reason: [
-      sameTopK
-        ? null
-        : `top_k changed from ${candidate.top_k} to ${current.top_k}`,
-      sameModes
-        ? null
-        : `modes changed from ${candidate.modes.join(", ")} to ${current.modes.join(", ")}`,
-    ]
-      .filter(Boolean)
-      .join("; "),
+    reason:
+      "Identity-defining provenance differs. Select intentionally to make a cross-configuration comparison.",
   };
 }
 
@@ -102,6 +105,12 @@ export function summarizeExperimentForComparison(
     latency_p95_ms: bestResult?.latency_p95_ms ?? 0,
     failure_count: experiment.failures.length,
     contains_full_local_data: experimentContainsFullLocalData(experiment),
+    provenance: experiment.provenance
+      ? {
+          schema_version: experiment.provenance.schema_version,
+          fingerprint: experiment.provenance.fingerprint,
+        }
+      : undefined,
     created_at: experiment.created_at,
   };
 }
@@ -158,10 +167,6 @@ export function regressionExplanation(
   }
 
   return "Classification is unchanged because gate status, cases, and metric deltas stayed within thresholds.";
-}
-
-function sortedModes(modes: string[]) {
-  return [...modes].sort().join(",");
 }
 
 function metricDeltaExplanation(

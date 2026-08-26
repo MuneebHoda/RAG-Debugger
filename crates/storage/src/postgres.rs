@@ -308,6 +308,13 @@ impl EmbeddingRepository for PostgresStore {
 
 #[async_trait]
 impl EvalRepository for PostgresStore {
+    async fn retrieval_eval_corpus_snapshot(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<crate::repository::RetrievalEvalCorpusSnapshot, StorageError> {
+        PostgresStore::retrieval_eval_corpus_snapshot(self, workspace_id).await
+    }
+
     async fn create_retrieval_eval_case(
         &self,
         workspace_id: WorkspaceId,

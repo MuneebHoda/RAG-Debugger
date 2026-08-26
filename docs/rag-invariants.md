@@ -47,7 +47,11 @@ When a strong cited hit passes direct body support, candidate-only weak, heading
 
 ## Eval Lab
 
-Every eval case must preserve its query, `top_k`, expected chunk IDs, expected document IDs, notes, and dataset membership. An experiment must preserve the dataset version, selected modes, retrieval configuration snapshot, embedding metadata, per-case results, aggregate metrics, failures, and gate outcome.
+Every eval case must preserve its query, `top_k`, expected chunk IDs, expected document IDs, notes, and dataset membership. Every newly created experiment must preserve the dataset version, selected modes, retrieval configuration snapshot, embedding metadata, per-case results, aggregate metrics, failures, gate outcome, and a versioned immutable provenance snapshot. Sources, documents, chunks, and embeddings must come from one consistent storage snapshot, and its candidate vector must be reused throughout the experiment so results and provenance describe exactly the same corpus/index state. MemoryStore enforces this with one mutex acquisition; Postgres uses one read-only `REPEATABLE READ` transaction.
+
+Identity-defining provenance includes workspace/project ownership, dataset revision, sources, document checksums and path fingerprints, normalized per-source chunking, privacy-safe fingerprints of chunk text/sections plus scoring-relevant chunk metadata, chunk set, embedding provider/model/dimension/index, retrieval modes, `top_k`, scoring and answerability policy, filters, and relevant runtime flags. Build version, deployment/runtime/storage mode, CI revision, and labels are informational. Provenance may contain opaque IDs, checksums, counts, configuration, and hashes; it must not contain raw queries, document paths, chunk/document text, section titles, vectors, credentials, or provider payloads.
+
+Canonical hashing uses sorted JSON object keys and sorted identity collections. Equivalent identity input must produce the same SHA-256 fingerprint regardless of incidental ordering. Experiment IDs, timestamps, names, and informational metadata do not define compatibility.
 
 Metrics are deterministic from stored results:
 
@@ -59,7 +63,7 @@ Metrics are deterministic from stored results:
 
 The default gate passes only when the best mode reaches at least `0.80` average recall, has no critical failures, and has no more than a `0.20` weak-evidence rate. Gate decisions and reasons must be stored with the experiment so later configuration changes cannot rewrite history.
 
-Regression history compares a current experiment with an explicit baseline or the latest earlier compatible experiment for the same dataset, `top_k`, and sorted retrieval-mode set. Backend comparison logic is authoritative: UI and reports must not reimplement their own trend or regression classification. The comparison must preserve gate transitions, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels in deterministic order.
+Regression history compares a current experiment with an explicit earlier same-dataset baseline or the latest earlier experiment with identical identity-defining provenance. Automatic selection must exclude identity changes and missing legacy provenance. Explicit identity changes are `partially_compatible`; automatic identity changes are `incompatible`; missing provenance is always `legacy_unknown`; informational-only changes remain `compatible`. Backend compatibility and regression logic is authoritative. Comparisons preserve machine-readable reasons, changed fields, gate transitions, metric deltas, newly failed cases, recovered cases, changed top evidence, and changed failure labels in deterministic order.
 
 ## Failure Labels
 

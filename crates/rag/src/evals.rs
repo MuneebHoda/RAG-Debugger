@@ -1,19 +1,23 @@
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use rag_debugger_core::{
     experiment_contains_full_local_data, DebuggerConfig, DocumentId, EvidenceStrength,
     RetrievalEmbeddingReadiness, RetrievalEvalCase, RetrievalEvalCaseEvaluation,
     RetrievalEvalCaseId, RetrievalEvalCaseRegression, RetrievalEvalComparison,
-    RetrievalEvalDatasetId, RetrievalEvalExperiment, RetrievalEvalExperimentSummary,
-    RetrievalEvalFailure, RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity,
-    RetrievalEvalGate, RetrievalEvalGateStatus, RetrievalEvalMetricDelta, RetrievalEvalModeResult,
+    RetrievalEvalCompatibilityClassification, RetrievalEvalDatasetId, RetrievalEvalExperiment,
+    RetrievalEvalExperimentSummary, RetrievalEvalFailure, RetrievalEvalFailureLabel,
+    RetrievalEvalFailureSeverity, RetrievalEvalGate, RetrievalEvalGateStatus,
+    RetrievalEvalMetricDelta, RetrievalEvalModeResult, RetrievalEvalProvenanceSummary,
     RetrievalEvalRegressionClassification, RetrievalEvalRegressionComparison,
     RetrievalEvalRegressionMetric, RetrievalEvalResult, RetrievalEvalTrendPoint,
     RetrievalEvalTrendSummary, RetrievalMode, RetrievalQualityFlag, RetrievalQueryResponse,
     SearchableChunk,
 };
 
-use crate::diagnosis::{diagnose_retrieval, ExpectedEvidence};
+use crate::{
+    diagnosis::{diagnose_retrieval, ExpectedEvidence},
+    provenance::experiment_compatibility,
+};
 
 const DEFAULT_RECALL_THRESHOLD: f32 = 0.80;
 const DEFAULT_WEAK_EVIDENCE_LIMIT: f32 = 0.20;
@@ -460,6 +464,12 @@ pub fn summarize_experiment(
         latency_p95_ms: best.map_or(0, |result| result.latency_p95_ms),
         failure_count: experiment.failures.len() as u32,
         contains_full_local_data: experiment_contains_full_local_data(experiment),
+        provenance: experiment.provenance.as_ref().map(|provenance| {
+            RetrievalEvalProvenanceSummary {
+                schema_version: provenance.schema_version,
+                fingerprint: provenance.fingerprint.clone(),
+            }
+        }),
         created_at: experiment.created_at,
     }
 }
@@ -506,11 +516,22 @@ pub fn compare_experiment_regression(
     current: &RetrievalEvalExperiment,
     baseline: Option<&RetrievalEvalExperiment>,
 ) -> RetrievalEvalRegressionComparison {
+    compare_experiment_regression_with_intent(current, baseline, false)
+}
+
+pub fn compare_experiment_regression_with_intent(
+    current: &RetrievalEvalExperiment,
+    baseline: Option<&RetrievalEvalExperiment>,
+    intentional_cross_configuration: bool,
+) -> RetrievalEvalRegressionComparison {
+    let compatibility =
+        experiment_compatibility(current, baseline, intentional_cross_configuration);
     let Some(baseline) = baseline else {
         let current_summary = summarize_experiment(current);
         return RetrievalEvalRegressionComparison {
             current_experiment_id: current.id,
             baseline_experiment_id: None,
+            compatibility,
             classification: RetrievalEvalRegressionClassification::Unchanged,
             current_gate_status: current.gate.status,
             baseline_gate_status: None,
@@ -519,9 +540,7 @@ pub fn compare_experiment_regression(
             recovered_cases: Vec::new(),
             changed_top_evidence_cases: Vec::new(),
             changed_failure_label_cases: Vec::new(),
-            summary:
-                "No prior comparable experiment was found for this dataset, top-k, and mode set."
-                    .to_owned(),
+            summary: "No prior experiment with fully compatible provenance was found.".to_owned(),
         };
     };
 
@@ -563,6 +582,7 @@ pub fn compare_experiment_regression(
     RetrievalEvalRegressionComparison {
         current_experiment_id: current.id,
         baseline_experiment_id: Some(baseline.id),
+        compatibility,
         classification,
         current_gate_status: current.gate.status,
         baseline_gate_status: Some(baseline.gate.status),
@@ -585,8 +605,10 @@ pub fn previous_comparable_experiment<'a>(
         .filter(|candidate| candidate.id != current.id)
         .filter(|candidate| candidate.dataset_id == current.dataset_id)
         .filter(|candidate| candidate.created_at < current.created_at)
-        .filter(|candidate| candidate.top_k == current.top_k)
-        .filter(|candidate| same_mode_set(&candidate.modes, &current.modes))
+        .filter(|candidate| {
+            experiment_compatibility(current, Some(candidate), false).classification
+                == RetrievalEvalCompatibilityClassification::Compatible
+        })
         .max_by_key(|candidate| candidate.created_at)
 }
 
@@ -925,14 +947,6 @@ fn sort_case_regressions(regressions: &mut [RetrievalEvalCaseRegression]) {
     });
 }
 
-fn same_mode_set(left: &[RetrievalMode], right: &[RetrievalMode]) -> bool {
-    mode_set(left) == mode_set(right)
-}
-
-fn mode_set(modes: &[RetrievalMode]) -> BTreeSet<&'static str> {
-    modes.iter().map(|mode| mode_code(*mode)).collect()
-}
-
 fn mode_code(mode: RetrievalMode) -> &'static str {
     match mode {
         RetrievalMode::Lexical => "lexical",
@@ -1030,8 +1044,8 @@ mod tests {
         ExtractiveAnswerStatus, ProjectId, RetrievalCitation, RetrievalEmbeddingReadiness,
         RetrievalEmbeddingStatus, RetrievalEvalCase, RetrievalEvalCaseEvaluation,
         RetrievalEvalCaseId, RetrievalEvalConfigSnapshot, RetrievalEvalDatasetId,
-        RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalFailure,
-        RetrievalEvalFailureSeverity, RetrievalEvalGateStatus,
+        RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalExperimentProvenance,
+        RetrievalEvalFailure, RetrievalEvalFailureSeverity, RetrievalEvalGateStatus,
         RetrievalEvalRegressionClassification, RetrievalMatchedTerm, RetrievalMode,
         RetrievalQueryHit, RetrievalQueryResponse, RetrievalQueryRun, RetrievalQueryRunId,
         RetrievalScoreBreakdown, Source, SourceId, SourceKind, SourceSyncPolicy,
@@ -1270,6 +1284,42 @@ mod tests {
     }
 
     #[test]
+    fn automatic_baseline_excludes_incompatible_and_legacy_experiments() {
+        let dataset_id = RetrievalEvalDatasetId(Uuid::now_v7());
+        let now = OffsetDateTime::now_utc();
+        let current = experiment_with_dataset(dataset_id, "Current", now, Vec::new());
+        let compatible = experiment_with_dataset(
+            dataset_id,
+            "Compatible",
+            now - Duration::minutes(3),
+            Vec::new(),
+        );
+        let mut incompatible = experiment_with_dataset(
+            dataset_id,
+            "Incompatible",
+            now - Duration::minutes(1),
+            Vec::new(),
+        );
+        incompatible
+            .provenance
+            .as_mut()
+            .unwrap()
+            .identity
+            .retrieval
+            .top_k = 10;
+        let mut legacy =
+            experiment_with_dataset(dataset_id, "Legacy", now - Duration::minutes(2), Vec::new());
+        legacy.provenance = None;
+
+        assert_eq!(
+            previous_comparable_experiment(&current, &[&incompatible, &legacy, &compatible])
+                .map(|experiment| experiment.id),
+            Some(compatible.id)
+        );
+        assert!(previous_comparable_experiment(&current, &[&incompatible, &legacy]).is_none());
+    }
+
+    #[test]
     fn regression_tracks_changed_top_evidence_and_failure_labels() {
         let case_id = RetrievalEvalCaseId(Uuid::now_v7());
         let expected_chunk = ChunkId(Uuid::now_v7());
@@ -1492,12 +1542,50 @@ mod tests {
                 embedding_model: EmbeddingModelInfo::default(),
                 dataset_case_count: 1,
             },
+            provenance: Some(provenance_fixture(dataset_id)),
             mode_results,
             comparison,
             gate,
             failures,
             created_at,
         }
+    }
+
+    fn provenance_fixture(dataset_id: RetrievalEvalDatasetId) -> RetrievalEvalExperimentProvenance {
+        serde_json::from_value(serde_json::json!({
+            "schema_version": 1,
+            "fingerprint": "stable-identity",
+            "identity": {
+                "workspace_id": "00000000-0000-0000-0000-000000000001",
+                "project_ids": [],
+                "dataset": {"dataset_id": dataset_id, "revision_fingerprint": "dataset", "case_count": 1},
+                "corpus": {"source_ids": [], "document_count": 0, "document_set_fingerprint": "documents", "documents": []},
+                "chunking": {"fingerprint": "chunking", "sources": []},
+                "chunk_set": {"fingerprint": "chunks", "chunk_count": 0},
+                "embedding": {"provider": "local", "model_name": "local-hash-v1", "dimension": 384, "index_fingerprint": "index", "indexed_chunk_count": 0, "missing_chunk_count": 0, "stale_chunk_count": 0},
+                "retrieval": {
+                    "modes": ["hybrid"],
+                    "top_k": 5,
+                    "scoring": {
+                        "weights": rag_debugger_core::RetrievalWeights::default(),
+                        "min_evidence_score": 0.35,
+                        "min_semantic_similarity": 0.25,
+                        "answer_citation_limit": 3,
+                        "answerability": rag_debugger_core::AnswerabilityConfig::default()
+                    },
+                    "filters": {"source_ids": [], "document_ids": []},
+                    "runtime_flags": {}
+                }
+            },
+            "informational": {
+                "application_version": "test",
+                "deployment_mode": "local",
+                "runtime_environment": "test",
+                "storage_backend": "memory",
+                "labels": {}
+            }
+        }))
+        .unwrap()
     }
 
     fn case_evaluation(

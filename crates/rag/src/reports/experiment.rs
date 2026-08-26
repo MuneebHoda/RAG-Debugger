@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use rag_debugger_core::{
     DebugReport, DebugReportFinding, DebugReportSeverity, DebugReportSource,
-    DiagnosisRecommendation, EvidenceDiagnosisSummary, RetrievalEvalExperiment,
-    RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity, RetrievalEvalGateStatus,
-    RetrievalEvalRegressionClassification, RetrievalEvalRegressionComparison,
+    DiagnosisRecommendation, EvidenceDiagnosisSummary, RetrievalEvalCompatibilityClassification,
+    RetrievalEvalExperiment, RetrievalEvalFailureLabel, RetrievalEvalFailureSeverity,
+    RetrievalEvalGateStatus, RetrievalEvalRegressionClassification,
+    RetrievalEvalRegressionComparison,
 };
 
 use super::{
@@ -84,6 +85,27 @@ pub fn build_eval_experiment_debug_report_with_regression(
     }
 
     if let Some(regression) = regression {
+        if regression.compatibility.classification
+            != RetrievalEvalCompatibilityClassification::Compatible
+            && regression.baseline_experiment_id.is_some()
+        {
+            findings.push(DebugReportFinding {
+                code: "baseline_compatibility_warning".to_owned(),
+                severity: DebugReportSeverity::Warning,
+                title: "Baseline configuration is not fully compatible".to_owned(),
+                summary: format!(
+                    "Compatibility is {}. Changed identity fields: {}.",
+                    compatibility_label(regression.compatibility.classification),
+                    if regression.compatibility.changed_fields.is_empty() {
+                        "unknown".to_owned()
+                    } else {
+                        regression.compatibility.changed_fields.join(", ")
+                    }
+                ),
+                failure_labels: vec!["baseline_compatibility".to_owned()],
+                evidence_refs: Vec::new(),
+            });
+        }
         findings.push(DebugReportFinding {
             code: "eval_regression_comparison".to_owned(),
             severity: match regression.classification {
@@ -240,6 +262,54 @@ fn experiment_context_with_regression(
     );
     context.insert("mode_count".to_owned(), experiment.modes.len().to_string());
     context.insert("top_k".to_owned(), experiment.top_k.to_string());
+    if let Some(provenance) = &experiment.provenance {
+        context.insert(
+            "provenance_schema_version".to_owned(),
+            provenance.schema_version.to_string(),
+        );
+        context.insert(
+            "experiment_fingerprint".to_owned(),
+            provenance.fingerprint.clone(),
+        );
+        context.insert(
+            "dataset_revision_fingerprint".to_owned(),
+            provenance.identity.dataset.revision_fingerprint.clone(),
+        );
+        context.insert(
+            "document_set_fingerprint".to_owned(),
+            provenance.identity.corpus.document_set_fingerprint.clone(),
+        );
+        context.insert(
+            "document_count".to_owned(),
+            provenance.identity.corpus.document_count.to_string(),
+        );
+        context.insert(
+            "chunking_fingerprint".to_owned(),
+            provenance.identity.chunking.fingerprint.clone(),
+        );
+        context.insert(
+            "chunk_set_fingerprint".to_owned(),
+            provenance.identity.chunk_set.fingerprint.clone(),
+        );
+        context.insert(
+            "chunk_count".to_owned(),
+            provenance.identity.chunk_set.chunk_count.to_string(),
+        );
+        context.insert(
+            "embedding_provider".to_owned(),
+            provenance.identity.embedding.provider.clone(),
+        );
+        context.insert(
+            "embedding_dimension".to_owned(),
+            provenance.identity.embedding.dimension.to_string(),
+        );
+        context.insert(
+            "embedding_index_fingerprint".to_owned(),
+            provenance.identity.embedding.index_fingerprint.clone(),
+        );
+    } else {
+        context.insert("provenance_status".to_owned(), "legacy_unknown".to_owned());
+    }
     if let Some(best_mode) = experiment.comparison.best_mode {
         context.insert(
             "best_retrieval_mode".to_owned(),
@@ -266,6 +336,16 @@ fn experiment_context_with_regression(
         );
     }
     if let Some(regression) = regression {
+        context.insert(
+            "baseline_compatibility".to_owned(),
+            compatibility_label(regression.compatibility.classification).to_owned(),
+        );
+        if !regression.compatibility.changed_fields.is_empty() {
+            context.insert(
+                "changed_configuration_fields".to_owned(),
+                regression.compatibility.changed_fields.join(", "),
+            );
+        }
         context.insert(
             "regression_classification".to_owned(),
             classification_label(regression.classification).to_owned(),
@@ -297,7 +377,13 @@ fn eval_summary_with_regression(
     regression: Option<&RetrievalEvalRegressionComparison>,
 ) -> String {
     let regression_sentence = regression
-        .map(|regression| format!(" {}", regression.summary))
+        .map(|regression| {
+            format!(
+                " {} Baseline compatibility: {}.",
+                regression.summary,
+                compatibility_label(regression.compatibility.classification)
+            )
+        })
         .unwrap_or_default();
     match experiment.gate.status {
         RetrievalEvalGateStatus::Passed => format!(
@@ -320,6 +406,15 @@ fn classification_label(classification: RetrievalEvalRegressionClassification) -
         RetrievalEvalRegressionClassification::Improved => "improved",
         RetrievalEvalRegressionClassification::Regressed => "regressed",
         RetrievalEvalRegressionClassification::Unchanged => "unchanged",
+    }
+}
+
+fn compatibility_label(classification: RetrievalEvalCompatibilityClassification) -> &'static str {
+    match classification {
+        RetrievalEvalCompatibilityClassification::Compatible => "compatible",
+        RetrievalEvalCompatibilityClassification::PartiallyCompatible => "partially_compatible",
+        RetrievalEvalCompatibilityClassification::Incompatible => "incompatible",
+        RetrievalEvalCompatibilityClassification::LegacyUnknown => "legacy_unknown",
     }
 }
 

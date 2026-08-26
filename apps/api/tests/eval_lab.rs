@@ -1034,6 +1034,30 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
         experiment["failures"].as_array().expect("failures").len(),
         0
     );
+    assert_eq!(experiment["provenance"]["schema_version"], 1);
+    assert_eq!(
+        experiment["provenance"]["fingerprint"]
+            .as_str()
+            .expect("provenance fingerprint")
+            .len(),
+        64
+    );
+    assert_eq!(
+        experiment["provenance"]["identity"]["corpus"]["document_count"],
+        1
+    );
+    assert!(
+        !experiment["provenance"]
+            .to_string()
+            .contains("Local GPU workers"),
+        "provenance must not contain raw document content"
+    );
+    assert!(
+        !experiment["provenance"]
+            .to_string()
+            .contains("gpu indexing workers"),
+        "provenance must not contain raw Eval queries"
+    );
 
     let experiment_id = experiment["id"].as_str().expect("experiment id");
     let history = get_json(
@@ -1043,6 +1067,10 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     .await;
     assert_eq!(history.as_array().expect("history").len(), 1);
     assert_eq!(history[0]["id"], experiment_id);
+    assert_eq!(
+        history[0]["provenance"]["fingerprint"],
+        experiment["provenance"]["fingerprint"]
+    );
 
     let comparison = request_json(
         &app,
@@ -1076,14 +1104,51 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     )
     .await;
     let regressed_id = regressed["id"].as_str().expect("regressed id");
+    let invalid_newer_baseline = app
+        .clone()
+        .oneshot(empty_request(
+            Method::GET,
+            &format!(
+                "/api/v1/eval-lab/experiments/{experiment_id}/regression?baseline_id={regressed_id}"
+            ),
+        ))
+        .await
+        .expect("request newer baseline");
+    assert_eq!(invalid_newer_baseline.status(), StatusCode::BAD_REQUEST);
     let regression = get_json(
         &app,
         &format!("/api/v1/eval-lab/experiments/{regressed_id}/regression"),
     )
     .await;
-    assert_eq!(regression["classification"], "regressed");
-    assert_eq!(regression["baseline_experiment_id"], experiment_id);
-    assert!(!regression["newly_failed_cases"]
+    assert!(regression["baseline_experiment_id"].is_null());
+    assert_eq!(
+        regression["compatibility"]["classification"],
+        "legacy_unknown"
+    );
+    let explicit_regression = get_json(
+        &app,
+        &format!(
+            "/api/v1/eval-lab/experiments/{regressed_id}/regression?baseline_id={experiment_id}"
+        ),
+    )
+    .await;
+    assert_eq!(explicit_regression["classification"], "regressed");
+    assert_eq!(explicit_regression["baseline_experiment_id"], experiment_id);
+    assert_eq!(
+        explicit_regression["compatibility"]["classification"],
+        "partially_compatible"
+    );
+    assert!(
+        explicit_regression["compatibility"]["intentional_cross_configuration"]
+            .as_bool()
+            .expect("intentional cross configuration")
+    );
+    assert!(explicit_regression["compatibility"]["changed_fields"]
+        .as_array()
+        .expect("changed fields")
+        .iter()
+        .any(|field| field == "dataset.revision_fingerprint"));
+    assert!(!explicit_regression["newly_failed_cases"]
         .as_array()
         .expect("newly failed")
         .is_empty());
@@ -1099,7 +1164,8 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     .await;
     assert_eq!(trend["window_limit"], 50);
     assert_eq!(trend["latest_experiment_id"], regressed_id);
-    assert_eq!(trend["latest_regression"]["classification"], "regressed");
+    assert_eq!(trend["latest_regression"]["classification"], "unchanged");
+    assert!(trend["latest_regression"]["baseline_experiment_id"].is_null());
 
     let overview = get_json(&app, "/api/v1/overview").await;
     assert_eq!(overview["latest_eval_experiment"]["id"], regressed_id);

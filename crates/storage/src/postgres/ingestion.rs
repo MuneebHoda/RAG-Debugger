@@ -1,5 +1,5 @@
 use rag_debugger_core::*;
-use sqlx::Row;
+use sqlx::{PgConnection, Row};
 use time::OffsetDateTime;
 
 use super::{codec::*, PostgresStore};
@@ -205,6 +205,15 @@ impl PostgresStore {
         &self,
         workspace_id: WorkspaceId,
     ) -> Result<Vec<SourceSummary>, StorageError> {
+        let mut connection = self.pool.acquire().await?;
+        self.list_sources_on(&mut connection, workspace_id).await
+    }
+
+    pub(super) async fn list_sources_on(
+        &self,
+        connection: &mut PgConnection,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<SourceSummary>, StorageError> {
         let source_rows = sqlx::query(
             "SELECT s.id, s.project_id, s.name, s.source_kind, s.root_hint,
                     s.github_owner, s.github_repo, s.sync_policy, s.sync_cron,
@@ -215,13 +224,15 @@ impl PostgresStore {
              ORDER BY s.created_at DESC",
         )
         .bind(workspace_id.0)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *connection)
         .await?;
 
         let mut summaries = Vec::with_capacity(source_rows.len());
         for row in source_rows {
             let source = source_from_row(&row)?;
-            let documents = self.list_document_summaries(source.id).await?;
+            let documents = self
+                .list_document_summaries_on(connection, source.id)
+                .await?;
             let chunk_count = documents.iter().map(|document| document.chunk_count).sum();
 
             summaries.push(SourceSummary {
@@ -282,6 +293,16 @@ impl PostgresStore {
         &self,
         source_id: SourceId,
     ) -> Result<Vec<DocumentSummary>, StorageError> {
+        let mut connection = self.pool.acquire().await?;
+        self.list_document_summaries_on(&mut connection, source_id)
+            .await
+    }
+
+    async fn list_document_summaries_on(
+        &self,
+        connection: &mut PgConnection,
+        source_id: SourceId,
+    ) -> Result<Vec<DocumentSummary>, StorageError> {
         let rows = sqlx::query(
             "SELECT d.id, d.source_id, d.path, d.mime_type, d.checksum, d.byte_size,
                     d.document_profile, d.extraction_quality, d.warnings,
@@ -293,7 +314,7 @@ impl PostgresStore {
              ORDER BY d.created_at DESC",
         )
         .bind(source_id.0)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *connection)
         .await?;
 
         rows.iter()

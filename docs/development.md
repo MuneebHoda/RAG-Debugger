@@ -157,6 +157,8 @@ Legacy retrieval evals are still stored through `/api/v1/retrieval/evals` and ru
 
 Eval Lab APIs live under `/api/v1/eval-lab`. Existing retrieval eval cases are backfilled into `Default retrieval dataset` by migration so older local data remains usable.
 
+New manual and CI experiments capture immutable provenance and reuse one consistent source/document/chunk/embedding snapshot for all cases and modes. MemoryStore clones under one mutex; PostgreSQL uses a read-only `REPEATABLE READ` transaction and stores the additive optional provenance inside the existing experiment JSONB, so no migration or legacy rewrite is required. Automatic regression history uses only identical provenance; use Experiment Detail to request a warned directional comparison with an earlier different or legacy configuration.
+
 ## CI Gate Flow
 
 1. Sign in to `/app/settings`.

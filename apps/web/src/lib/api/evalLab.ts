@@ -173,11 +173,81 @@ export interface RetrievalEvalExperiment {
   modes: RetrievalMode[];
   top_k: number;
   config_snapshot: RetrievalEvalConfigSnapshot;
+  provenance?: RetrievalEvalExperimentProvenance;
   mode_results: RetrievalEvalModeResult[];
   comparison: RetrievalEvalComparison;
   gate: RetrievalEvalGate;
   failures: RetrievalEvalFailure[];
   created_at: string;
+}
+
+export interface RetrievalEvalExperimentProvenance {
+  schema_version: number;
+  fingerprint: string;
+  identity: {
+    workspace_id: string;
+    project_ids: string[];
+    dataset: {
+      dataset_id: string;
+      revision_fingerprint: string;
+      case_count: number;
+    };
+    corpus: {
+      source_ids: string[];
+      document_count: number;
+      document_set_fingerprint: string;
+      documents: Array<{
+        document_id: string;
+        source_id: string;
+        checksum: string;
+        path_fingerprint?: string;
+      }>;
+    };
+    chunking: {
+      fingerprint: string;
+      sources: Array<{
+        source_id: string;
+        config: {
+          target_tokens: number;
+          overlap_tokens: number;
+          strategy: string;
+        };
+      }>;
+    };
+    chunk_set: { fingerprint: string; chunk_count: number };
+    embedding: {
+      provider: string;
+      model_name: string;
+      dimension: number;
+      index_fingerprint: string;
+      indexed_chunk_count: number;
+      missing_chunk_count: number;
+      stale_chunk_count: number;
+    };
+    retrieval: {
+      modes: RetrievalMode[];
+      top_k: number;
+      scoring: Record<string, unknown>;
+      filters: { source_ids: string[]; document_ids: string[] };
+      runtime_flags: Record<string, string>;
+    };
+  };
+  informational: {
+    application_version: string;
+    deployment_mode: string;
+    runtime_environment?: string | null;
+    storage_backend?: string | null;
+    branch?: string | null;
+    commit_sha?: string | null;
+    base_ref?: string | null;
+    head_ref?: string | null;
+    labels: Record<string, string>;
+  };
+}
+
+export interface RetrievalEvalProvenanceSummary {
+  schema_version: number;
+  fingerprint: string;
 }
 
 export interface RetrievalEvalConfigSnapshot {
@@ -264,6 +334,7 @@ export interface RetrievalEvalExperimentSummary {
   latency_p95_ms: number;
   failure_count: number;
   contains_full_local_data: boolean;
+  provenance?: RetrievalEvalProvenanceSummary;
   created_at: string;
 }
 
@@ -305,6 +376,7 @@ export interface RetrievalEvalTrendPoint {
 export interface RetrievalEvalRegressionComparison {
   current_experiment_id: string;
   baseline_experiment_id: string | null;
+  compatibility: RetrievalEvalCompatibility;
   classification: RetrievalEvalRegressionClassification;
   current_gate_status: RetrievalEvalGateStatus;
   baseline_gate_status: RetrievalEvalGateStatus | null;
@@ -314,6 +386,31 @@ export interface RetrievalEvalRegressionComparison {
   changed_top_evidence_cases: RetrievalEvalCaseRegression[];
   changed_failure_label_cases: RetrievalEvalCaseRegression[];
   summary: string;
+}
+
+export type RetrievalEvalCompatibilityClassification =
+  | "compatible"
+  | "partially_compatible"
+  | "incompatible"
+  | "legacy_unknown";
+
+export interface RetrievalEvalCompatibility {
+  classification: RetrievalEvalCompatibilityClassification;
+  intentional_cross_configuration: boolean;
+  changed_fields: string[];
+  reasons: Array<{
+    code:
+      | "no_baseline"
+      | "missing_provenance"
+      | "identity_changed"
+      | "informational_changed"
+      | "explicit_cross_configuration";
+    field: string | null;
+    field_class: "identity_defining" | "informational";
+    privacy_sensitive: boolean;
+    legacy_optional: boolean;
+    message: string;
+  }>;
 }
 
 export interface RetrievalEvalMetricDelta {

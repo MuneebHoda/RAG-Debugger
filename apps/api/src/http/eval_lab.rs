@@ -9,32 +9,29 @@ use rag_debugger_core::{
     CreateRetrievalEvalDatasetRequest, CreateRetrievalEvalLabCaseRequest, DocumentId,
     EvalLabEvidenceSearchQuery, EvalLabEvidenceSearchRequest, QueryEvalLabEvidenceRequest,
     QueryEvalLabEvidenceResponse, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalCaseProvenance, RetrievalEvalConfigSnapshot, RetrievalEvalDataset,
-    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
-    RetrievalEvalExperimentId, RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison,
-    RetrievalEvalRun, RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode,
-    RetrievalQueryRequest, RunRetrievalEvalExperimentRequest, TraceIngestionPrivacyMode,
-    UpdateRetrievalEvalCaseRequest, WorkspaceId, EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT,
-    EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS,
-    EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS,
-    EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
+    RetrievalEvalCaseProvenance, RetrievalEvalDataset, RetrievalEvalDatasetId,
+    RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
+    RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
+    RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode,
+    RunRetrievalEvalExperimentRequest, TraceIngestionPrivacyMode, UpdateRetrievalEvalCaseRequest,
+    WorkspaceId, EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
+    EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS,
+    EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS, EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
 };
-use rag_debugger_rag::{
-    embedding::LocalHashEmbeddingProvider,
-    evals::{
-        build_trend_summary, compare_experiment_regression, compare_mode_results, evaluate_gate,
-        evaluate_retrieval_eval_case_with_context, expected_chunk_parent_document_ids,
-        previous_comparable_experiment, summarize_experiment, summarize_mode_result,
-    },
-    retrieval::LocalHybridRetriever,
-    RagError,
+use rag_debugger_rag::evals::{
+    build_trend_summary, compare_experiment_regression_with_intent, compare_mode_results,
+    previous_comparable_experiment, summarize_experiment,
 };
 use rag_debugger_storage::repository::{EvidenceRepository, SubmittedExpectedEvidence};
 use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
-use crate::{error::ApiError, state::AppState};
+use crate::{
+    error::ApiError,
+    eval_experiment::{run_experiment_for_dataset, CiProvenanceMetadata},
+    state::AppState,
+};
 
 pub async fn list_datasets(
     State(state): State<AppState>,
@@ -270,72 +267,20 @@ pub async fn run_experiment(
         state.config().product.retrieval.default_top_k,
         state.config().product.retrieval.max_top_k,
     );
-    let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
-    let retriever = LocalHybridRetriever::new(provider, state.config().product.retrieval.clone())
-        .with_debugger_config(state.config().product.debugger.clone());
-    let mut mode_results = Vec::with_capacity(modes.len());
-
-    for mode in &modes {
-        let mut case_results = Vec::with_capacity(dataset.cases.len());
-        for eval_case in &dataset.cases {
-            let case = RetrievalEvalCase {
-                top_k,
-                ..eval_case.clone()
-            };
-            let query_request = RetrievalQueryRequest {
-                query: case.query.clone(),
-                top_k,
-                retrieval_mode: *mode,
-                source_ids: Vec::new(),
-                document_ids: Vec::new(),
-            };
-            let candidates = repository
-                .list_searchable_chunks(workspace_id, &query_request)
-                .await?;
-            let expected_chunk_document_ids =
-                expected_chunk_parent_document_ids(&case, &candidates);
-            let response = retriever
-                .retrieve(query_request, candidates)
-                .map_err(rag_error_to_api_error)?;
-            case_results.push(evaluate_retrieval_eval_case_with_context(
-                &case,
-                &response,
-                &state.config().product.debugger,
-                &expected_chunk_document_ids,
-            ));
-        }
-        mode_results.push(summarize_mode_result(*mode, case_results));
-    }
-
-    let comparison = compare_mode_results(&mode_results);
-    let gate = evaluate_gate(&mode_results);
-    let failures = mode_results
-        .iter()
-        .flat_map(|result| result.case_results.iter())
-        .flat_map(|result| result.failures.iter().cloned())
-        .collect::<Vec<_>>();
-    let experiment = RetrievalEvalExperiment {
-        id: RetrievalEvalExperimentId(Uuid::now_v7()),
-        dataset_id: dataset.id,
-        dataset_name: dataset.name.clone(),
-        name: request
-            .name
-            .filter(|name| !name.trim().is_empty())
-            .unwrap_or_else(|| format!("{} comparison", dataset.name)),
+    let name = request
+        .name
+        .filter(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| format!("{} comparison", dataset.name));
+    let experiment = run_experiment_for_dataset(
+        &state,
+        workspace_id,
+        dataset,
         modes,
         top_k,
-        config_snapshot: RetrievalEvalConfigSnapshot {
-            top_k,
-            scoring_weights: state.config().product.retrieval.weights.clone(),
-            embedding_model: state.config().product.embedding.model.clone(),
-            dataset_case_count: dataset.cases.len() as u32,
-        },
-        mode_results,
-        comparison,
-        gate,
-        failures,
-        created_at: OffsetDateTime::now_utc(),
-    };
+        name,
+        CiProvenanceMetadata::default(),
+    )
+    .await?;
 
     let saved = repository
         .save_retrieval_eval_experiment(workspace_id, experiment)
@@ -470,6 +415,11 @@ pub async fn experiment_regression(
                 "baseline experiment must belong to the same dataset".to_owned(),
             ));
         }
+        if baseline.created_at >= current.created_at {
+            return Err(ApiError::BadRequest(
+                "baseline experiment must be earlier than the current experiment".to_owned(),
+            ));
+        }
         Some(baseline)
     } else {
         None
@@ -482,7 +432,11 @@ pub async fn experiment_regression(
         .as_ref()
         .or_else(|| previous_comparable_experiment(&current, &experiment_refs));
 
-    Ok(Json(compare_experiment_regression(&current, baseline_ref)))
+    Ok(Json(compare_experiment_regression_with_intent(
+        &current,
+        baseline_ref,
+        query.baseline_id.is_some(),
+    )))
 }
 
 pub async fn compare_experiment(
@@ -764,13 +718,6 @@ fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
     });
     normalized.dedup();
     normalized
-}
-
-fn rag_error_to_api_error(error: RagError) -> ApiError {
-    match error {
-        RagError::InvalidConfig(message) => ApiError::BadRequest(message.to_owned()),
-        RagError::NotImplemented(_) => ApiError::Internal,
-    }
 }
 
 fn not_found_to_api(

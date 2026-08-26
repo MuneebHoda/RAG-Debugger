@@ -120,11 +120,15 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 
 CI creation stores both the compatibility aggregate and the additive full Eval Lab v2 regression comparison. Older JSON records remain readable when the new field is absent. API-key and CI repository operations always receive a workspace ID; key revocation includes it in the Postgres predicate.
 
+Manual and CI Eval Lab runs share one experiment runner. It acquires workspace-scoped source/document/chunk/embedding state through one repository snapshot operation and reuses that exact candidate set for every case/mode. MemoryStore clones under one mutex; Postgres uses one read-only `REPEATABLE READ` transaction so concurrent corpus/index writes cannot create mixed provenance. The RAG provenance module canonicalizes sorted identity collections and JSON keys before SHA-256 hashing. Identity covers dataset revision, document checksums and path fingerprints, chunking, privacy-safe chunk text/section/quality identity, chunk set, embedding configuration/index, modes, `top_k`, scoring/filters, and runtime flags; build and CI revision values are informational. Compatibility is typed as `compatible`, `partially_compatible`, `incompatible`, or `legacy_unknown` with reasons and changed fields. Automatic baselines require identical identity provenance; explicit earlier same-dataset comparisons may cross configurations with warnings.
+
 ## Database Schema And Migrations
 
 Migrations are in `migrations`.
 
 Core tables include `organizations`, `workspaces`, `users`, `workspace_memberships`, `auth_sessions`, `api_keys`, `projects`, `sources`, `ingestion_runs`, `documents`, `chunks`, `chunk_embeddings`, `retrieval_playground_runs`, `retrieval_playground_hits`, `debug_traces`, `trace_rerun_experiments`, `retrieval_eval_datasets`, `retrieval_eval_cases`, `retrieval_eval_runs`, `retrieval_eval_results`, `retrieval_eval_experiments`, and `ci_eval_runs`.
+
+Experiment provenance is an additive optional field inside the existing `retrieval_eval_experiments.experiment_json` JSONB snapshot. No migration or legacy rewrite is required. MemoryStore and Postgres reject duplicate experiment IDs, validate provenance workspace/project ownership, and retain legacy JSON without provenance as readable `legacy_unknown` data.
 
 The Eval Lab evidence-search migrations enable `pg_trgm`, add GIN indexes for normalized source names, document paths, chunk section titles, and chunk text, and add B-tree browse indexes for normalized document paths and document/ordinal chunk traversal. UUID primary keys continue serving direct requested-ID resolution. These migrations change indexes only and do not rewrite corpus records.
 

@@ -88,6 +88,12 @@ function comparison(
   return {
     current_experiment_id: "current",
     baseline_experiment_id: "baseline",
+    compatibility: {
+      classification: "compatible",
+      intentional_cross_configuration: false,
+      changed_fields: [],
+      reasons: [],
+    },
     classification: "unchanged",
     current_gate_status: "failed",
     baseline_gate_status: "passed",
