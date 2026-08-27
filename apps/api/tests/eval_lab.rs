@@ -4,9 +4,16 @@ use axum::{
     body::{to_bytes, Body},
     http::{header, Method, Request, StatusCode},
 };
-use rag_debugger_core::{ChunkId, DocumentId, RetrievalEvalCase};
-use rag_debugger_storage::repository::{EvalRepository, SubmittedExpectedEvidence};
+use rag_debugger_core::{
+    ChunkId, DocumentId, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset,
+    RetrievalEvalDatasetId, WorkspaceId, RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES,
+};
+use rag_debugger_storage::{
+    memory::MemoryStore,
+    repository::{CiEvalRepository, EvalRepository, SubmittedExpectedEvidence},
+};
 use serde_json::{json, Value};
+use time::{Duration, OffsetDateTime};
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -1171,6 +1178,116 @@ async fn eval_lab_runs_multi_mode_experiment_with_gate() {
     assert_eq!(overview["latest_eval_experiment"]["id"], regressed_id);
 }
 
+#[tokio::test]
+async fn experiment_case_limit_is_inclusive_and_modes_stay_bounded() {
+    let context = support::authenticated_test_app().await;
+    let dataset_id = seed_dataset_cases(
+        context.store.as_ref(),
+        context.workspace_id,
+        RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES,
+    )
+    .await;
+    let experiment = request_json(
+        &context.router,
+        Method::POST,
+        "/api/v1/eval-lab/experiments",
+        json!({
+            "dataset_id": dataset_id,
+            "modes": ["lexical", "hybrid", "vector", "lexical", "vector", "hybrid"]
+        }),
+    )
+    .await;
+
+    assert_eq!(
+        experiment["config_snapshot"]["dataset_case_count"],
+        RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES
+    );
+    assert_eq!(experiment["modes"], json!(["hybrid", "vector", "lexical"]));
+    assert_eq!(experiment["mode_results"].as_array().map(Vec::len), Some(3));
+}
+
+#[tokio::test]
+async fn manual_and_ci_experiments_reject_oversized_datasets_without_persistence() {
+    let context = support::authenticated_test_app().await;
+    let dataset_id = seed_dataset_cases(
+        context.store.as_ref(),
+        context.workspace_id,
+        RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES + 1,
+    )
+    .await;
+    let api_key = request_json(
+        &context.router,
+        Method::POST,
+        "/api/v1/api-keys",
+        json!({ "name": "Oversized dataset CI" }),
+    )
+    .await;
+    let secret = api_key["secret"].as_str().expect("CI API key secret");
+    let expected_message = format!(
+        "bad request: eval dataset contains {} cases, exceeding the supported experiment case limit of {RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES}",
+        RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES + 1
+    );
+
+    let manual = context
+        .router
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/eval-lab/experiments",
+            json!({ "dataset_id": dataset_id }),
+        ))
+        .await
+        .expect("manual oversized response");
+    assert_eq!(manual.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json_body(manual).await["error"]["message"],
+        expected_message
+    );
+
+    let ci = context
+        .router
+        .clone()
+        .oneshot(bearer_json_request(
+            Method::POST,
+            "/api/v1/eval-lab/ci/runs",
+            json!({ "dataset_id": dataset_id }),
+            secret,
+        ))
+        .await
+        .expect("CI oversized response");
+    assert_eq!(ci.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json_body(ci).await["error"]["message"], expected_message);
+
+    assert!(context
+        .store
+        .list_retrieval_eval_experiments(context.workspace_id)
+        .await
+        .expect("list experiments")
+        .is_empty());
+    assert!(context
+        .store
+        .latest_retrieval_eval_run(context.workspace_id)
+        .await
+        .expect("latest eval run")
+        .is_none());
+    assert!(context
+        .store
+        .list_ci_eval_runs(context.workspace_id)
+        .await
+        .expect("list CI runs")
+        .is_empty());
+    assert_eq!(
+        context
+            .store
+            .get_retrieval_eval_dataset(context.workspace_id, dataset_id)
+            .await
+            .expect("oversized dataset remains intact")
+            .cases
+            .len(),
+        RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES + 1
+    );
+}
+
 async fn create_dataset(app: &axum::Router, name: &str) -> Value {
     request_json(
         app,
@@ -1243,6 +1360,16 @@ fn json_request(method: Method, uri: &str, body: Value) -> Request<Body> {
         .expect("request")
 }
 
+fn bearer_json_request(method: Method, uri: &str, body: Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::from(body.to_string()))
+        .expect("request")
+}
+
 fn empty_request(method: Method, uri: &str) -> Request<Body> {
     Request::builder()
         .method(method)
@@ -1291,4 +1418,45 @@ async fn json_body(response: axum::response::Response) -> Value {
         .await
         .expect("body bytes");
     serde_json::from_slice(&bytes).expect("json body")
+}
+
+async fn seed_dataset_cases(
+    store: &MemoryStore,
+    workspace_id: WorkspaceId,
+    case_count: usize,
+) -> RetrievalEvalDatasetId {
+    let now = OffsetDateTime::now_utc();
+    let dataset = RetrievalEvalDataset {
+        id: RetrievalEvalDatasetId(Uuid::now_v7()),
+        name: format!("Bounded experiment {case_count}"),
+        description: None,
+        cases: Vec::new(),
+        created_at: now,
+        updated_at: now,
+    };
+    store
+        .create_retrieval_eval_dataset(workspace_id, dataset.clone())
+        .await
+        .expect("create bounded experiment dataset");
+    for index in 0..case_count {
+        store
+            .create_retrieval_eval_case_in_dataset(
+                workspace_id,
+                dataset.id,
+                RetrievalEvalCase {
+                    id: RetrievalEvalCaseId(Uuid::now_v7()),
+                    name: format!("Bounded case {index}"),
+                    query: format!("bounded experiment query {index}"),
+                    top_k: 5,
+                    expected_chunk_ids: Vec::new(),
+                    expected_document_ids: Vec::new(),
+                    notes: None,
+                    provenance: None,
+                    created_at: now + Duration::milliseconds(index as i64),
+                },
+            )
+            .await
+            .expect("seed bounded experiment case");
+    }
+    dataset.id
 }

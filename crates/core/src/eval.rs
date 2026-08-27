@@ -192,6 +192,7 @@ pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS: usize = 100;
 pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS: usize = 250;
 pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS: usize = 250;
 pub const EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS: usize = 3;
+pub const RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES: usize = 250;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum EvalLabEvidenceSearchQuery {

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use rag_debugger_core::{
     DeploymentMode, RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalExperiment,
     RetrievalEvalExperimentId, RetrievalEvalProvenanceInformation, RetrievalMode,
-    RetrievalQueryRequest, WorkspaceId,
+    RetrievalQueryRequest, WorkspaceId, RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES,
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider,
@@ -42,6 +42,13 @@ pub(crate) async fn run_experiment_for_dataset(
     name: String,
     ci: CiProvenanceMetadata,
 ) -> Result<RetrievalEvalExperiment, ApiError> {
+    let case_count = dataset.cases.len();
+    if case_count > RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES {
+        return Err(ApiError::BadRequest(format!(
+            "eval dataset contains {case_count} cases, exceeding the supported experiment case limit of {RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES}"
+        )));
+    }
+    let modes = normalized_modes(modes);
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let corpus_snapshot = repository
         .retrieval_eval_corpus_snapshot(workspace_id)
@@ -75,9 +82,21 @@ pub(crate) async fn run_experiment_for_dataset(
     let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
     let retriever = LocalHybridRetriever::new(provider, state.config().product.retrieval.clone())
         .with_debugger_config(state.config().product.debugger.clone());
-    let mut mode_results = Vec::with_capacity(modes.len());
+    let mut mode_results = Vec::new();
     for mode in &modes {
-        let mut case_results = Vec::with_capacity(dataset.cases.len());
+        let mut case_results = Vec::new();
+        case_results.try_reserve(case_count).map_err(|error| {
+            let correlation_id = Uuid::now_v7();
+            tracing::error!(
+                %correlation_id,
+                workspace_id = %workspace_id.0,
+                dataset_id = %dataset.id.0,
+                requested_case_capacity = case_count,
+                %error,
+                "failed to allocate eval experiment case results"
+            );
+            ApiError::Internal
+        })?;
         for eval_case in &dataset.cases {
             let case = rag_debugger_core::RetrievalEvalCase {
                 top_k,
@@ -123,7 +142,7 @@ pub(crate) async fn run_experiment_for_dataset(
             top_k,
             scoring_weights: state.config().product.retrieval.weights.clone(),
             embedding_model: state.config().product.embedding.model.clone(),
-            dataset_case_count: dataset.cases.len() as u32,
+            dataset_case_count: case_count as u32,
         },
         provenance: Some(provenance),
         mode_results,
@@ -132,6 +151,25 @@ pub(crate) async fn run_experiment_for_dataset(
         failures,
         created_at: OffsetDateTime::now_utc(),
     })
+}
+
+fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
+    let mut normalized = if modes.is_empty() {
+        vec![
+            RetrievalMode::Hybrid,
+            RetrievalMode::Vector,
+            RetrievalMode::Lexical,
+        ]
+    } else {
+        modes
+    };
+    normalized.sort_by_key(|mode| match mode {
+        RetrievalMode::Hybrid => 0,
+        RetrievalMode::Vector => 1,
+        RetrievalMode::Lexical => 2,
+    });
+    normalized.dedup();
+    normalized
 }
 
 fn provenance_information(

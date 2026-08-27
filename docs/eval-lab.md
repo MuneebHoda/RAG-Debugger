@@ -35,6 +35,8 @@ Eval Lab routes live under `/api/v1/eval-lab`.
 
 The older `/api/v1/retrieval/evals` endpoints remain available for compatibility. New UI workflows save cases into Eval Lab datasets.
 
+Manual and CI experiments execute at most 250 dataset cases per request. The shared execution boundary rejects larger stored or legacy datasets with `400 Bad Request` before corpus snapshotting, provenance construction, retrieval, result allocation, or persistence; cases are never truncated.
+
 ### Evidence lookup contract
 
 Evidence lookup separates explicit selection from candidate discovery. Requested document and chunk IDs are deduplicated in first-occurrence order and resolved directly. Every requested ID is either returned before candidates or included in the corresponding unresolved array. Requested items never consume candidate limits and cannot disappear because a search produced earlier matches.

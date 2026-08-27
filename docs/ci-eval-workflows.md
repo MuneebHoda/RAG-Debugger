@@ -65,6 +65,7 @@ If `modes` is empty, CorpusLab runs `hybrid`, `vector`, and `lexical`. If `top_k
 ## Response Behavior
 
 - `201 Created`: run saved and either the gate passed or `fail_on_gate=false`.
+- `400 Bad Request`: the dataset exceeds the shared 250-case experiment execution limit.
 - `422 Unprocessable Entity`: run saved, but the gate failed and `fail_on_gate=true`.
 - `401 Unauthorized`: missing, invalid, or revoked API key.
 - `403 Forbidden`: API key does not include the `ci_eval_runs` scope.

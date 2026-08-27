@@ -12,9 +12,9 @@ use rag_debugger_core::{
     RetrievalEvalCaseProvenance, RetrievalEvalDataset, RetrievalEvalDatasetId,
     RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
     RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
-    RetrievalEvalRunId, RetrievalEvalTrendSummary, RetrievalMode,
-    RunRetrievalEvalExperimentRequest, TraceIngestionPrivacyMode, UpdateRetrievalEvalCaseRequest,
-    WorkspaceId, EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
+    RetrievalEvalRunId, RetrievalEvalTrendSummary, RunRetrievalEvalExperimentRequest,
+    TraceIngestionPrivacyMode, UpdateRetrievalEvalCaseRequest, WorkspaceId,
+    EVAL_LAB_EVIDENCE_DEFAULT_CANDIDATE_LIMIT, EVAL_LAB_EVIDENCE_MAX_CANDIDATE_LIMIT,
     EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS, EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS,
     EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS, EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS,
 };
@@ -259,7 +259,6 @@ pub async fn run_experiment(
         ));
     }
 
-    let modes = normalized_modes(request.modes);
     let top_k = normalized_top_k(
         request
             .top_k
@@ -275,7 +274,7 @@ pub async fn run_experiment(
         &state,
         workspace_id,
         dataset,
-        modes,
+        request.modes,
         top_k,
         name,
         CiProvenanceMetadata::default(),
@@ -699,25 +698,6 @@ fn normalized_top_k(top_k: u32, default_top_k: u32, max_top_k: u32) -> u32 {
     } else {
         top_k.min(max_top_k)
     }
-}
-
-fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
-    let mut normalized = if modes.is_empty() {
-        vec![
-            RetrievalMode::Hybrid,
-            RetrievalMode::Vector,
-            RetrievalMode::Lexical,
-        ]
-    } else {
-        modes
-    };
-    normalized.sort_by_key(|mode| match mode {
-        RetrievalMode::Hybrid => 0,
-        RetrievalMode::Vector => 1,
-        RetrievalMode::Lexical => 2,
-    });
-    normalized.dedup();
-    normalized
 }
 
 fn not_found_to_api(

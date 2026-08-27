@@ -8,7 +8,7 @@ use axum::{
 use rag_debugger_core::{
     ApiKeyScope, CiEvalPrincipal, CiEvalRegressionSummary, CiEvalReport, CiEvalRun, CiEvalRunId,
     CiEvalRunReportResponse, CiEvalRunStatus, RetrievalEvalExperiment, RetrievalEvalGateStatus,
-    RetrievalEvalModeResult, RetrievalEvalRun, RetrievalEvalRunId, RetrievalMode, RunCiEvalRequest,
+    RetrievalEvalModeResult, RetrievalEvalRun, RetrievalEvalRunId, RunCiEvalRequest,
 };
 use rag_debugger_rag::evals::compare_experiment_regression;
 use time::OffsetDateTime;
@@ -52,7 +52,6 @@ pub async fn run_ci_eval(
         });
     }
 
-    let modes = normalized_modes(request.modes);
     let top_k = normalized_top_k(
         request
             .top_k
@@ -75,7 +74,7 @@ pub async fn run_ci_eval(
         &state,
         workspace_id,
         dataset.clone(),
-        modes,
+        request.modes,
         top_k,
         name,
         CiProvenanceMetadata {
@@ -313,25 +312,6 @@ fn normalized_top_k(top_k: u32, default_top_k: u32, max_top_k: u32) -> u32 {
     } else {
         top_k.min(max_top_k)
     }
-}
-
-fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
-    let mut normalized = if modes.is_empty() {
-        vec![
-            RetrievalMode::Hybrid,
-            RetrievalMode::Vector,
-            RetrievalMode::Lexical,
-        ]
-    } else {
-        modes
-    };
-    normalized.sort_by_key(|mode| match mode {
-        RetrievalMode::Hybrid => 0,
-        RetrievalMode::Vector => 1,
-        RetrievalMode::Lexical => 2,
-    });
-    normalized.dedup();
-    normalized
 }
 
 fn validate_ci_request(mut request: RunCiEvalRequest) -> Result<RunCiEvalRequest, ApiError> {
