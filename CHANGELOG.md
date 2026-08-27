@@ -18,6 +18,8 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Versioned immutable Eval Lab experiment provenance with deterministic canonical SHA-256 identities for datasets, corpus/document checksums, chunking/chunk sets, embedding configuration/indexes, retrieval/scoring/filters/runtime flags, and privacy-safe build/CI metadata.
+- Typed baseline compatibility with machine-readable reasons and changed fields, strict fully compatible automatic selection, explicit warned cross-configuration comparisons, legacy-unknown handling, Experiment Detail provenance, and privacy-safe audit-report context.
 - Local-first launch-readiness package with a reproducible design-partner demo, onboarding guide, technical one-pager, sanitized feedback template, honest limitations, and discoverable README/handbook navigation.
 - Workspace-scoped native and OTLP/HTTP protobuf trace ingestion with idempotent span merging, deterministic monotonic status, pre-persistence privacy enforcement, privacy-safe span names and kinds, imported Trace Debugger views, privacy-provenance-preserving full-local Eval conversion, permitted audit reports, and local SDK and Collector examples.
 - Hardened imported-trace retries with unique aggregate evidence ranks, preserved rerun history and timestamps, server-side rerun rejection, strict CorpusLab scores with partial third-party score mapping, collision-aware errors, complete ingestion metadata constraints, and isolated log-redaction coverage.
@@ -59,6 +61,9 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- Manual and CI Eval Lab experiment execution now rejects datasets above a shared 250-case limit before snapshotting, provenance, retrieval, result allocation, or persistence, and uses fallible bounded result reservation.
+- CI automatic baseline discovery now uses a workspace- and dataset/config-scoped repository lookup across all earlier runs, selecting only exact schema-and-identity provenance matches with deterministic MemoryStore/Postgres ordering.
+- Manual and CI Eval Lab runs now share one frozen workspace-scoped source/chunk snapshot, preserve additive provenance in existing experiment JSON, and enforce append-only experiment IDs plus MemoryStore/Postgres provenance ownership parity without a database migration.
 - Corpus evidence, embedding status and writes, retrieval candidates and saved runs, traces and reruns, Eval Lab datasets/cases/experiments/runs, CI reads, overview metrics, demo progress, and report inputs now enforce authenticated workspace ownership inside storage; cross-workspace identifiers use the same unresolved, unavailable, or not-found behavior as nonexistent resources.
 - Retrieval and Trace save-to-Quality panels now key drafts and mutations to the active run or trace, preserve dataset intent across source changes, block stale submissions during retrieval transitions, expose keyboard-operable evidence toggles and announced async states, and verify submitted payloads against the current source.
 - Expected-evidence lookup now caps submitted ID work before storage access, routes browse/exact/text searches explicitly, uses synchronized ordered MemoryStore browse indexes and bounded text-search retention, follows index-compatible Postgres paths, rejects unsafe short text without clearing picker results, and preserves removable selections when metadata is unavailable.

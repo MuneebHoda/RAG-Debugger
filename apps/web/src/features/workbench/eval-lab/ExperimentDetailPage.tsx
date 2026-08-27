@@ -9,6 +9,7 @@ import {
   experimentContainsFullLocalData,
   listEvalLabDatasetExperiments,
 } from "../../../lib/api/evalLab";
+import type { RetrievalEvalExperiment } from "../../../lib/api/evalLab";
 import { formatDateTime } from "../../../lib/dateTime";
 import { CreateAuditReportAction } from "../reports/components/CreateAuditReportAction";
 import { BaselineSelector, RegressionPanel } from "./components/QualityViews";
@@ -46,7 +47,7 @@ export function ExperimentDetailPage() {
   const hasInvalidSelectedBaseline = Boolean(
     selectedBaselineId &&
     historyQuery.isSuccess &&
-    (!selectedBaseline || selectedCompatibility?.level === "incompatible"),
+    (!selectedBaseline || selectedCompatibility?.level === "unavailable"),
   );
   const hasSelectedBaselinePendingValidation = Boolean(
     selectedBaselineId && !historyQuery.isSuccess,
@@ -165,6 +166,8 @@ export function ExperimentDetailPage() {
           <p>{experiment.gate.reasons.join(" ")}</p>
         </div>
       </section>
+
+      <ProvenancePanel experiment={experiment} />
 
       <BaselineSelector
         automaticBaseline={automaticBaseline}
@@ -320,6 +323,123 @@ export function ExperimentDetailPage() {
           </div>
         </details>
       </section>
+    </section>
+  );
+}
+
+function ProvenancePanel({
+  experiment,
+}: {
+  experiment: RetrievalEvalExperiment;
+}) {
+  const provenance = experiment.provenance;
+  if (!provenance) {
+    return (
+      <section className={styles.panel} aria-labelledby="provenance-title">
+        <div className={styles.panelHeading}>
+          <div>
+            <h2 id="provenance-title">Immutable provenance</h2>
+            <p role="status">
+              Legacy experiment: provenance is unavailable, so baseline
+              compatibility cannot be proven.
+            </p>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const { identity, informational } = provenance;
+  return (
+    <section className={styles.panel} aria-labelledby="provenance-title">
+      <div className={styles.panelHeading}>
+        <div>
+          <h2 id="provenance-title">Immutable provenance</h2>
+          <p>
+            Version {provenance.schema_version} identity snapshot captured
+            without raw document content.
+          </p>
+        </div>
+      </div>
+      <div className={styles.metricRows}>
+        <Metric label="Experiment fingerprint" value={provenance.fingerprint} />
+        <Metric
+          label="Dataset revision"
+          value={identity.dataset.revision_fingerprint}
+        />
+        <Metric
+          label="Documents"
+          value={[
+            String(identity.corpus.document_count),
+            identity.corpus.document_set_fingerprint,
+          ].join(" · ")}
+        />
+        <Metric
+          label="Chunks"
+          value={[
+            String(identity.chunk_set.chunk_count),
+            identity.chunk_set.fingerprint,
+          ].join(" · ")}
+        />
+      </div>
+      <details className={styles.details}>
+        <summary>Show provenance configuration</summary>
+        <div className={styles.metricRows}>
+          <Metric
+            label="Chunking fingerprint"
+            value={identity.chunking.fingerprint}
+          />
+          <Metric
+            label="Embedding"
+            value={[
+              [identity.embedding.provider, identity.embedding.model_name].join(
+                "/",
+              ),
+              [String(identity.embedding.dimension), "dimensions"].join(" "),
+            ].join(" · ")}
+          />
+          <Metric
+            label="Embedding index"
+            value={identity.embedding.index_fingerprint}
+          />
+          <Metric
+            label="Index coverage"
+            value={[
+              [String(identity.embedding.indexed_chunk_count), "indexed"].join(
+                " ",
+              ),
+              [String(identity.embedding.missing_chunk_count), "missing"].join(
+                " ",
+              ),
+              [String(identity.embedding.stale_chunk_count), "stale"].join(" "),
+            ].join(" · ")}
+          />
+          <Metric
+            label="Retrieval"
+            value={[
+              identity.retrieval.modes.join(", "),
+              ["top_k", String(identity.retrieval.top_k)].join(" "),
+            ].join(" · ")}
+          />
+          <Metric
+            label="Build"
+            value={[
+              informational.application_version,
+              informational.runtime_environment ?? "unknown",
+              informational.storage_backend ?? "unknown",
+            ].join(" · ")}
+          />
+          {informational.branch || informational.commit_sha ? (
+            <Metric
+              label="CI"
+              value={[
+                informational.branch ?? "unknown branch",
+                informational.commit_sha ?? "unknown commit",
+              ].join(" · ")}
+            />
+          ) : null}
+        </div>
+      </details>
     </section>
   );
 }

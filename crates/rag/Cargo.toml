@@ -13,10 +13,9 @@ html2text.workspace = true
 mime_guess.workspace = true
 pdf-extract.workspace = true
 rag-debugger-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 time.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true

@@ -218,6 +218,40 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     assert_eq!(ci_run["branch"], "feature/evals");
     assert!(ci_run["eval_regression"]["baseline_experiment_id"].is_null());
     assert_eq!(ci_run["eval_regression"]["classification"], "unchanged");
+    assert_eq!(
+        ci_run["report"]["experiment"]["provenance"]["informational"]["branch"],
+        "feature/evals"
+    );
+    assert_eq!(
+        ci_run["report"]["experiment"]["provenance"]["informational"]["commit_sha"],
+        "abc123"
+    );
+
+    let compatible_run = post_json_with_bearer(
+        &app,
+        "/api/v1/eval-lab/ci/runs",
+        json!({
+            "dataset_id": dataset_id,
+            "branch": "feature/evals",
+            "commit_sha": "abc124",
+            "base_ref": "main",
+            "head_ref": "feature/evals",
+            "modes": ["lexical"],
+            "config_label": "default",
+            "fail_on_gate": true
+        }),
+        secret,
+        StatusCode::CREATED,
+    )
+    .await;
+    assert_eq!(
+        compatible_run["eval_regression"]["baseline_experiment_id"],
+        ci_run["report"]["experiment"]["id"]
+    );
+    assert_eq!(
+        compatible_run["eval_regression"]["compatibility"]["classification"],
+        "compatible"
+    );
 
     request_json_with_cookie(
         &app,
@@ -247,15 +281,13 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     .await;
     assert_eq!(failed_run["status"], "failed");
     assert_eq!(failed_run["gate_status"], "failed");
-    assert_eq!(failed_run["eval_regression"]["classification"], "regressed");
+    assert_eq!(failed_run["eval_regression"]["classification"], "unchanged");
+    assert!(failed_run["eval_regression"]["baseline_experiment_id"].is_null());
     assert_eq!(
-        failed_run["eval_regression"]["newly_failed_cases"]
-            .as_array()
-            .expect("newly failed cases")
-            .len(),
-        1
+        failed_run["eval_regression"]["compatibility"]["classification"],
+        "legacy_unknown"
     );
-    assert_eq!(failed_run["regression"]["newly_failed_case_count"], 1);
+    assert!(failed_run["regression"].is_null());
     assert!(!failed_run["report"]["failed_cases"]
         .as_array()
         .expect("failed cases")
@@ -280,7 +312,11 @@ async fn api_keys_authorize_ci_eval_runs_and_can_be_revoked() {
     )
     .await;
     assert_eq!(report["privacy_mode"], "metadata_only");
-    assert_eq!(report["context"]["regression_classification"], "regressed");
+    assert_eq!(report["context"]["regression_classification"], "unchanged");
+    assert_eq!(
+        report["context"]["baseline_compatibility"],
+        "legacy_unknown"
+    );
     assert_eq!(report["context"]["recovered_cases"], "0");
     assert!(!report.to_string().contains("qxzv blorp"));
 

@@ -9,7 +9,7 @@ RAG systems regress quietly. A chunking change, embedding refresh, scoring tweak
 - Run expected-evidence questions on every branch.
 - Compare lexical, vector, and hybrid behavior.
 - Record recall, precision, MRR, citation coverage, and latency.
-- Detect newly failing cases when the latest run for the same dataset/config label also has the same top-k and retrieval-mode set; otherwise record that no comparable baseline exists.
+- Detect newly failing cases only when the latest earlier run for the same dataset/config label has identical identity-defining provenance; otherwise record that no compatible baseline exists.
 - Preserve an export-ready report for engineering review.
 
 ## Setup
@@ -30,6 +30,8 @@ The Actions runner must be able to reach the CorpusLab API. Set `CORPUSLAB_API_U
 The example does not check out, execute, deploy, or otherwise evaluate the pull request's modified RAG application code. It requests an evaluation from the existing CorpusLab instance at `CORPUSLAB_API_URL`, using the configured Eval Lab dataset and that instance's current corpus, index, and retrieval configuration.
 
 Branch, commit SHA, base/head refs, and configuration label are recorded as run metadata. The configuration label groups comparable runs; it does not apply a retrieval configuration by itself. If multiple pull requests target the same unchanged CorpusLab instance and dataset configuration, they may evaluate the same underlying system state.
+
+Each CI-created experiment also captures a versioned immutable identity snapshot of the dataset revision, corpus/document checksums, chunking, chunks, embedding configuration/index, retrieval modes, `top_k`, scoring/filters, and runtime flags. CI and build values are informational and do not make otherwise identical retrieval inputs incompatible. Raw documents, queries, paths, chunk text, vectors, credentials, and response bodies are never copied into provenance.
 
 To evaluate candidate-specific behavior, connect the workflow to a candidate-specific CorpusLab deployment, corpus/index, or retrieval configuration, then set `CORPUSLAB_API_URL`, `CORPUSLAB_DATASET_ID`, and `CORPUSLAB_CONFIG_LABEL` to identify that target.
 
@@ -63,6 +65,7 @@ If `modes` is empty, CorpusLab runs `hybrid`, `vector`, and `lexical`. If `top_k
 ## Response Behavior
 
 - `201 Created`: run saved and either the gate passed or `fail_on_gate=false`.
+- `400 Bad Request`: the dataset exceeds the shared 250-case experiment execution limit.
 - `422 Unprocessable Entity`: run saved, but the gate failed and `fail_on_gate=true`.
 - `401 Unauthorized`: missing, invalid, or revoked API key.
 - `403 Forbidden`: API key does not include the `ci_eval_runs` scope.
@@ -72,7 +75,7 @@ The response includes:
 - linked Eval Lab experiment
 - gate status
 - branch and commit metadata
-- complete Eval Lab v2 regression details, including newly failed, recovered, changed-top-evidence, and changed-failure-label cases, when the latest dataset/config run has matching top-k and modes; otherwise a no-baseline comparison
+- complete Eval Lab v2 regression and compatibility details, including machine-readable changed fields and newly failed, recovered, changed-top-evidence, and changed-failure-label cases, when a fully compatible baseline exists; otherwise a no-baseline comparison
 - report JSON
 
 The example writes only gate status, aggregate recall, failed-case count, opaque run/experiment IDs, and the configured label to logs and the Actions job summary. It deliberately never prints the response body because it may contain case queries and report content.
@@ -87,6 +90,8 @@ CI run history appears in:
 - `/app/reports` as failed-gate report candidates with native CI audit-report creation.
 
 Creating a report from a failed CI gate preserves the CI run source, branch, commit, configuration label, regression deltas, newly failed cases, and gate outcome. The action defaults to `metadata_only` and opens the generated report directly after creation.
+
+CI baseline selection is strict: corpus, dataset, chunking, chunk-set, embedding index, ranking, scoring, filter, or runtime-flag changes exclude the run from automatic regression comparison. Use Experiment Detail's explicit baseline selector when a deliberate cross-configuration directional comparison is useful; CI does not silently promote that comparison to a normal regression.
 
 ## Gate Rule
 

@@ -2,6 +2,7 @@ pub mod auth;
 pub mod config;
 pub(crate) mod demo;
 pub mod error;
+pub(crate) mod eval_experiment;
 pub mod http;
 pub(crate) mod ingestion;
 pub mod state;

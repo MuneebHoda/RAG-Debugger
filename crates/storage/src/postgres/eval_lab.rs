@@ -4,9 +4,41 @@ use time::OffsetDateTime;
 use uuid::Uuid;
 
 use super::{codec::*, PostgresStore};
-use crate::{repository::SubmittedExpectedEvidence, StorageError};
+use crate::{
+    repository::{RetrievalEvalCorpusSnapshot, SubmittedExpectedEvidence},
+    StorageError,
+};
 
 impl PostgresStore {
+    pub(super) async fn retrieval_eval_corpus_snapshot(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<RetrievalEvalCorpusSnapshot, StorageError> {
+        let mut transaction = self.pool.begin().await?;
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            .execute(&mut *transaction)
+            .await?;
+        let sources = self.list_sources_on(&mut transaction, workspace_id).await?;
+        let candidates = self
+            .list_searchable_chunks_on(
+                &mut transaction,
+                workspace_id,
+                &RetrievalQueryRequest {
+                    query: String::new(),
+                    top_k: 1,
+                    retrieval_mode: RetrievalMode::Hybrid,
+                    source_ids: Vec::new(),
+                    document_ids: Vec::new(),
+                },
+            )
+            .await?;
+        transaction.commit().await?;
+        Ok(RetrievalEvalCorpusSnapshot {
+            sources,
+            candidates,
+        })
+    }
+
     pub(super) async fn create_retrieval_eval_case(
         &self,
         workspace_id: WorkspaceId,
@@ -583,6 +615,29 @@ impl PostgresStore {
         workspace_id: WorkspaceId,
         experiment: RetrievalEvalExperiment,
     ) -> Result<RetrievalEvalExperiment, StorageError> {
+        if let Some(provenance) = &experiment.provenance {
+            if provenance.identity.workspace_id != workspace_id
+                || provenance.identity.dataset.dataset_id != experiment.dataset_id
+            {
+                return Err(StorageError::NotFound);
+            }
+            let project_ids = provenance
+                .identity
+                .project_ids
+                .iter()
+                .map(|project_id| project_id.0)
+                .collect::<Vec<_>>();
+            let owned_project_count = sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM projects WHERE workspace_id = $1 AND id = ANY($2)",
+            )
+            .bind(workspace_id.0)
+            .bind(&project_ids)
+            .fetch_one(&self.pool)
+            .await?;
+            if owned_project_count != project_ids.len() as i64 {
+                return Err(StorageError::NotFound);
+            }
+        }
         let best_mode = experiment.comparison.best_mode.map(retrieval_mode_to_str);
         let best_result = experiment.mode_results.iter().max_by(|left, right| {
             left.average_recall_at_k
@@ -595,7 +650,7 @@ impl PostgresStore {
             .map(|mode| retrieval_mode_to_str(*mode).to_owned())
             .collect::<Vec<_>>();
 
-        sqlx::query(
+        let result = sqlx::query(
             "INSERT INTO retrieval_eval_experiments (
                 id, dataset_id, name, modes, top_k, best_mode, gate_status,
                 average_recall_at_k, average_precision_at_k, failure_count,
@@ -622,11 +677,22 @@ impl PostgresStore {
         .bind(experiment.created_at)
         .bind(workspace_id.0)
         .execute(&self.pool)
-        .await?
-        .rows_affected()
-        .eq(&1)
-        .then_some(())
-        .ok_or(StorageError::NotFound)?;
+        .await
+        .map_err(|error| {
+            if error
+                .as_database_error()
+                .is_some_and(|database_error| database_error.code().as_deref() == Some("23505"))
+            {
+                StorageError::Conflict("retrieval eval experiment id".to_owned())
+            } else {
+                StorageError::Sqlx(error)
+            }
+        })?;
+        result
+            .rows_affected()
+            .eq(&1)
+            .then_some(())
+            .ok_or(StorageError::NotFound)?;
 
         sqlx::query("UPDATE retrieval_eval_datasets SET updated_at = $1 WHERE id = $2")
             .bind(experiment.created_at)

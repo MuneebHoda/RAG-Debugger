@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use rag_debugger_core::*;
-use sqlx::types::Json;
+use sqlx::{types::Json, PgConnection};
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -11,6 +11,17 @@ use crate::StorageError;
 impl PostgresStore {
     pub(super) async fn list_searchable_chunks(
         &self,
+        workspace_id: WorkspaceId,
+        request: &RetrievalQueryRequest,
+    ) -> Result<Vec<SearchableChunk>, StorageError> {
+        let mut connection = self.pool.acquire().await?;
+        self.list_searchable_chunks_on(&mut connection, workspace_id, request)
+            .await
+    }
+
+    pub(super) async fn list_searchable_chunks_on(
+        &self,
+        connection: &mut PgConnection,
         workspace_id: WorkspaceId,
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError> {
@@ -61,7 +72,7 @@ impl PostgresStore {
         .bind(source_ids)
         .bind(document_ids.is_empty())
         .bind(document_ids)
-        .fetch_all(&self.pool)
+        .fetch_all(&mut *connection)
         .await?;
 
         rows.iter().map(searchable_chunk_from_row).collect()

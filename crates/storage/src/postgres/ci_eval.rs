@@ -76,22 +76,36 @@ impl PostgresStore {
         ci_eval_run_from_row(&row)
     }
 
-    pub(super) async fn latest_ci_eval_run_for_dataset(
+    pub(super) async fn latest_compatible_ci_eval_run(
         &self,
         workspace_id: WorkspaceId,
-        dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
+        current: &RetrievalEvalExperiment,
     ) -> Result<Option<CiEvalRun>, StorageError> {
+        let Some(provenance) = &current.provenance else {
+            return Ok(None);
+        };
         let row = sqlx::query(
-            "SELECT run_json
-             FROM ci_eval_runs
-             WHERE workspace_id = $1 AND dataset_id = $2 AND config_label = $3
-             ORDER BY created_at DESC
+            "SELECT runs.run_json
+             FROM ci_eval_runs runs
+             INNER JOIN retrieval_eval_experiments experiments
+                ON experiments.id = runs.experiment_id
+             WHERE runs.workspace_id = $1
+               AND runs.dataset_id = $2
+               AND runs.config_label = $3
+               AND experiments.created_at < $4
+               AND (experiments.experiment_json #>> '{provenance,schema_version}')::INTEGER = $5
+               AND experiments.experiment_json #> '{provenance,identity}' = $6
+             ORDER BY experiments.created_at DESC, experiments.id DESC,
+                      runs.created_at DESC, runs.id DESC
              LIMIT 1",
         )
         .bind(workspace_id.0)
-        .bind(dataset_id.0)
+        .bind(current.dataset_id.0)
         .bind(config_label)
+        .bind(current.created_at)
+        .bind(provenance.schema_version as i32)
+        .bind(Json(&provenance.identity))
         .fetch_optional(&self.pool)
         .await?;
         row.map(|row| ci_eval_run_from_row(&row)).transpose()

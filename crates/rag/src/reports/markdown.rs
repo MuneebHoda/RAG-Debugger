@@ -490,6 +490,8 @@ fn is_change_key(key: &str) -> bool {
     key.starts_with("latest_rerun_")
         || key.contains("_delta")
         || key.contains("newly_failed")
+        || key.contains("compatibility")
+        || key == "changed_configuration_fields"
         || key == "best_retrieval_mode"
         || key == "gate_status"
         || key == "ci_gate_status"

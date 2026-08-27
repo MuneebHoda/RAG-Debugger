@@ -119,6 +119,10 @@ fn eval_report_maps_failures_missing_evidence_and_recommendations() {
         .recommendations
         .iter()
         .any(|recommendation| recommendation.code == "expand_corpus_coverage"));
+    assert_eq!(first.context["experiment_fingerprint"], "experiment-v1");
+    assert_eq!(first.context["document_count"], "1");
+    let serialized = serde_json::to_string(&first).expect("serialize eval report");
+    assert!(!serialized.contains("SECRET document checksum"));
 }
 
 #[test]
@@ -133,11 +137,23 @@ fn ci_report_preserves_regression_context() {
     assert_eq!(report.context["ci_head_ref"], "feature/indexing");
     assert_eq!(report.context["ci_newly_failed_case_count"], "1");
     assert_eq!(report.context["regression_classification"], "regressed");
+    assert_eq!(
+        report.context["baseline_compatibility"],
+        "partially_compatible"
+    );
+    assert_eq!(
+        report.context["changed_configuration_fields"],
+        "embedding.index_fingerprint"
+    );
     assert_eq!(report.context["recovered_cases"], "1");
     assert!(report
         .findings
         .iter()
         .any(|finding| finding.code.starts_with("newly_failed_case:")));
+    assert!(report
+        .findings
+        .iter()
+        .any(|finding| finding.code == "baseline_compatibility_warning"));
     assert!(report
         .recommendations
         .iter()
@@ -285,7 +301,7 @@ fn retrieval_response_json() -> Value {
 }
 
 fn experiment_fixture() -> RetrievalEvalExperiment {
-    serde_json::from_value(json!({
+    let mut experiment: RetrievalEvalExperiment = serde_json::from_value(json!({
         "id": "00000000-0000-0000-0000-000000000040",
         "dataset_id": "00000000-0000-0000-0000-000000000041",
         "dataset_name": "Release quality",
@@ -374,7 +390,49 @@ fn experiment_fixture() -> RetrievalEvalExperiment {
         }],
         "created_at": "2026-06-30T08:15:30Z"
     }))
-    .expect("valid experiment fixture")
+    .expect("valid experiment fixture");
+    experiment.provenance =
+        Some(serde_json::from_value(provenance_json()).expect("valid provenance fixture"));
+    experiment
+}
+
+fn provenance_json() -> Value {
+    json!({
+        "schema_version": 1,
+        "fingerprint": "experiment-v1",
+        "identity": {
+            "workspace_id": "00000000-0000-0000-0000-000000000002",
+            "project_ids": ["00000000-0000-0000-0000-000000000003"],
+            "dataset": {"dataset_id": "00000000-0000-0000-0000-000000000041", "revision_fingerprint": "dataset-v1", "case_count": 1},
+            "corpus": {
+                "source_ids": ["00000000-0000-0000-0000-000000000023"],
+                "document_count": 1,
+                "document_set_fingerprint": "documents-v1",
+                "documents": [{
+                    "document_id": "00000000-0000-0000-0000-000000000022",
+                    "source_id": "00000000-0000-0000-0000-000000000023",
+                    "checksum": "SECRET document checksum"
+                }]
+            },
+            "chunking": {"fingerprint": "chunking-v1", "sources": []},
+            "chunk_set": {"fingerprint": "chunks-v1", "chunk_count": 1},
+            "embedding": {"provider": "local", "model_name": "local-hash-v1", "dimension": 384, "index_fingerprint": "index-v1", "indexed_chunk_count": 1, "missing_chunk_count": 0, "stale_chunk_count": 0},
+            "retrieval": {
+                "modes": ["hybrid", "lexical"],
+                "top_k": 5,
+                "scoring": {
+                    "weights": rag_debugger_core::RetrievalWeights::default(),
+                    "min_evidence_score": 0.35,
+                    "min_semantic_similarity": 0.25,
+                    "answer_citation_limit": 3,
+                    "answerability": rag_debugger_core::AnswerabilityConfig::default()
+                },
+                "filters": {"source_ids": [], "document_ids": []},
+                "runtime_flags": {}
+            }
+        },
+        "informational": {"application_version": "test", "deployment_mode": "local", "runtime_environment": "test", "storage_backend": "memory", "labels": {}}
+    })
 }
 
 fn ci_run_fixture() -> CiEvalRun {
@@ -404,6 +462,19 @@ fn ci_run_fixture() -> CiEvalRun {
         "eval_regression": {
             "current_experiment_id": experiment.id,
             "baseline_experiment_id": "00000000-0000-0000-0000-000000000052",
+            "compatibility": {
+                "classification": "partially_compatible",
+                "intentional_cross_configuration": true,
+                "changed_fields": ["embedding.index_fingerprint"],
+                "reasons": [{
+                    "code": "identity_changed",
+                    "field": "embedding.index_fingerprint",
+                    "field_class": "identity_defining",
+                    "privacy_sensitive": true,
+                    "legacy_optional": false,
+                    "message": "The embedding index changed."
+                }]
+            },
             "classification": "regressed",
             "current_gate_status": "failed",
             "baseline_gate_status": "passed",

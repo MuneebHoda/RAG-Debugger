@@ -1,11 +1,14 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use time::OffsetDateTime;
 
 use crate::{
-    chunk::{ChunkId, ChunkQualityFlag},
-    config::RetrievalWeights,
+    auth::WorkspaceId,
+    chunk::{ChunkId, ChunkQualityFlag, ChunkingConfig},
+    config::{AnswerabilityConfig, RetrievalWeights},
     diagnosis::EvidenceDiagnosisSummary,
     embedding::EmbeddingModelInfo,
     model::ModelConfigId,
@@ -189,6 +192,7 @@ pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_DOCUMENTS: usize = 100;
 pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_CHUNKS: usize = 250;
 pub const EVAL_LAB_EVIDENCE_MAX_REQUESTED_IDS: usize = 250;
 pub const EVAL_LAB_EVIDENCE_MIN_TEXT_QUERY_CHARS: usize = 3;
+pub const RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES: usize = 250;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum EvalLabEvidenceSearchQuery {
@@ -275,6 +279,8 @@ pub struct RetrievalEvalExperiment {
     pub modes: Vec<RetrievalMode>,
     pub top_k: u32,
     pub config_snapshot: RetrievalEvalConfigSnapshot,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<RetrievalEvalExperimentProvenance>,
     pub mode_results: Vec<RetrievalEvalModeResult>,
     pub comparison: RetrievalEvalComparison,
     pub gate: RetrievalEvalGate,
@@ -289,6 +295,128 @@ pub struct RetrievalEvalConfigSnapshot {
     pub scoring_weights: RetrievalWeights,
     pub embedding_model: EmbeddingModelInfo,
     pub dataset_case_count: u32,
+}
+
+pub const RETRIEVAL_EVAL_PROVENANCE_SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RetrievalEvalExperimentProvenance {
+    pub schema_version: u32,
+    pub fingerprint: String,
+    pub identity: RetrievalEvalProvenanceIdentity,
+    pub informational: RetrievalEvalProvenanceInformation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RetrievalEvalProvenanceIdentity {
+    pub workspace_id: WorkspaceId,
+    pub project_ids: Vec<ProjectId>,
+    pub dataset: RetrievalEvalDatasetProvenance,
+    pub corpus: RetrievalEvalCorpusProvenance,
+    pub chunking: RetrievalEvalChunkingProvenance,
+    pub chunk_set: RetrievalEvalChunkSetProvenance,
+    pub embedding: RetrievalEvalEmbeddingProvenance,
+    pub retrieval: RetrievalEvalRetrievalProvenance,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalDatasetProvenance {
+    pub dataset_id: RetrievalEvalDatasetId,
+    pub revision_fingerprint: String,
+    pub case_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalCorpusProvenance {
+    pub source_ids: Vec<SourceId>,
+    pub document_count: u32,
+    pub document_set_fingerprint: String,
+    pub documents: Vec<RetrievalEvalDocumentProvenance>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalDocumentProvenance {
+    pub document_id: DocumentId,
+    pub source_id: SourceId,
+    pub checksum: String,
+    #[serde(default)]
+    pub path_fingerprint: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalChunkingProvenance {
+    pub fingerprint: String,
+    pub sources: Vec<RetrievalEvalSourceChunkingProvenance>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalSourceChunkingProvenance {
+    pub source_id: SourceId,
+    pub config: ChunkingConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalChunkSetProvenance {
+    pub fingerprint: String,
+    pub chunk_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RetrievalEvalEmbeddingProvenance {
+    pub provider: String,
+    pub model_name: String,
+    pub dimension: u32,
+    pub index_fingerprint: String,
+    pub indexed_chunk_count: u32,
+    pub missing_chunk_count: u32,
+    pub stale_chunk_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RetrievalEvalRetrievalProvenance {
+    pub modes: Vec<RetrievalMode>,
+    pub top_k: u32,
+    pub scoring: RetrievalEvalScoringProvenance,
+    pub filters: RetrievalEvalFilterProvenance,
+    #[serde(default)]
+    pub runtime_flags: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RetrievalEvalScoringProvenance {
+    pub weights: RetrievalWeights,
+    pub min_evidence_score: f32,
+    pub min_semantic_similarity: f32,
+    pub answer_citation_limit: u32,
+    pub answerability: AnswerabilityConfig,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalFilterProvenance {
+    #[serde(default)]
+    pub source_ids: Vec<SourceId>,
+    #[serde(default)]
+    pub document_ids: Vec<DocumentId>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalProvenanceInformation {
+    pub application_version: String,
+    pub deployment_mode: String,
+    pub runtime_environment: Option<String>,
+    pub storage_backend: Option<String>,
+    pub branch: Option<String>,
+    pub commit_sha: Option<String>,
+    pub base_ref: Option<String>,
+    pub head_ref: Option<String>,
+    #[serde(default)]
+    pub labels: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalProvenanceSummary {
+    pub schema_version: u32,
+    pub fingerprint: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -362,6 +490,8 @@ pub struct RetrievalEvalExperimentSummary {
     pub failure_count: u32,
     #[serde(default)]
     pub contains_full_local_data: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<RetrievalEvalProvenanceSummary>,
     #[serde(with = "crate::wire_time")]
     pub created_at: OffsetDateTime,
 }
@@ -409,6 +539,8 @@ pub struct RetrievalEvalTrendPoint {
 pub struct RetrievalEvalRegressionComparison {
     pub current_experiment_id: RetrievalEvalExperimentId,
     pub baseline_experiment_id: Option<RetrievalEvalExperimentId>,
+    #[serde(default)]
+    pub compatibility: RetrievalEvalCompatibility,
     pub classification: RetrievalEvalRegressionClassification,
     pub current_gate_status: RetrievalEvalGateStatus,
     pub baseline_gate_status: Option<RetrievalEvalGateStatus>,
@@ -418,6 +550,64 @@ pub struct RetrievalEvalRegressionComparison {
     pub changed_top_evidence_cases: Vec<RetrievalEvalCaseRegression>,
     pub changed_failure_label_cases: Vec<RetrievalEvalCaseRegression>,
     pub summary: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalCompatibility {
+    pub classification: RetrievalEvalCompatibilityClassification,
+    #[serde(default)]
+    pub intentional_cross_configuration: bool,
+    #[serde(default)]
+    pub changed_fields: Vec<String>,
+    #[serde(default)]
+    pub reasons: Vec<RetrievalEvalCompatibilityReason>,
+}
+
+impl Default for RetrievalEvalCompatibility {
+    fn default() -> Self {
+        Self {
+            classification: RetrievalEvalCompatibilityClassification::LegacyUnknown,
+            intentional_cross_configuration: false,
+            changed_fields: Vec::new(),
+            reasons: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RetrievalEvalCompatibilityClassification {
+    Compatible,
+    PartiallyCompatible,
+    Incompatible,
+    LegacyUnknown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
+pub struct RetrievalEvalCompatibilityReason {
+    pub code: RetrievalEvalCompatibilityReasonCode,
+    pub field: Option<String>,
+    pub field_class: RetrievalEvalProvenanceFieldClass,
+    pub privacy_sensitive: bool,
+    pub legacy_optional: bool,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RetrievalEvalCompatibilityReasonCode {
+    NoBaseline,
+    MissingProvenance,
+    IdentityChanged,
+    InformationalChanged,
+    ExplicitCrossConfiguration,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Eq, PartialEq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum RetrievalEvalProvenanceFieldClass {
+    IdentityDefining,
+    Informational,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -617,6 +807,7 @@ mod tests {
         let comparison = RetrievalEvalRegressionComparison {
             current_experiment_id: RetrievalEvalExperimentId(Uuid::now_v7()),
             baseline_experiment_id: Some(RetrievalEvalExperimentId(Uuid::now_v7())),
+            compatibility: RetrievalEvalCompatibility::default(),
             classification: RetrievalEvalRegressionClassification::Regressed,
             current_gate_status: RetrievalEvalGateStatus::Failed,
             baseline_gate_status: Some(RetrievalEvalGateStatus::Passed),
@@ -655,6 +846,17 @@ mod tests {
         assert_eq!(
             json["newly_failed_cases"][0]["current_failure_labels"][0],
             "expected_evidence_missing"
+        );
+        let mut legacy_json = json.clone();
+        legacy_json
+            .as_object_mut()
+            .expect("comparison object")
+            .remove("compatibility");
+        let legacy: RetrievalEvalRegressionComparison =
+            serde_json::from_value(legacy_json).expect("legacy comparison deserializes");
+        assert_eq!(
+            legacy.compatibility.classification,
+            RetrievalEvalCompatibilityClassification::LegacyUnknown
         );
 
         let round_trip: RetrievalEvalRegressionComparison =

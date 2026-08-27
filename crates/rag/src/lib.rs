@@ -8,6 +8,7 @@ pub mod extraction;
 pub mod imported_trace;
 pub mod ingestion;
 pub mod intelligence;
+pub mod provenance;
 pub mod reports;
 pub mod retrieval;
 pub mod tracing;

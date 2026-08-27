@@ -22,6 +22,7 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 - **Traces:** sensitive because prompts and retrieved context may contain private data.
 - **Metrics:** usually safe after aggregation, but still project-owned.
 - **Eval datasets:** sensitive when derived from real user questions or internal docs.
+- **Eval experiment provenance:** workspace-owned derived metadata containing opaque IDs, checksums, configuration, counts, and fingerprints; it excludes raw queries, paths, text, sections, and vectors.
 
 ## Engineering Requirements
 
@@ -35,6 +36,7 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 - Any export path must preserve project ownership and deletion semantics.
 - Report sharing must support redaction before it becomes a hosted/team feature.
 - Audit report creation defaults to `metadata_only`; `full_local_only` reports cannot use Markdown export.
+- Experiment provenance is captured locally, validates workspace/project ownership, and never copies raw document/query content. Metadata-only reports expose aggregate provenance only, not per-document checksums.
 
 Changes that move data, add external providers, alter auth/retention/export behavior, or add telemetry must complete the [`Privacy Review Checklist`](privacy-review-checklist.md). Hosted sync and external model-provider boundaries require an ADR.
 

@@ -22,8 +22,9 @@ use uuid::Uuid;
 use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
-        EvalRepository, HealthRepository, ProjectRepository, ReportRepository, RetrievalRepository,
-        SourceRepository, SubmittedExpectedEvidence, TraceRepository,
+        EvalRepository, HealthRepository, ProjectRepository, ReportRepository,
+        RetrievalEvalCorpusSnapshot, RetrievalRepository, SourceRepository,
+        SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
@@ -181,38 +182,7 @@ impl SourceRepository for MemoryStore {
         workspace_id: WorkspaceId,
     ) -> Result<Vec<SourceSummary>, StorageError> {
         let inner = self.lock()?;
-        let mut summaries = Vec::new();
-
-        for source in inner
-            .sources
-            .values()
-            .filter(|source| workspace_owns_source(&inner, workspace_id, source.id))
-        {
-            let documents = inner
-                .documents
-                .values()
-                .filter(|document| document.source_id == source.id)
-                .map(|document| {
-                    let chunk_count = inner
-                        .chunks
-                        .get(&document.id)
-                        .map_or(0, |chunks| chunks.len() as u32);
-                    DocumentSummary {
-                        document: document.clone(),
-                        chunk_count,
-                    }
-                })
-                .collect::<Vec<_>>();
-
-            summaries.push(SourceSummary {
-                source: source.clone(),
-                document_count: documents.len() as u32,
-                chunk_count: documents.iter().map(|document| document.chunk_count).sum(),
-                documents,
-            });
-        }
-
-        Ok(summaries)
+        Ok(source_summaries(&inner, workspace_id))
     }
 }
 
@@ -255,47 +225,7 @@ impl RetrievalRepository for MemoryStore {
         request: &RetrievalQueryRequest,
     ) -> Result<Vec<SearchableChunk>, StorageError> {
         let inner = self.lock()?;
-        let mut candidates = Vec::new();
-
-        for chunks in inner.chunks.values() {
-            for chunk in chunks {
-                if !workspace_owns_source(&inner, workspace_id, chunk.source_id) {
-                    continue;
-                }
-                if !request.source_ids.is_empty() && !request.source_ids.contains(&chunk.source_id)
-                {
-                    continue;
-                }
-
-                if !request.document_ids.is_empty()
-                    && !request.document_ids.contains(&chunk.document_id)
-                {
-                    continue;
-                }
-
-                let Some(document) = inner.documents.get(&chunk.document_id) else {
-                    continue;
-                };
-                let Some(source) = inner.sources.get(&chunk.source_id) else {
-                    continue;
-                };
-
-                candidates.push(SearchableChunk {
-                    source: source.clone(),
-                    document: document.clone(),
-                    chunk: chunk.clone(),
-                    embedding: inner.embeddings.get(&chunk.id).cloned(),
-                });
-            }
-        }
-
-        candidates.sort_by(|left, right| {
-            left.document
-                .path
-                .cmp(&right.document.path)
-                .then_with(|| left.chunk.ordinal.cmp(&right.chunk.ordinal))
-        });
-        Ok(candidates)
+        Ok(searchable_chunks(&inner, workspace_id, request))
     }
 
     async fn save_retrieval_query(
@@ -564,6 +494,27 @@ impl EmbeddingRepository for MemoryStore {
 
 #[async_trait]
 impl EvalRepository for MemoryStore {
+    async fn retrieval_eval_corpus_snapshot(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<RetrievalEvalCorpusSnapshot, StorageError> {
+        let inner = self.lock()?;
+        Ok(RetrievalEvalCorpusSnapshot {
+            sources: source_summaries(&inner, workspace_id),
+            candidates: searchable_chunks(
+                &inner,
+                workspace_id,
+                &RetrievalQueryRequest {
+                    query: String::new(),
+                    top_k: 1,
+                    retrieval_mode: rag_debugger_core::RetrievalMode::Hybrid,
+                    source_ids: Vec::new(),
+                    document_ids: Vec::new(),
+                },
+            ),
+        })
+    }
+
     async fn create_retrieval_eval_case(
         &self,
         workspace_id: WorkspaceId,
@@ -826,6 +777,25 @@ impl EvalRepository for MemoryStore {
         let mut inner = self.lock()?;
         if !dataset_owned_by(&inner, workspace_id, experiment.dataset_id) {
             return Err(StorageError::NotFound);
+        }
+        if experiment.provenance.as_ref().is_some_and(|provenance| {
+            provenance.identity.workspace_id != workspace_id
+                || provenance.identity.dataset.dataset_id != experiment.dataset_id
+                || provenance
+                    .identity
+                    .project_ids
+                    .iter()
+                    .any(|project_id| !workspace_owns_project(&inner, workspace_id, *project_id))
+        }) {
+            return Err(StorageError::NotFound);
+        }
+        if inner
+            .retrieval_eval_experiments
+            .contains_key(&experiment.id)
+        {
+            return Err(StorageError::Conflict(
+                "retrieval eval experiment id".to_owned(),
+            ));
         }
         inner
             .retrieval_eval_experiments
@@ -1098,22 +1068,43 @@ impl CiEvalRepository for MemoryStore {
             .ok_or(StorageError::NotFound)
     }
 
-    async fn latest_ci_eval_run_for_dataset(
+    async fn latest_compatible_ci_eval_run(
         &self,
         workspace_id: WorkspaceId,
-        dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
+        current: &RetrievalEvalExperiment,
     ) -> Result<Option<CiEvalRun>, StorageError> {
+        let Some(current_provenance) = &current.provenance else {
+            return Ok(None);
+        };
         let inner = self.lock()?;
         Ok(inner
             .ci_eval_runs
             .values()
             .filter(|run| {
                 run.workspace_id == workspace_id
-                    && run.dataset_id == dataset_id
+                    && run.dataset_id == current.dataset_id
                     && run.config_label == config_label
+                    && run.report.experiment.created_at < current.created_at
+                    && run
+                        .report
+                        .experiment
+                        .provenance
+                        .as_ref()
+                        .is_some_and(|provenance| {
+                            provenance.schema_version == current_provenance.schema_version
+                                && provenance.identity == current_provenance.identity
+                        })
             })
-            .max_by_key(|run| run.created_at)
+            .max_by(|left, right| {
+                left.report
+                    .experiment
+                    .created_at
+                    .cmp(&right.report.experiment.created_at)
+                    .then_with(|| left.experiment_id.0.cmp(&right.experiment_id.0))
+                    .then_with(|| left.created_at.cmp(&right.created_at))
+                    .then_with(|| left.id.0.cmp(&right.id.0))
+            })
             .cloned())
     }
 }
@@ -1263,6 +1254,68 @@ impl DemoRepository for MemoryStore {
             .max_by_key(|trace| trace.started_at)
             .cloned())
     }
+}
+
+fn source_summaries(inner: &MemoryStoreInner, workspace_id: WorkspaceId) -> Vec<SourceSummary> {
+    inner
+        .sources
+        .values()
+        .filter(|source| workspace_owns_source(inner, workspace_id, source.id))
+        .map(|source| {
+            let documents = inner
+                .documents
+                .values()
+                .filter(|document| document.source_id == source.id)
+                .map(|document| DocumentSummary {
+                    document: document.clone(),
+                    chunk_count: inner
+                        .chunks
+                        .get(&document.id)
+                        .map_or(0, |chunks| chunks.len() as u32),
+                })
+                .collect::<Vec<_>>();
+            SourceSummary {
+                source: source.clone(),
+                document_count: documents.len() as u32,
+                chunk_count: documents.iter().map(|document| document.chunk_count).sum(),
+                documents,
+            }
+        })
+        .collect()
+}
+
+fn searchable_chunks(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    request: &RetrievalQueryRequest,
+) -> Vec<SearchableChunk> {
+    let mut candidates = inner
+        .chunks
+        .values()
+        .flatten()
+        .filter(|chunk| workspace_owns_source(inner, workspace_id, chunk.source_id))
+        .filter(|chunk| {
+            request.source_ids.is_empty() || request.source_ids.contains(&chunk.source_id)
+        })
+        .filter(|chunk| {
+            request.document_ids.is_empty() || request.document_ids.contains(&chunk.document_id)
+        })
+        .filter_map(|chunk| {
+            Some(SearchableChunk {
+                source: inner.sources.get(&chunk.source_id)?.clone(),
+                document: inner.documents.get(&chunk.document_id)?.clone(),
+                chunk: chunk.clone(),
+                embedding: inner.embeddings.get(&chunk.id).cloned(),
+            })
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| {
+        left.document
+            .path
+            .cmp(&right.document.path)
+            .then_with(|| left.chunk.ordinal.cmp(&right.chunk.ordinal))
+    });
+    candidates
 }
 
 impl MemoryStore {

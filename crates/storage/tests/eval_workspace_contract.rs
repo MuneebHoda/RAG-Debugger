@@ -1,23 +1,26 @@
 use rag_debugger_core::{
-    ApiKey, ApiKeyId, ApiKeyRecord, ApiKeyScope, CiEvalReport, CiEvalRun, CiEvalRunId,
-    CiEvalRunStatus, EmbeddingModelInfo, Organization, OrganizationId, RetrievalEvalCase,
+    ApiKey, ApiKeyId, ApiKeyRecord, ApiKeyScope, ByteRange, Chunk, ChunkEmbedding, ChunkId,
+    ChunkQualityFlag, ChunkSplitReason, ChunkingConfig, ChunkingStrategy, CiEvalReport, CiEvalRun,
+    CiEvalRunId, CiEvalRunStatus, Document, DocumentId, DocumentProfile, EmbeddingModelInfo,
+    ExtractionQuality, Organization, OrganizationId, ProjectId, RetrievalEvalCase,
     RetrievalEvalCaseId, RetrievalEvalCaseProvenance, RetrievalEvalComparison,
     RetrievalEvalConfigSnapshot, RetrievalEvalDataset, RetrievalEvalDatasetId,
-    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalGate, RetrievalEvalGateStatus,
-    RetrievalEvalRun, RetrievalEvalRunId, RetrievalMode, RetrievalWeights, Trace, TraceId,
-    TraceIngestionMetadata, TraceIngestionPrivacyMode, TraceIngestionSource, TraceMappingStatus,
-    TraceStatus, User, UserId, Workspace, WorkspaceId, WorkspaceRole,
+    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalExperimentProvenance,
+    RetrievalEvalGate, RetrievalEvalGateStatus, RetrievalEvalRun, RetrievalEvalRunId,
+    RetrievalMode, RetrievalWeights, Source, SourceId, SourceKind, SourceSyncPolicy, Trace,
+    TraceId, TraceIngestionMetadata, TraceIngestionPrivacyMode, TraceIngestionSource,
+    TraceMappingStatus, TraceStatus, User, UserId, Workspace, WorkspaceId, WorkspaceRole,
 };
 use rag_debugger_storage::{
     memory::MemoryStore,
     postgres::PostgresStore,
     repository::{
-        AuthRepository, CiEvalRepository, EvalRepository, ProjectRepository,
-        SubmittedExpectedEvidence, TraceRepository,
+        AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
+        ProjectRepository, SourceRepository, SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -33,6 +36,21 @@ async fn postgres_eval_repository_enforces_workspace_ownership() {
         .await
         .expect("connect Postgres store");
     run_eval_workspace_contract(&store).await;
+}
+
+#[tokio::test]
+async fn memory_ci_baseline_lookup_reaches_past_one_hundred_incompatible_runs() {
+    run_ci_baseline_history_contract(&MemoryStore::default()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a migrated Postgres database"]
+async fn postgres_ci_baseline_lookup_reaches_past_one_hundred_incompatible_runs() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    let store = PostgresStore::connect(&database_url)
+        .await
+        .expect("connect Postgres store");
+    run_ci_baseline_history_contract(&store).await;
 }
 
 #[tokio::test]
@@ -118,6 +136,162 @@ async fn postgres_eval_provenance_lock_blocks_concurrent_trace_mutation() {
         .expect("update source trace after validation");
 }
 
+#[tokio::test]
+#[ignore = "requires a migrated Postgres database"]
+async fn postgres_eval_corpus_snapshot_stays_consistent_across_concurrent_mutation() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    let store = PostgresStore::connect(&database_url)
+        .await
+        .expect("connect Postgres store");
+    let workspace_id = create_workspace(&store, "eval-snapshot").await;
+    let project = store
+        .ensure_default_project(workspace_id)
+        .await
+        .expect("default project");
+    let source = Source {
+        id: SourceId(Uuid::now_v7()),
+        project_id: project.id,
+        name: "Snapshot source".to_owned(),
+        kind: SourceKind::FileSet {
+            root_hint: "snapshot".to_owned(),
+        },
+        sync_policy: SourceSyncPolicy::Manual,
+        chunking: ChunkingConfig::default(),
+    };
+    store
+        .create_source(workspace_id, source.clone())
+        .await
+        .expect("create source");
+    let document = Document {
+        id: DocumentId(Uuid::now_v7()),
+        source_id: source.id,
+        path: "snapshot.md".to_owned(),
+        mime_type: Some("text/markdown".to_owned()),
+        checksum: "document-before".to_owned(),
+        byte_size: 16,
+        profile: DocumentProfile::TechnicalDocs,
+        extraction_quality: ExtractionQuality::High,
+        warnings: Vec::new(),
+    };
+    let chunk = Chunk {
+        id: ChunkId(Uuid::now_v7()),
+        source_id: source.id,
+        document_id: document.id,
+        ordinal: 0,
+        text: "snapshot evidence".to_owned(),
+        token_count: 2,
+        byte_range: ByteRange { start: 0, end: 16 },
+        checksum: "chunk-before".to_owned(),
+        strategy: ChunkingStrategy::Structured,
+        section_title: None,
+        split_reason: ChunkSplitReason::DocumentEnd,
+        quality_flags: vec![ChunkQualityFlag::GoodEvidenceCandidate],
+        is_duplicate: false,
+        text_density: 1.0,
+        evidence_score_hint: 1.0,
+    };
+    store
+        .insert_document_with_chunks(workspace_id, document.clone(), vec![chunk.clone()])
+        .await
+        .expect("insert document and chunk");
+    let model = EmbeddingModelInfo::default();
+    store
+        .upsert_chunk_embeddings(
+            workspace_id,
+            vec![ChunkEmbedding {
+                chunk_id: chunk.id,
+                chunk_checksum: chunk.checksum.clone(),
+                model: model.clone(),
+                vector: vec![0.0; model.dimension as usize],
+                indexed_at: OffsetDateTime::now_utc(),
+            }],
+        )
+        .await
+        .expect("insert embedding");
+
+    let mut blocker = store.pool().begin().await.expect("blocking transaction");
+    sqlx::query("LOCK TABLE chunk_embeddings IN ACCESS EXCLUSIVE MODE")
+        .execute(&mut *blocker)
+        .await
+        .expect("block snapshot candidate phase");
+    let snapshot_store = store.clone();
+    let snapshot = tokio::spawn(async move {
+        snapshot_store
+            .retrieval_eval_corpus_snapshot(workspace_id)
+            .await
+    });
+    let mut candidate_phase_blocked = false;
+    for _ in 0..500 {
+        candidate_phase_blocked = sqlx::query_scalar::<_, bool>(
+            "SELECT EXISTS (
+                 SELECT 1
+                 FROM pg_locks held
+                 INNER JOIN pg_class relation ON relation.oid = held.relation
+                 WHERE relation.relname = 'chunk_embeddings'
+                   AND NOT held.granted
+             )",
+        )
+        .fetch_one(store.pool())
+        .await
+        .expect("inspect blocked snapshot query");
+        if candidate_phase_blocked {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert!(candidate_phase_blocked, "candidate phase must be blocked");
+
+    sqlx::query("UPDATE sources SET target_tokens = target_tokens + 1 WHERE id = $1")
+        .bind(source.id.0)
+        .execute(store.pool())
+        .await
+        .expect("mutate source");
+    sqlx::query("UPDATE documents SET checksum = 'document-after' WHERE id = $1")
+        .bind(document.id.0)
+        .execute(store.pool())
+        .await
+        .expect("mutate document");
+    sqlx::query("UPDATE chunks SET checksum = 'chunk-after' WHERE id = $1")
+        .bind(chunk.id.0)
+        .execute(store.pool())
+        .await
+        .expect("mutate chunk");
+    sqlx::query("UPDATE chunk_embeddings SET vector[1] = 1.0 WHERE chunk_id = $1")
+        .bind(chunk.id.0)
+        .execute(&mut *blocker)
+        .await
+        .expect("mutate embedding");
+    blocker.commit().await.expect("release candidate phase");
+
+    let snapshot = snapshot
+        .await
+        .expect("join snapshot")
+        .expect("capture snapshot");
+    assert_eq!(snapshot.sources[0].source.chunking, source.chunking);
+    assert_eq!(
+        snapshot.sources[0].documents[0].document.checksum,
+        "document-before"
+    );
+    assert_eq!(snapshot.candidates[0].document.checksum, "document-before");
+    assert_eq!(snapshot.candidates[0].chunk.checksum, "chunk-before");
+    assert_eq!(
+        snapshot.candidates[0].embedding.as_ref().unwrap().vector[0],
+        0.0
+    );
+
+    let fresh = store
+        .retrieval_eval_corpus_snapshot(workspace_id)
+        .await
+        .expect("capture post-mutation snapshot");
+    assert_ne!(fresh.sources[0].source.chunking, source.chunking);
+    assert_eq!(fresh.candidates[0].document.checksum, "document-after");
+    assert_eq!(fresh.candidates[0].chunk.checksum, "chunk-after");
+    assert_eq!(
+        fresh.candidates[0].embedding.as_ref().unwrap().vector[0],
+        1.0
+    );
+}
+
 async fn run_eval_workspace_contract<R>(repository: &R)
 where
     R: AuthRepository + CiEvalRepository + EvalRepository + ProjectRepository + TraceRepository,
@@ -139,6 +313,10 @@ where
         .ensure_default_project(workspace_a)
         .await
         .expect("alpha project");
+    let project_b = repository
+        .ensure_default_project(workspace_b)
+        .await
+        .expect("beta project");
     let imported_trace = full_local_trace(project_a.id);
     repository
         .upsert_imported_trace(workspace_a, imported_trace.clone())
@@ -229,11 +407,42 @@ where
         Err(StorageError::NotFound)
     ));
 
-    let experiment_b = experiment(dataset_b.id, &dataset_b.name);
+    let mut experiment_b = experiment(dataset_b.id, &dataset_b.name);
+    experiment_b.provenance = Some(experiment_provenance(
+        workspace_b,
+        project_b.id,
+        dataset_b.id,
+    ));
     repository
         .save_retrieval_eval_experiment(workspace_b, experiment_b.clone())
         .await
         .expect("save beta experiment");
+    assert_eq!(
+        repository
+            .get_retrieval_eval_experiment(workspace_b, experiment_b.id)
+            .await
+            .expect("read beta experiment provenance")
+            .provenance,
+        experiment_b.provenance
+    );
+    assert!(matches!(
+        repository
+            .save_retrieval_eval_experiment(workspace_b, experiment_b.clone())
+            .await,
+        Err(StorageError::Conflict(_))
+    ));
+    let mut forged_experiment = experiment(dataset_b.id, &dataset_b.name);
+    forged_experiment.provenance = Some(experiment_provenance(
+        workspace_b,
+        project_a.id,
+        dataset_b.id,
+    ));
+    assert!(matches!(
+        repository
+            .save_retrieval_eval_experiment(workspace_b, forged_experiment)
+            .await,
+        Err(StorageError::NotFound)
+    ));
     assert!(matches!(
         repository
             .get_retrieval_eval_experiment(workspace_a, experiment_b.id)
@@ -268,7 +477,7 @@ where
         .expect("list alpha CI runs")
         .is_empty());
     assert!(repository
-        .latest_ci_eval_run_for_dataset(workspace_a, dataset_b.id, &ci_run_b.config_label)
+        .latest_compatible_ci_eval_run(workspace_a, &ci_run_b.config_label, &experiment_b)
         .await
         .expect("read alpha CI baseline")
         .is_none());
@@ -352,6 +561,72 @@ where
             .id,
         case_a.id
     );
+}
+
+async fn run_ci_baseline_history_contract<R>(repository: &R)
+where
+    R: AuthRepository + CiEvalRepository + EvalRepository + ProjectRepository,
+{
+    let workspace_id = create_workspace(repository, "ci-baseline-history").await;
+    let dataset = dataset("CI baseline history");
+    repository
+        .create_retrieval_eval_dataset(workspace_id, dataset.clone())
+        .await
+        .expect("create CI baseline dataset");
+    let project = repository
+        .ensure_default_project(workspace_id)
+        .await
+        .expect("create CI baseline project");
+    let now = OffsetDateTime::now_utc();
+
+    let mut baseline = experiment(dataset.id, &dataset.name);
+    baseline.provenance = Some(experiment_provenance(workspace_id, project.id, dataset.id));
+    baseline.created_at = now - Duration::hours(3);
+    repository
+        .save_retrieval_eval_experiment(workspace_id, baseline.clone())
+        .await
+        .expect("save compatible baseline experiment");
+    let mut baseline_run = ci_run(workspace_id, &dataset, &baseline);
+    baseline_run.created_at = baseline.created_at + Duration::minutes(1);
+    repository
+        .save_ci_eval_run(baseline_run.clone())
+        .await
+        .expect("save compatible baseline run");
+
+    let mut incompatible = experiment(dataset.id, &dataset.name);
+    incompatible.provenance = baseline.provenance.clone();
+    incompatible.top_k = 1;
+    incompatible.config_snapshot.top_k = 1;
+    incompatible
+        .provenance
+        .as_mut()
+        .expect("incompatible provenance")
+        .identity
+        .retrieval
+        .top_k = 1;
+    incompatible.created_at = now - Duration::hours(2);
+    repository
+        .save_retrieval_eval_experiment(workspace_id, incompatible.clone())
+        .await
+        .expect("save incompatible experiment");
+    for index in 0..101 {
+        let mut run = ci_run(workspace_id, &dataset, &incompatible);
+        run.created_at = now - Duration::hours(1) + Duration::seconds(index);
+        repository
+            .save_ci_eval_run(run)
+            .await
+            .expect("save newer incompatible run");
+    }
+
+    let mut current = experiment(dataset.id, &dataset.name);
+    current.provenance = baseline.provenance.clone();
+    current.created_at = now;
+    let selected = repository
+        .latest_compatible_ci_eval_run(workspace_id, &baseline_run.config_label, &current)
+        .await
+        .expect("select compatible baseline")
+        .expect("older compatible baseline");
+    assert_eq!(selected.id, baseline_run.id);
 }
 
 async fn create_workspace<R>(repository: &R, label: &str) -> WorkspaceId
@@ -478,6 +753,7 @@ fn experiment(dataset_id: RetrievalEvalDatasetId, dataset_name: &str) -> Retriev
             embedding_model: EmbeddingModelInfo::default(),
             dataset_case_count: 1,
         },
+        provenance: None,
         mode_results: Vec::new(),
         comparison: RetrievalEvalComparison {
             best_mode: None,
@@ -499,6 +775,40 @@ fn experiment(dataset_id: RetrievalEvalDatasetId, dataset_name: &str) -> Retriev
         failures: Vec::new(),
         created_at: OffsetDateTime::now_utc(),
     }
+}
+
+fn experiment_provenance(
+    workspace_id: WorkspaceId,
+    project_id: ProjectId,
+    dataset_id: RetrievalEvalDatasetId,
+) -> RetrievalEvalExperimentProvenance {
+    serde_json::from_value(serde_json::json!({
+        "schema_version": 1,
+        "fingerprint": "storage-contract",
+        "identity": {
+            "workspace_id": workspace_id,
+            "project_ids": [project_id],
+            "dataset": {"dataset_id": dataset_id, "revision_fingerprint": "dataset", "case_count": 1},
+            "corpus": {"source_ids": [], "document_count": 0, "document_set_fingerprint": "documents", "documents": []},
+            "chunking": {"fingerprint": "chunking", "sources": []},
+            "chunk_set": {"fingerprint": "chunks", "chunk_count": 0},
+            "embedding": {"provider": "local", "model_name": "local-hash-v1", "dimension": 384, "index_fingerprint": "index", "indexed_chunk_count": 0, "missing_chunk_count": 0, "stale_chunk_count": 0},
+            "retrieval": {
+                "modes": ["lexical"], "top_k": 5,
+                "scoring": {
+                    "weights": RetrievalWeights::default(),
+                    "min_evidence_score": 0.35,
+                    "min_semantic_similarity": 0.25,
+                    "answer_citation_limit": 3,
+                    "answerability": rag_debugger_core::AnswerabilityConfig::default()
+                },
+                "filters": {"source_ids": [], "document_ids": []},
+                "runtime_flags": {}
+            }
+        },
+        "informational": {"application_version": "test", "deployment_mode": "local", "runtime_environment": "test", "storage_backend": "memory", "labels": {}}
+    }))
+    .expect("valid experiment provenance fixture")
 }
 
 fn ci_run(

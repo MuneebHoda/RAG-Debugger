@@ -308,6 +308,13 @@ impl EmbeddingRepository for PostgresStore {
 
 #[async_trait]
 impl EvalRepository for PostgresStore {
+    async fn retrieval_eval_corpus_snapshot(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<crate::repository::RetrievalEvalCorpusSnapshot, StorageError> {
+        PostgresStore::retrieval_eval_corpus_snapshot(self, workspace_id).await
+    }
+
     async fn create_retrieval_eval_case(
         &self,
         workspace_id: WorkspaceId,
@@ -562,13 +569,13 @@ impl CiEvalRepository for PostgresStore {
         PostgresStore::get_ci_eval_run(self, workspace_id, id).await
     }
 
-    async fn latest_ci_eval_run_for_dataset(
+    async fn latest_compatible_ci_eval_run(
         &self,
         workspace_id: WorkspaceId,
-        dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
+        current: &RetrievalEvalExperiment,
     ) -> Result<Option<CiEvalRun>, StorageError> {
-        PostgresStore::latest_ci_eval_run_for_dataset(self, workspace_id, dataset_id, config_label)
+        PostgresStore::latest_compatible_ci_eval_run(self, workspace_id, config_label, current)
             .await
     }
 }

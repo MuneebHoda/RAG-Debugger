@@ -279,7 +279,7 @@ export function BaselineSelector({
     : null;
   const hasInvalidSelectedBaseline = Boolean(
     selectedBaselineId &&
-    (!selectedCandidate || selectedCompatibility?.level === "incompatible"),
+    (!selectedCandidate || selectedCompatibility?.level === "unavailable"),
   );
   const selectValue = hasInvalidSelectedBaseline
     ? "auto"
@@ -319,7 +319,7 @@ export function BaselineSelector({
               );
               return (
                 <option
-                  disabled={compatibility.level === "incompatible"}
+                  disabled={compatibility.level === "unavailable"}
                   key={candidate.id}
                   value={candidate.id}
                 >
@@ -342,7 +342,7 @@ export function BaselineSelector({
           <span>
             {selectedCompatibility?.reason ??
               (automaticBaseline
-                ? "Using the latest earlier experiment with the same top_k and retrieval modes."
+                ? "Using the latest earlier experiment with identical identity-defining provenance."
                 : "Run another compatible experiment to enable regression comparison.")}
           </span>
           {selectedCandidate ? (
@@ -355,10 +355,13 @@ export function BaselineSelector({
           ) : null}
         </div>
       </div>
-      {selectedCompatibility?.level === "partially_compatible" ? (
-        <p className={styles.warning}>
-          Partial baseline: compare directionally, because top_k or mode
-          coverage differs.
+      {selectedCompatibility?.level === "partially_compatible" ||
+      selectedCompatibility?.level === "legacy_unknown" ? (
+        <p className={styles.warning} role="status">
+          {selectedCompatibility.level === "legacy_unknown"
+            ? "Legacy baseline: compatibility cannot be proven."
+            : "Cross-configuration baseline: identity-defining provenance differs."}{" "}
+          Compare directionally; this is not a normal regression baseline.
         </p>
       ) : null}
       {error ? <p className={styles.error}>{error}</p> : null}
@@ -445,6 +448,26 @@ export function RegressionPanel({
           status={regression.current_gate_status}
         />
       </div>
+      {hasBaseline &&
+      regression.compatibility.classification !== "compatible" ? (
+        <div className={styles.warning} role="status">
+          <strong>
+            Baseline compatibility:{" "}
+            {regression.compatibility.classification.replaceAll("_", " ")}
+          </strong>
+          <p>
+            {regression.compatibility.reasons
+              .map((reason) => reason.message)
+              .join(" ")}
+          </p>
+          {regression.compatibility.changed_fields.length > 0 ? (
+            <p>
+              Changed configuration:{" "}
+              {regression.compatibility.changed_fields.join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {hasBaseline ? (
         <p className={styles.callout}>{explanation}</p>
       ) : (
