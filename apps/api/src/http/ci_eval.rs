@@ -7,13 +7,10 @@ use axum::{
 };
 use rag_debugger_core::{
     ApiKeyScope, CiEvalPrincipal, CiEvalRegressionSummary, CiEvalReport, CiEvalRun, CiEvalRunId,
-    CiEvalRunReportResponse, CiEvalRunStatus, RetrievalEvalCompatibilityClassification,
-    RetrievalEvalExperiment, RetrievalEvalGateStatus, RetrievalEvalModeResult, RetrievalEvalRun,
-    RetrievalEvalRunId, RetrievalMode, RunCiEvalRequest,
+    CiEvalRunReportResponse, CiEvalRunStatus, RetrievalEvalExperiment, RetrievalEvalGateStatus,
+    RetrievalEvalModeResult, RetrievalEvalRun, RetrievalEvalRunId, RetrievalMode, RunCiEvalRequest,
 };
-use rag_debugger_rag::{
-    evals::compare_experiment_regression, provenance::experiment_compatibility,
-};
+use rag_debugger_rag::evals::compare_experiment_regression;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
@@ -95,9 +92,9 @@ pub async fn run_ci_eval(
         .await?;
     save_legacy_best_run(repository.as_ref(), workspace_id, &saved_experiment).await?;
 
-    let prior_runs = repository.list_ci_eval_runs(workspace_id).await?;
-    let baseline =
-        previous_compatible_ci_baseline(&saved_experiment, &prior_runs, dataset.id, &config_label);
+    let baseline = repository
+        .latest_compatible_ci_eval_run(workspace_id, &config_label, &saved_experiment)
+        .await?;
 
     let report = build_report(&saved_experiment);
     let regression = baseline
@@ -335,22 +332,6 @@ fn normalized_modes(modes: Vec<RetrievalMode>) -> Vec<RetrievalMode> {
     });
     normalized.dedup();
     normalized
-}
-
-fn previous_compatible_ci_baseline<'a>(
-    current: &RetrievalEvalExperiment,
-    runs: &'a [CiEvalRun],
-    dataset_id: rag_debugger_core::RetrievalEvalDatasetId,
-    config_label: &str,
-) -> Option<&'a CiEvalRun> {
-    runs.iter()
-        .filter(|run| run.dataset_id == dataset_id && run.config_label == config_label)
-        .filter(|run| run.report.experiment.created_at < current.created_at)
-        .filter(|run| {
-            experiment_compatibility(current, Some(&run.report.experiment), false).classification
-                == RetrievalEvalCompatibilityClassification::Compatible
-        })
-        .max_by_key(|run| run.created_at)
 }
 
 fn validate_ci_request(mut request: RunCiEvalRequest) -> Result<RunCiEvalRequest, ApiError> {

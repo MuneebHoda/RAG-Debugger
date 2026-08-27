@@ -569,13 +569,13 @@ impl CiEvalRepository for PostgresStore {
         PostgresStore::get_ci_eval_run(self, workspace_id, id).await
     }
 
-    async fn latest_ci_eval_run_for_dataset(
+    async fn latest_compatible_ci_eval_run(
         &self,
         workspace_id: WorkspaceId,
-        dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
+        current: &RetrievalEvalExperiment,
     ) -> Result<Option<CiEvalRun>, StorageError> {
-        PostgresStore::latest_ci_eval_run_for_dataset(self, workspace_id, dataset_id, config_label)
+        PostgresStore::latest_compatible_ci_eval_run(self, workspace_id, config_label, current)
             .await
     }
 }

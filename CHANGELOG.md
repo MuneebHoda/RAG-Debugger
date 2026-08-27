@@ -61,6 +61,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Changed
 
+- CI automatic baseline discovery now uses a workspace- and dataset/config-scoped repository lookup across all earlier runs, selecting only exact schema-and-identity provenance matches with deterministic MemoryStore/Postgres ordering.
 - Manual and CI Eval Lab runs now share one frozen workspace-scoped source/chunk snapshot, preserve additive provenance in existing experiment JSON, and enforce append-only experiment IDs plus MemoryStore/Postgres provenance ownership parity without a database migration.
 - Corpus evidence, embedding status and writes, retrieval candidates and saved runs, traces and reruns, Eval Lab datasets/cases/experiments/runs, CI reads, overview metrics, demo progress, and report inputs now enforce authenticated workspace ownership inside storage; cross-workspace identifiers use the same unresolved, unavailable, or not-found behavior as nonexistent resources.
 - Retrieval and Trace save-to-Quality panels now key drafts and mutations to the active run or trace, preserve dataset intent across source changes, block stale submissions during retrieval transitions, expose keyboard-operable evidence toggles and announced async states, and verify submitted payloads against the current source.

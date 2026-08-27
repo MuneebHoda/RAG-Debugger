@@ -20,7 +20,7 @@ use rag_debugger_storage::{
     },
     StorageError,
 };
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -36,6 +36,21 @@ async fn postgres_eval_repository_enforces_workspace_ownership() {
         .await
         .expect("connect Postgres store");
     run_eval_workspace_contract(&store).await;
+}
+
+#[tokio::test]
+async fn memory_ci_baseline_lookup_reaches_past_one_hundred_incompatible_runs() {
+    run_ci_baseline_history_contract(&MemoryStore::default()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a migrated Postgres database"]
+async fn postgres_ci_baseline_lookup_reaches_past_one_hundred_incompatible_runs() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    let store = PostgresStore::connect(&database_url)
+        .await
+        .expect("connect Postgres store");
+    run_ci_baseline_history_contract(&store).await;
 }
 
 #[tokio::test]
@@ -462,7 +477,7 @@ where
         .expect("list alpha CI runs")
         .is_empty());
     assert!(repository
-        .latest_ci_eval_run_for_dataset(workspace_a, dataset_b.id, &ci_run_b.config_label)
+        .latest_compatible_ci_eval_run(workspace_a, &ci_run_b.config_label, &experiment_b)
         .await
         .expect("read alpha CI baseline")
         .is_none());
@@ -546,6 +561,72 @@ where
             .id,
         case_a.id
     );
+}
+
+async fn run_ci_baseline_history_contract<R>(repository: &R)
+where
+    R: AuthRepository + CiEvalRepository + EvalRepository + ProjectRepository,
+{
+    let workspace_id = create_workspace(repository, "ci-baseline-history").await;
+    let dataset = dataset("CI baseline history");
+    repository
+        .create_retrieval_eval_dataset(workspace_id, dataset.clone())
+        .await
+        .expect("create CI baseline dataset");
+    let project = repository
+        .ensure_default_project(workspace_id)
+        .await
+        .expect("create CI baseline project");
+    let now = OffsetDateTime::now_utc();
+
+    let mut baseline = experiment(dataset.id, &dataset.name);
+    baseline.provenance = Some(experiment_provenance(workspace_id, project.id, dataset.id));
+    baseline.created_at = now - Duration::hours(3);
+    repository
+        .save_retrieval_eval_experiment(workspace_id, baseline.clone())
+        .await
+        .expect("save compatible baseline experiment");
+    let mut baseline_run = ci_run(workspace_id, &dataset, &baseline);
+    baseline_run.created_at = baseline.created_at + Duration::minutes(1);
+    repository
+        .save_ci_eval_run(baseline_run.clone())
+        .await
+        .expect("save compatible baseline run");
+
+    let mut incompatible = experiment(dataset.id, &dataset.name);
+    incompatible.provenance = baseline.provenance.clone();
+    incompatible.top_k = 1;
+    incompatible.config_snapshot.top_k = 1;
+    incompatible
+        .provenance
+        .as_mut()
+        .expect("incompatible provenance")
+        .identity
+        .retrieval
+        .top_k = 1;
+    incompatible.created_at = now - Duration::hours(2);
+    repository
+        .save_retrieval_eval_experiment(workspace_id, incompatible.clone())
+        .await
+        .expect("save incompatible experiment");
+    for index in 0..101 {
+        let mut run = ci_run(workspace_id, &dataset, &incompatible);
+        run.created_at = now - Duration::hours(1) + Duration::seconds(index);
+        repository
+            .save_ci_eval_run(run)
+            .await
+            .expect("save newer incompatible run");
+    }
+
+    let mut current = experiment(dataset.id, &dataset.name);
+    current.provenance = baseline.provenance.clone();
+    current.created_at = now;
+    let selected = repository
+        .latest_compatible_ci_eval_run(workspace_id, &baseline_run.config_label, &current)
+        .await
+        .expect("select compatible baseline")
+        .expect("older compatible baseline");
+    assert_eq!(selected.id, baseline_run.id);
 }
 
 async fn create_workspace<R>(repository: &R, label: &str) -> WorkspaceId

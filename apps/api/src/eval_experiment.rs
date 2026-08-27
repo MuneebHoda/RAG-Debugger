@@ -60,7 +60,17 @@ pub(crate) async fn run_experiment_for_dataset(
         },
         provenance_information(state, ci),
     )
-    .map_err(|_| ApiError::Internal)?;
+    .map_err(|error| {
+        let correlation_id = Uuid::now_v7();
+        tracing::error!(
+            %correlation_id,
+            workspace_id = %workspace_id.0,
+            dataset_id = %dataset.id.0,
+            %error,
+            "failed to build eval experiment provenance"
+        );
+        ApiError::Internal
+    })?;
 
     let provider = LocalHashEmbeddingProvider::new(state.config().product.embedding.model.clone());
     let retriever = LocalHybridRetriever::new(provider, state.config().product.retrieval.clone())

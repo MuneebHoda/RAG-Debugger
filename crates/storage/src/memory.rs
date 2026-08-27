@@ -1068,22 +1068,43 @@ impl CiEvalRepository for MemoryStore {
             .ok_or(StorageError::NotFound)
     }
 
-    async fn latest_ci_eval_run_for_dataset(
+    async fn latest_compatible_ci_eval_run(
         &self,
         workspace_id: WorkspaceId,
-        dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
+        current: &RetrievalEvalExperiment,
     ) -> Result<Option<CiEvalRun>, StorageError> {
+        let Some(current_provenance) = &current.provenance else {
+            return Ok(None);
+        };
         let inner = self.lock()?;
         Ok(inner
             .ci_eval_runs
             .values()
             .filter(|run| {
                 run.workspace_id == workspace_id
-                    && run.dataset_id == dataset_id
+                    && run.dataset_id == current.dataset_id
                     && run.config_label == config_label
+                    && run.report.experiment.created_at < current.created_at
+                    && run
+                        .report
+                        .experiment
+                        .provenance
+                        .as_ref()
+                        .is_some_and(|provenance| {
+                            provenance.schema_version == current_provenance.schema_version
+                                && provenance.identity == current_provenance.identity
+                        })
             })
-            .max_by_key(|run| run.created_at)
+            .max_by(|left, right| {
+                left.report
+                    .experiment
+                    .created_at
+                    .cmp(&right.report.experiment.created_at)
+                    .then_with(|| left.experiment_id.0.cmp(&right.experiment_id.0))
+                    .then_with(|| left.created_at.cmp(&right.created_at))
+                    .then_with(|| left.id.0.cmp(&right.id.0))
+            })
             .cloned())
     }
 }

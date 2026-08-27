@@ -318,11 +318,11 @@ pub trait CiEvalRepository: Send + Sync {
         workspace_id: WorkspaceId,
         id: CiEvalRunId,
     ) -> Result<CiEvalRun, StorageError>;
-    async fn latest_ci_eval_run_for_dataset(
+    async fn latest_compatible_ci_eval_run(
         &self,
         workspace_id: WorkspaceId,
-        dataset_id: RetrievalEvalDatasetId,
         config_label: &str,
+        current: &RetrievalEvalExperiment,
     ) -> Result<Option<CiEvalRun>, StorageError>;
 }
 
