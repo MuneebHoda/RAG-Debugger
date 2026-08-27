@@ -16,7 +16,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 async-trait = "0.1"
 argon2 = "0.5"
-axum = { version = "0.7", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart"] }
 hex = "0.4"
 html2text = "0.17"
 http = "1"
