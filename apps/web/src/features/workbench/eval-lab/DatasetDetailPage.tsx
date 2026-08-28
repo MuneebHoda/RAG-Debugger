@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   FlaskConical,
   Loader2,
-  Pencil,
   Plus,
   Trash2,
   X,
@@ -15,6 +14,7 @@ import { WorkbenchPageHeader } from "../../../components/workbench/WorkbenchPage
 import {
   createEvalLabCase,
   deleteEvalLabCase,
+  goldenDatasetExportUrl,
   getEvalLabDatasetTrends,
   getEvalLabDataset,
   listEvalLabDatasetExperiments,
@@ -168,6 +168,25 @@ export function DatasetDetailPage() {
         <Stat label="Updated" value={formatDateTime(dataset.updated_at)} />
         <Stat label="Expected evidence" value="Required" />
       </section>
+
+      <details className={styles.details}>
+        <summary>
+          Export golden data. Full JSON exposes queries, notes, IDs, and
+          provenance; review before sharing.
+        </summary>
+        <a
+          className="secondary-button"
+          href={goldenDatasetExportUrl(dataset.id, "metadata_only")}
+        >
+          Metadata-only JSON
+        </a>
+        <a
+          className="primary-button"
+          href={goldenDatasetExportUrl(dataset.id, "full")}
+        >
+          Full JSON
+        </a>
+      </details>
 
       <div className={styles.grid}>
         <TrendSummaryPanel trend={trendQuery.data} />
@@ -511,7 +530,7 @@ function EditableCase({
                 type="button"
                 onClick={beginEditing}
               >
-                <Pencil aria-hidden="true" size={14} />
+                Edit
               </button>
               <button
                 aria-label={`Delete ${evalCase.name}`}

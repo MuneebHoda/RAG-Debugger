@@ -8,7 +8,8 @@ use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
         EvalRepository, EvidenceRepository, HealthRepository, ProjectRepository, ReportRepository,
-        RetrievalRepository, SourceRepository, SubmittedExpectedEvidence, TraceRepository,
+        RetrievalEvalDatasetImportWrite, RetrievalRepository, SourceRepository,
+        SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
@@ -308,6 +309,13 @@ impl EmbeddingRepository for PostgresStore {
 
 #[async_trait]
 impl EvalRepository for PostgresStore {
+    async fn list_golden_dataset_evidence_identities(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<GoldenDatasetEvidenceIdentity>, StorageError> {
+        PostgresStore::list_golden_dataset_evidence_identities(self, workspace_id).await
+    }
+
     async fn retrieval_eval_corpus_snapshot(
         &self,
         workspace_id: WorkspaceId,
@@ -367,6 +375,14 @@ impl EvalRepository for PostgresStore {
         dataset: RetrievalEvalDataset,
     ) -> Result<RetrievalEvalDataset, StorageError> {
         PostgresStore::create_retrieval_eval_dataset(self, workspace_id, dataset).await
+    }
+
+    async fn apply_retrieval_eval_dataset_import(
+        &self,
+        workspace_id: WorkspaceId,
+        import: RetrievalEvalDatasetImportWrite,
+    ) -> Result<RetrievalEvalDataset, StorageError> {
+        PostgresStore::apply_retrieval_eval_dataset_import(self, workspace_id, import).await
     }
 
     async fn list_retrieval_eval_datasets(

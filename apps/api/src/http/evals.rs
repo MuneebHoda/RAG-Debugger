@@ -8,7 +8,7 @@ use rag_debugger_core::{
 };
 use rag_debugger_rag::{
     embedding::LocalHashEmbeddingProvider, evals::score_retrieval_eval_case,
-    retrieval::LocalHybridRetriever, RagError,
+    golden_dataset::next_case_key, retrieval::LocalHybridRetriever, RagError,
 };
 use time::OffsetDateTime;
 use uuid::Uuid;
@@ -50,8 +50,15 @@ pub async fn create_retrieval_eval_case(
         state.config().product.retrieval.default_top_k,
         state.config().product.retrieval.max_top_k,
     );
-    let eval_case = RetrievalEvalCase {
+    let existing_case_keys = repository
+        .list_retrieval_eval_cases(user.workspace.id)
+        .await?
+        .into_iter()
+        .map(|case| case.case_key)
+        .collect::<Vec<_>>();
+    let mut eval_case = RetrievalEvalCase {
         id: rag_debugger_core::RetrievalEvalCaseId(Uuid::now_v7()),
+        case_key: String::new(),
         name: request
             .name
             .filter(|name| !name.trim().is_empty())
@@ -64,6 +71,7 @@ pub async fn create_retrieval_eval_case(
         provenance: None,
         created_at: OffsetDateTime::now_utc(),
     };
+    eval_case.case_key = next_case_key(&eval_case.name, &eval_case.query, existing_case_keys);
 
     Ok(Json(
         repository

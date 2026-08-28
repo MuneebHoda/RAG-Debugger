@@ -76,6 +76,8 @@ pub struct EvalRunId(pub Uuid);
 #[derive(Debug, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct RetrievalEvalCase {
     pub id: RetrievalEvalCaseId,
+    #[serde(default)]
+    pub case_key: String,
     pub name: String,
     pub query: String,
     pub top_k: u32,

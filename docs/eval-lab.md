@@ -21,6 +21,8 @@ Eval Lab routes live under `/api/v1/eval-lab`.
 - `GET /datasets`: list datasets with case counts and latest gate summaries.
 - `POST /datasets`: create a dataset.
 - `GET /datasets/:dataset_id`: load a dataset and its cases.
+- `GET /datasets/:dataset_id/export?content_mode=metadata_only|full`: download canonical golden dataset schema v1 JSON.
+- `POST /datasets/import?mode=<mode>&dry_run=true`: validate a session-authenticated import; applying requires the returned validation token.
 - `GET /datasets/:dataset_id/experiments`: list dataset-scoped experiment history as compact summaries.
 - `GET /datasets/:dataset_id/trends?limit=10`: load recent quality trend points and latest regression comparison.
 - `POST /evidence/query`: search or resolve workspace-readable documents and chunks for the expected-evidence picker.
@@ -32,10 +34,74 @@ Eval Lab routes live under `/api/v1/eval-lab`.
 - `GET /experiments/:experiment_id`: load one experiment.
 - `GET /experiments/:experiment_id/regression?baseline_id=<uuid>`: compare an experiment with an explicit baseline or the previous compatible run.
 - `POST /experiments/:experiment_id/compare`: compare selected modes from a saved experiment.
+- `POST /ci/datasets/import?mode=<mode>&dry_run=true`: validate or apply the same import with a `ci_eval_runs` API key.
 
 The older `/api/v1/retrieval/evals` endpoints remain available for compatibility. New UI workflows save cases into Eval Lab datasets.
 
 Manual and CI experiments execute at most 250 dataset cases per request. The shared execution boundary rejects larger stored or legacy datasets with `400 Bad Request` before corpus snapshotting, provenance construction, retrieval, result allocation, or persistence; cases are never truncated.
+
+## Portable Golden Dataset Schema
+
+Golden datasets use a typed, versioned JSON contract. Schema v1 contains only fields supported by Eval Lab; tags, severity, and importance are intentionally absent because the current domain does not store them.
+
+```json
+{
+  "schema_version": 1,
+  "content_mode": "full",
+  "dataset": {
+    "key": "release-gate",
+    "name": "Release gate",
+    "description": "Critical retrieval behavior"
+  },
+  "cases": [
+    {
+      "case_key": "account-recovery-policy",
+      "name": "Account recovery policy",
+      "query": "Which evidence defines account recovery?",
+      "top_k": 5,
+      "expected_documents": [
+        { "document_checksum": "sha256-checksum" }
+      ],
+      "expected_chunks": [
+        {
+          "document_checksum": "sha256-checksum",
+          "chunk_checksum": "sha256-chunk-checksum",
+          "ordinal": 3
+        }
+      ],
+      "notes": "Release-critical behavior",
+      "provenance": {
+        "source_trace_id": "018f7a2a-6e2e-7000-a000-000000000001",
+        "source": "native",
+        "privacy_mode": "full_local_only"
+      }
+    }
+  ]
+}
+```
+
+`schema_version` is mandatory. Unversioned files, legacy version `0`, malformed v1 files, and future versions are rejected explicitly; unknown fields are not ignored. Dataset and case keys contain 1–128 lowercase ASCII letters, digits, dots, underscores, or hyphens and cannot begin with punctuation.
+
+`case_key` is stored independently of the database UUID and is unique inside a dataset. Existing cases receive a deterministic normalized-name key during migration, with `-2`, `-3`, and later suffixes assigned by creation time then UUID. New cases derive a readable key from their name or query and take the first available numeric suffix. Imports match only this key; database UUIDs never cross environments. The dataset key is the canonical lowercase slug of its name, while the explicit target dataset ID remains the authority for merge and replace operations.
+
+Canonical output fixes object-field order through the schema, sorts cases by `case_key`, sorts document references by checksum, sorts chunk references by document checksum, chunk checksum, and ordinal, removes duplicate references, uses pretty JSON, and ends with one newline. It omits local dataset/case UUIDs, timestamps, raw paths, document/chunk text, snippets, and embeddings. Repeated exports of unchanged data are byte-identical and suitable for Git diffs.
+
+Expected evidence is portable metadata, not corpus content. A document reference uses its checksum. A chunk reference uses its parent document checksum plus chunk checksum and ordinal. Import resolves that tuple only against evidence in the authenticated target workspace and accepts exactly one match; missing or ambiguous matches are reported as unresolved. It never falls back to paths, text, or foreign-workspace IDs.
+
+`metadata_only` export omits dataset description, queries, notes, and evidence references while retaining safe inventory, case settings, stable keys, and provenance classification. That inventory is reviewable but cannot execute until required content and evidence references are supplied. The `full` download sits inside an explicit UI warning because queries, notes, checksums, and provenance may be sensitive. A dataset containing `full_local_only` provenance cannot use full export. Metadata-only inventory remains available, while CI validation/import rejects full-local cases entirely.
+
+## Import Contract
+
+Every import is planned and validated before one atomic repository write. The default is `dry_run=true`. A valid dry run returns a validation token bound to the workspace, exact canonical file, import mode, target dataset, and target update timestamp. Applying uses the same request with `dry_run=false` and that token; missing or stale validation returns `409 Conflict`. Invalid plans and `validate_only` never write, and replace additionally requires `confirm_replace=true`.
+
+The exact modes are:
+
+- `create_new`: creates a separate dataset; a target ID is forbidden.
+- `merge_by_case_key`: creates missing keys, explicitly reports and updates changed matching keys, skips identical keys, and preserves unmentioned local cases.
+- `replace_dataset`: performs the same deterministic key matching and removes unmentioned local cases after dry-run review and explicit confirmation.
+- `validate_only`: returns validation findings and always performs zero writes.
+
+Dry-run summaries include the dataset action, total/add/change/skip/remove counts, invalid cases with stable codes and messages, unresolved document/chunk references, privacy-sensitive field classes, and the validation token when apply is possible. Duplicate keys, invalid keys/names/queries/`top_k`, missing evidence, malformed trace UUIDs, unavailable or conflicting immutable provenance, evidence-reference limits, the shared 250-case limit, and workspace ownership are checked before persistence. MemoryStore applies the complete plan under one lock; PostgreSQL uses one transaction with a locked target revision. Either commits the complete dataset change or preserves the previous state.
 
 ### Evidence lookup contract
 

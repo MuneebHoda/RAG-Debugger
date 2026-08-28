@@ -25,6 +25,38 @@ RAG systems regress quietly. A chunking change, embedding refresh, scoring tweak
 
 The Actions runner must be able to reach the CorpusLab API. Set `CORPUSLAB_API_URL` to that reachable base URL. If CorpusLab is only available on a private local network, use a self-hosted runner and set the variable to the address reachable from that runner.
 
+## Validate A Checked-In Golden Dataset
+
+A workflow can validate and import a reviewed schema v1 file before running the existing CI gate. The import route uses the same `ci_eval_runs` key scope and target workspace as CI execution; it does not add a second CI architecture.
+
+For an existing target dataset, validate first:
+
+```sh
+export GOLDEN_DATASET_FILE=evals/release-gate.json
+export CORPUSLAB_DATASET_ID=018f7a2a-6e2e-7000-a000-000000000001
+
+VALIDATION_JSON=$(curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer $CORPUSLAB_API_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary "@$GOLDEN_DATASET_FILE" \
+  "$CORPUSLAB_API_URL/api/v1/eval-lab/ci/datasets/import?mode=merge_by_case_key&target_dataset_id=$CORPUSLAB_DATASET_ID&dry_run=true")
+
+test "$(printf '%s' "$VALIDATION_JSON" | jq -r '.valid')" = true
+VALIDATION_TOKEN=$(printf '%s' "$VALIDATION_JSON" | jq -er '.validation_token')
+```
+
+Review or record only the bounded counts and validation codes needed by the job; do not print the whole response because the imported file and validation details may identify private cases. Apply the exact validated file and target state:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer $CORPUSLAB_API_KEY" \
+  -H "Content-Type: application/json" \
+  --data-binary "@$GOLDEN_DATASET_FILE" \
+  "$CORPUSLAB_API_URL/api/v1/eval-lab/ci/datasets/import?mode=merge_by_case_key&target_dataset_id=$CORPUSLAB_DATASET_ID&dry_run=false&validation_token=$VALIDATION_TOKEN"
+```
+
+Then submit the ordinary `/api/v1/eval-lab/ci/runs` request using `CORPUSLAB_DATASET_ID`. Use `create_new` without `target_dataset_id` when the workflow should create a dataset and read the new `dataset_id` from the apply response. `replace_dataset` additionally requires `confirm_replace=true`; `validate_only` cannot apply. A concurrent target change invalidates the token with `409`, requiring a fresh dry run. Unresolved or ambiguous checksum references, cross-workspace evidence, and full-local provenance fail validation instead of being guessed or downgraded.
+
 ## What The Example Evaluates
 
 The example does not check out, execute, deploy, or otherwise evaluate the pull request's modified RAG application code. It requests an evaluation from the existing CorpusLab instance at `CORPUSLAB_API_URL`, using the configured Eval Lab dataset and that instance's current corpus, index, and retrieval configuration.

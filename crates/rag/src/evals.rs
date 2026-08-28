@@ -1061,6 +1061,7 @@ mod tests {
         let chunk_id = ChunkId(Uuid::now_v7());
         let case = RetrievalEvalCase {
             id: RetrievalEvalCaseId(Uuid::now_v7()),
+            case_key: "gpu-evidence".to_owned(),
             name: "GPU evidence".to_owned(),
             query: "gpu work".to_owned(),
             top_k: 5,
@@ -1366,6 +1367,7 @@ mod tests {
     ) -> RetrievalEvalCase {
         RetrievalEvalCase {
             id: RetrievalEvalCaseId(Uuid::now_v7()),
+            case_key: "fixture-expectation".to_owned(),
             name: "Fixture expectation".to_owned(),
             query: "How is GPU indexing configured?".to_owned(),
             top_k: 5,

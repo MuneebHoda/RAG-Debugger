@@ -28,6 +28,7 @@ import {
   CreateDatasetPanel,
   TrendSummaryPanel,
 } from "./components/QualityViews";
+import { GoldenDatasetImportPanel } from "./components/GoldenDatasetTransfer";
 import styles from "./QualityPage.module.css";
 
 export function QualityPage() {
@@ -182,6 +183,11 @@ export function QualityPage() {
               onNameChange={setName}
             />
           ) : null}
+
+          <GoldenDatasetImportPanel
+            datasets={datasets}
+            onApplied={datasetsQuery.refetch}
+          />
 
           <div className={styles.grid}>
             <WorkbenchPanel

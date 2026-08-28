@@ -49,6 +49,10 @@ fn public_routes() -> Router<AppState> {
             get(ci_eval::get_ci_eval_report),
         )
         .route(
+            "/eval-lab/ci/datasets/import",
+            post(eval_lab::import_dataset_ci),
+        )
+        .route(
             "/traces/ingest",
             post(trace_ingestion::ingest_native)
                 .layer(DefaultBodyLimit::max(trace_ingestion::MAX_BODY_BYTES)),
@@ -78,7 +82,12 @@ fn protected_routes(state: AppState) -> Router<AppState> {
             get(eval_lab::list_datasets).post(eval_lab::create_dataset),
         )
         .route("/eval-lab/evidence/query", post(eval_lab::query_evidence))
+        .route("/eval-lab/datasets/import", post(eval_lab::import_dataset))
         .route("/eval-lab/datasets/:dataset_id", get(eval_lab::get_dataset))
+        .route(
+            "/eval-lab/datasets/:dataset_id/export",
+            get(eval_lab::export_dataset),
+        )
         .route(
             "/eval-lab/datasets/:dataset_id/experiments",
             get(eval_lab::list_dataset_experiments),

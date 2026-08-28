@@ -2,14 +2,17 @@ use std::{collections::HashSet, hash::Hash};
 
 use axum::{
     extract::{Extension, Path, Query, State},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
+    response::{IntoResponse, Response},
     Json,
 };
 use rag_debugger_core::{
-    AuthenticatedUser, ChunkId, CompareRetrievalEvalExperimentRequest,
+    ApiKeyScope, AuthenticatedUser, ChunkId, CompareRetrievalEvalExperimentRequest,
     CreateRetrievalEvalDatasetRequest, CreateRetrievalEvalLabCaseRequest, DocumentId,
-    EvalLabEvidenceSearchQuery, EvalLabEvidenceSearchRequest, QueryEvalLabEvidenceRequest,
-    QueryEvalLabEvidenceResponse, RetrievalEvalCase, RetrievalEvalCaseId,
-    RetrievalEvalCaseProvenance, RetrievalEvalDataset, RetrievalEvalDatasetId,
+    EvalLabEvidenceSearchQuery, EvalLabEvidenceSearchRequest, GoldenDataset,
+    GoldenDatasetContentMode, GoldenDatasetImportMode, GoldenDatasetImportSummary,
+    QueryEvalLabEvidenceRequest, QueryEvalLabEvidenceResponse, RetrievalEvalCase,
+    RetrievalEvalCaseId, RetrievalEvalCaseProvenance, RetrievalEvalDataset, RetrievalEvalDatasetId,
     RetrievalEvalDatasetSummary, RetrievalEvalExperiment, RetrievalEvalExperimentId,
     RetrievalEvalExperimentSummary, RetrievalEvalRegressionComparison, RetrievalEvalRun,
     RetrievalEvalRunId, RetrievalEvalTrendSummary, RunRetrievalEvalExperimentRequest,
@@ -22,12 +25,20 @@ use rag_debugger_rag::evals::{
     build_trend_summary, compare_experiment_regression_with_intent, compare_mode_results,
     previous_comparable_experiment, summarize_experiment,
 };
-use rag_debugger_storage::repository::{EvidenceRepository, SubmittedExpectedEvidence};
+use rag_debugger_rag::golden_dataset::next_case_key;
+use rag_debugger_rag::golden_dataset::{
+    canonical_golden_dataset_json, export_golden_dataset, import_validation_token,
+    parse_golden_dataset, plan_golden_dataset_import, GoldenDatasetError,
+};
+use rag_debugger_storage::repository::{
+    AppRepository, EvidenceRepository, RetrievalEvalDatasetImportWrite, SubmittedExpectedEvidence,
+};
 use serde::Deserialize;
 use time::OffsetDateTime;
 use uuid::Uuid;
 
 use crate::{
+    auth,
     error::ApiError,
     eval_experiment::{run_experiment_for_dataset, CiProvenanceMetadata},
     state::AppState,
@@ -90,6 +101,62 @@ pub async fn get_dataset(
     ))
 }
 
+pub async fn export_dataset(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Path(dataset_id): Path<Uuid>,
+    Query(query): Query<GoldenDatasetExportQuery>,
+) -> Result<Response, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let dataset = repository
+        .get_retrieval_eval_dataset(user.workspace.id, RetrievalEvalDatasetId(dataset_id))
+        .await
+        .map_err(not_found_to_api("eval dataset"))?;
+    let evidence = repository
+        .list_golden_dataset_evidence_identities(user.workspace.id)
+        .await?;
+    let portable = export_golden_dataset(
+        &dataset,
+        &evidence,
+        query
+            .content_mode
+            .unwrap_or(GoldenDatasetContentMode::MetadataOnly),
+    )
+    .map_err(golden_dataset_error)?;
+    let json = canonical_golden_dataset_json(&portable).map_err(golden_dataset_error)?;
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/json; charset=utf-8"),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=golden-dataset-v1.json"),
+    );
+    Ok((headers, json).into_response())
+}
+
+pub async fn import_dataset(
+    State(state): State<AppState>,
+    Extension(user): Extension<AuthenticatedUser>,
+    Query(options): Query<GoldenDatasetImportQuery>,
+    Json(value): Json<serde_json::Value>,
+) -> Result<Json<GoldenDatasetImportSummary>, ApiError> {
+    import_dataset_for_workspace(&state, user.workspace.id, options, value, true).await
+}
+
+pub async fn import_dataset_ci(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(options): Query<GoldenDatasetImportQuery>,
+    Json(value): Json<serde_json::Value>,
+) -> Result<Json<GoldenDatasetImportSummary>, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let api_key =
+        auth::authenticate_api_key(repository.as_ref(), &headers, ApiKeyScope::CiEvalRuns).await?;
+    import_dataset_for_workspace(&state, api_key.workspace_id, options, value, false).await
+}
+
 pub async fn query_evidence(
     State(state): State<AppState>,
     Extension(user): Extension<AuthenticatedUser>,
@@ -109,7 +176,7 @@ pub async fn create_case(
 ) -> Result<Json<RetrievalEvalCase>, ApiError> {
     let repository = state.repository().ok_or(ApiError::NotReady)?;
     let workspace_id = user.workspace.id;
-    repository
+    let dataset = repository
         .get_retrieval_eval_dataset(workspace_id, RetrievalEvalDatasetId(dataset_id))
         .await
         .map_err(not_found_to_api("eval dataset"))?;
@@ -157,12 +224,17 @@ pub async fn create_case(
     )?;
     request.expected_chunk_ids = dedupe_chunk_ids(request.expected_chunk_ids);
     request.expected_document_ids = dedupe_document_ids(request.expected_document_ids);
-    let eval_case = eval_case_from_request(
+    let mut eval_case = eval_case_from_request(
         request,
         provenance,
         state.config().product.retrieval.default_top_k,
         state.config().product.retrieval.max_top_k,
     )?;
+    eval_case.case_key = next_case_key(
+        &eval_case.name,
+        &eval_case.query,
+        dataset.cases.into_iter().map(|case| case.case_key),
+    );
     Ok(Json(
         repository
             .create_retrieval_eval_case_in_dataset(
@@ -608,6 +680,7 @@ fn eval_case_from_request(
 
     Ok(RetrievalEvalCase {
         id: RetrievalEvalCaseId(Uuid::now_v7()),
+        case_key: String::new(),
         name: request
             .name
             .filter(|name| !name.trim().is_empty())
@@ -642,6 +715,215 @@ where
         }
     }
     deduped
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GoldenDatasetExportQuery {
+    pub content_mode: Option<GoldenDatasetContentMode>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct GoldenDatasetImportQuery {
+    pub mode: GoldenDatasetImportMode,
+    pub target_dataset_id: Option<Uuid>,
+    pub dry_run: Option<bool>,
+    pub confirm_replace: Option<bool>,
+    pub validation_token: Option<String>,
+}
+
+async fn import_dataset_for_workspace(
+    state: &AppState,
+    workspace_id: WorkspaceId,
+    options: GoldenDatasetImportQuery,
+    value: serde_json::Value,
+    allow_full_local: bool,
+) -> Result<Json<GoldenDatasetImportSummary>, ApiError> {
+    let repository = state.repository().ok_or(ApiError::NotReady)?;
+    let portable = parse_golden_dataset(value).map_err(golden_dataset_error)?;
+    if !allow_full_local
+        && portable.cases.iter().any(|case| {
+            case.provenance.as_ref().is_some_and(|provenance| {
+                provenance.privacy_mode == TraceIngestionPrivacyMode::FullLocalOnly
+            })
+        })
+    {
+        return Err(ApiError::Coded {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "full_local_eval_ci_not_permitted",
+            message: "CI cannot validate or import full-local Eval content",
+        });
+    }
+    let target_dataset_id = options.target_dataset_id.map(RetrievalEvalDatasetId);
+    match options.mode {
+        GoldenDatasetImportMode::CreateNew if target_dataset_id.is_some() => {
+            return Err(ApiError::BadRequest(
+                "create_new must not include target_dataset_id".to_owned(),
+            ));
+        }
+        GoldenDatasetImportMode::MergeByCaseKey | GoldenDatasetImportMode::ReplaceDataset
+            if target_dataset_id.is_none() =>
+        {
+            return Err(ApiError::BadRequest(
+                "merge_by_case_key and replace_dataset require target_dataset_id".to_owned(),
+            ));
+        }
+        _ => {}
+    }
+    let dry_run =
+        options.dry_run.unwrap_or(true) || options.mode == GoldenDatasetImportMode::ValidateOnly;
+    if !dry_run
+        && options.mode == GoldenDatasetImportMode::ReplaceDataset
+        && options.confirm_replace != Some(true)
+    {
+        return Err(ApiError::BadRequest(
+            "replace_dataset requires confirm_replace=true".to_owned(),
+        ));
+    }
+
+    let current = if let Some(dataset_id) = target_dataset_id {
+        Some(
+            repository
+                .get_retrieval_eval_dataset(workspace_id, dataset_id)
+                .await
+                .map_err(not_found_to_api("eval dataset"))?,
+        )
+    } else {
+        None
+    };
+    let evidence = repository
+        .list_golden_dataset_evidence_identities(workspace_id)
+        .await?;
+    let provenance =
+        resolve_import_provenance(repository.as_ref(), workspace_id, &portable).await?;
+    let plan = plan_golden_dataset_import(
+        &portable,
+        options.mode,
+        current.as_ref(),
+        &evidence,
+        &provenance,
+        state.config().product.retrieval.max_top_k,
+        OffsetDateTime::now_utc(),
+    )
+    .map_err(golden_dataset_error)?;
+    let token = plan
+        .is_valid()
+        .then(|| import_validation_token(workspace_id, options.mode, &portable, current.as_ref()))
+        .transpose()
+        .map_err(golden_dataset_error)?;
+    let mut summary = GoldenDatasetImportSummary {
+        schema_version: portable.schema_version,
+        mode: options.mode,
+        dry_run,
+        valid: plan.is_valid(),
+        applied: false,
+        action: plan.action,
+        dataset_id: plan.target_dataset_id,
+        cases_total: portable.cases.len() as u32,
+        cases_added: plan.cases_added(),
+        cases_changed: plan.cases_changed(),
+        cases_skipped: plan.cases_skipped,
+        cases_removed: plan.cases_removed(),
+        invalid_cases: plan.invalid_cases.clone(),
+        unresolved_evidence: plan.unresolved_evidence.clone(),
+        privacy_sensitive_fields: plan.privacy_sensitive_fields.clone(),
+        validation_token: if dry_run && options.mode != GoldenDatasetImportMode::ValidateOnly {
+            token.clone()
+        } else {
+            None
+        },
+    };
+    if dry_run || !plan.is_valid() {
+        return Ok(Json(summary));
+    }
+    if options.validation_token.as_deref() != token.as_deref() {
+        return Err(ApiError::Coded {
+            status: StatusCode::CONFLICT,
+            code: "stale_import_validation",
+            message: "run a fresh golden dataset dry-run before applying the import",
+        });
+    }
+
+    let now = OffsetDateTime::now_utc();
+    let dataset_id = current.as_ref().map_or_else(
+        || RetrievalEvalDatasetId(Uuid::now_v7()),
+        |dataset| dataset.id,
+    );
+    let dataset = RetrievalEvalDataset {
+        id: dataset_id,
+        name: plan.dataset_name.clone(),
+        description: plan.dataset_description.clone(),
+        cases: Vec::new(),
+        created_at: current.as_ref().map_or(now, |dataset| dataset.created_at),
+        updated_at: now,
+    };
+    let saved = repository
+        .apply_retrieval_eval_dataset_import(
+            workspace_id,
+            RetrievalEvalDatasetImportWrite {
+                dataset,
+                expected_updated_at: plan.expected_updated_at,
+                cases_to_create: plan.cases_to_create,
+                cases_to_update: plan.cases_to_update,
+                case_ids_to_delete: plan.case_ids_to_delete,
+            },
+        )
+        .await?;
+    summary.applied = true;
+    summary.dataset_id = Some(saved.id);
+    summary.validation_token = None;
+    Ok(Json(summary))
+}
+
+async fn resolve_import_provenance(
+    repository: &dyn AppRepository,
+    workspace_id: WorkspaceId,
+    portable: &GoldenDataset,
+) -> Result<std::collections::HashMap<String, RetrievalEvalCaseProvenance>, ApiError> {
+    let mut resolved = std::collections::HashMap::new();
+    for case in &portable.cases {
+        let Some(provenance) = &case.provenance else {
+            continue;
+        };
+        let Ok(trace_id) = Uuid::parse_str(&provenance.source_trace_id) else {
+            continue;
+        };
+        let trace = match repository
+            .get_trace_detail(workspace_id, rag_debugger_core::TraceId(trace_id))
+            .await
+        {
+            Ok(trace) => trace,
+            Err(rag_debugger_storage::StorageError::NotFound) => continue,
+            Err(error) => return Err(ApiError::Storage(error)),
+        };
+        let Some(ingestion) = trace.ingestion else {
+            continue;
+        };
+        if ingestion.source == provenance.source
+            && ingestion.privacy_mode == provenance.privacy_mode
+            && case.query.as_deref() == Some(trace.input.as_str())
+        {
+            resolved.insert(
+                case.case_key.clone(),
+                RetrievalEvalCaseProvenance {
+                    source_trace_id: trace.id,
+                    source: ingestion.source,
+                    privacy_mode: ingestion.privacy_mode,
+                },
+            );
+        }
+    }
+    Ok(resolved)
+}
+
+fn golden_dataset_error(error: GoldenDatasetError) -> ApiError {
+    match error {
+        GoldenDatasetError::FullLocalExportNotPermitted => ApiError::Coded {
+            status: StatusCode::UNPROCESSABLE_ENTITY,
+            code: "full_local_eval_export_not_permitted",
+            message: "datasets containing full-local cases cannot export queries or evidence",
+        },
+        other => ApiError::BadRequest(other.to_string()),
+    }
 }
 
 #[derive(Debug, Deserialize)]

@@ -4,12 +4,13 @@ use rag_debugger_core::{
     ChunkId, CiEvalRun, CiEvalRunId, DebugReport, DebugReportId, Document, DocumentId,
     EmbeddingIndexCandidate, EmbeddingIndexRequest, EmbeddingModelInfo, EmbeddingStatus,
     EvalLabEvidenceChunk, EvalLabEvidenceDocument, EvalLabEvidenceSearchRequest,
-    EvalLabEvidenceSearchResult, ImportedTraceUpsertResult, IngestionRun, IngestionRunId,
-    IngestionRunStatus, IngestionTotals, Organization, Project, ProjectId, RetrievalEvalCase,
-    RetrievalEvalCaseId, RetrievalEvalDataset, RetrievalEvalDatasetId, RetrievalEvalDatasetSummary,
-    RetrievalEvalExperiment, RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest,
-    RetrievalQueryResponse, RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace,
-    TraceId, TraceSummary, User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
+    EvalLabEvidenceSearchResult, GoldenDatasetEvidenceIdentity, ImportedTraceUpsertResult,
+    IngestionRun, IngestionRunId, IngestionRunStatus, IngestionTotals, Organization, Project,
+    ProjectId, RetrievalEvalCase, RetrievalEvalCaseId, RetrievalEvalDataset,
+    RetrievalEvalDatasetId, RetrievalEvalDatasetSummary, RetrievalEvalExperiment,
+    RetrievalEvalExperimentId, RetrievalEvalRun, RetrievalQueryRequest, RetrievalQueryResponse,
+    RetrievalQueryRunId, SearchableChunk, Source, SourceSummary, Trace, TraceId, TraceSummary,
+    User, UserId, UserWithPassword, Workspace, WorkspaceId, WorkspaceRole,
 };
 
 use crate::StorageError;
@@ -24,6 +25,15 @@ pub struct SubmittedExpectedEvidence {
 pub struct RetrievalEvalCorpusSnapshot {
     pub sources: Vec<SourceSummary>,
     pub candidates: Vec<SearchableChunk>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct RetrievalEvalDatasetImportWrite {
+    pub dataset: RetrievalEvalDataset,
+    pub expected_updated_at: Option<time::OffsetDateTime>,
+    pub cases_to_create: Vec<RetrievalEvalCase>,
+    pub cases_to_update: Vec<RetrievalEvalCase>,
+    pub case_ids_to_delete: Vec<RetrievalEvalCaseId>,
 }
 
 #[async_trait]
@@ -171,6 +181,10 @@ pub trait TraceRepository: Send + Sync {
 
 #[async_trait]
 pub trait EvalRepository: Send + Sync {
+    async fn list_golden_dataset_evidence_identities(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<GoldenDatasetEvidenceIdentity>, StorageError>;
     async fn retrieval_eval_corpus_snapshot(
         &self,
         workspace_id: WorkspaceId,
@@ -207,6 +221,11 @@ pub trait EvalRepository: Send + Sync {
         &self,
         workspace_id: WorkspaceId,
         dataset: RetrievalEvalDataset,
+    ) -> Result<RetrievalEvalDataset, StorageError>;
+    async fn apply_retrieval_eval_dataset_import(
+        &self,
+        workspace_id: WorkspaceId,
+        import: RetrievalEvalDatasetImportWrite,
     ) -> Result<RetrievalEvalDataset, StorageError>;
     async fn list_retrieval_eval_datasets(
         &self,

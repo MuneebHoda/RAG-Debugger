@@ -1288,6 +1288,351 @@ async fn manual_and_ci_experiments_reject_oversized_datasets_without_persistence
     );
 }
 
+#[tokio::test]
+async fn golden_dataset_export_import_round_trip_and_modes_are_deterministic() {
+    let context = support::authenticated_test_app().await;
+    let app = &context.router;
+    let upload = upload_text_file(
+        app,
+        "portable-policy.md",
+        "Portable policy evidence stays local.",
+    )
+    .await;
+    let document_id = upload["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("document id");
+    let chunk_id = upload["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("chunk id");
+    let dataset = create_dataset(app, "Portable quality").await;
+    let dataset_id = dataset["id"].as_str().expect("dataset id");
+    let original_case = create_case(
+        app,
+        dataset_id,
+        json!({
+            "name": "Portable policy",
+            "query": "portable policy evidence",
+            "expected_document_ids": [document_id],
+            "expected_chunk_ids": [chunk_id],
+            "notes": "Review in Git"
+        }),
+    )
+    .await;
+    assert_eq!(original_case["case_key"], "portable-policy");
+
+    let export_uri = format!("/api/v1/eval-lab/datasets/{dataset_id}/export?content_mode=full");
+    let first = get_text(app, &export_uri).await;
+    let second = get_text(app, &export_uri).await;
+    assert_eq!(first, second);
+    assert!(first.ends_with('\n'));
+    assert!(first.contains("portable policy evidence"));
+    assert!(!first.contains("portable-policy.md"));
+    assert!(!first.contains("Portable policy evidence stays local."));
+    let portable: Value = serde_json::from_str(&first).expect("portable JSON");
+    assert_eq!(portable["schema_version"], 1);
+    assert_eq!(portable["cases"][0]["case_key"], "portable-policy");
+
+    let metadata = get_text(
+        app,
+        &format!("/api/v1/eval-lab/datasets/{dataset_id}/export?content_mode=metadata_only"),
+    )
+    .await;
+    let metadata: Value = serde_json::from_str(&metadata).expect("metadata export");
+    assert!(metadata["cases"][0]["query"].is_null());
+    assert!(metadata["cases"][0]["expected_documents"]
+        .as_array()
+        .expect("metadata documents")
+        .is_empty());
+
+    let dataset_count_before = get_json(app, "/api/v1/eval-lab/datasets")
+        .await
+        .as_array()
+        .expect("datasets")
+        .len();
+    let dry_run = request_json(
+        app,
+        Method::POST,
+        "/api/v1/eval-lab/datasets/import?mode=create_new&dry_run=true",
+        portable.clone(),
+    )
+    .await;
+    assert_eq!(dry_run["valid"], true);
+    assert_eq!(dry_run["applied"], false);
+    assert_eq!(dry_run["cases_added"], 1);
+    let token = dry_run["validation_token"]
+        .as_str()
+        .expect("validation token");
+    assert_eq!(
+        get_json(app, "/api/v1/eval-lab/datasets")
+            .await
+            .as_array()
+            .expect("datasets after dry-run")
+            .len(),
+        dataset_count_before
+    );
+
+    let missing_token = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/eval-lab/datasets/import?mode=create_new&dry_run=false",
+            portable.clone(),
+        ))
+        .await
+        .expect("missing token response");
+    assert_eq!(missing_token.status(), StatusCode::CONFLICT);
+
+    let applied = request_json(
+        app,
+        Method::POST,
+        &format!(
+            "/api/v1/eval-lab/datasets/import?mode=create_new&dry_run=false&validation_token={token}"
+        ),
+        portable.clone(),
+    )
+    .await;
+    assert_eq!(applied["applied"], true);
+    let imported_dataset_id = applied["dataset_id"].as_str().expect("imported dataset id");
+    let imported = get_json(
+        app,
+        &format!("/api/v1/eval-lab/datasets/{imported_dataset_id}"),
+    )
+    .await;
+    assert_eq!(imported["cases"][0]["case_key"], "portable-policy");
+    assert_eq!(
+        get_text(
+            app,
+            &format!("/api/v1/eval-lab/datasets/{imported_dataset_id}/export?content_mode=full")
+        )
+        .await,
+        first
+    );
+
+    let original_case_id = original_case["id"].as_str().expect("case id");
+    let mut merge_file = portable.clone();
+    merge_file["cases"][0]["notes"] = json!("Changed through merge");
+    let mut added_case = merge_file["cases"][0].clone();
+    added_case["case_key"] = json!("portable-policy-secondary");
+    added_case["name"] = json!("Portable policy secondary");
+    added_case["query"] = json!("secondary portable policy evidence");
+    merge_file["cases"]
+        .as_array_mut()
+        .expect("merge cases")
+        .push(added_case);
+    let merge_dry_run = request_json(
+        app,
+        Method::POST,
+        &format!(
+            "/api/v1/eval-lab/datasets/import?mode=merge_by_case_key&target_dataset_id={dataset_id}&dry_run=true"
+        ),
+        merge_file.clone(),
+    )
+    .await;
+    assert_eq!(merge_dry_run["cases_added"], 1);
+    assert_eq!(merge_dry_run["cases_changed"], 1);
+    let merge_token = merge_dry_run["validation_token"]
+        .as_str()
+        .expect("merge token");
+    request_json(
+        app,
+        Method::POST,
+        &format!(
+            "/api/v1/eval-lab/datasets/import?mode=merge_by_case_key&target_dataset_id={dataset_id}&dry_run=false&validation_token={merge_token}"
+        ),
+        merge_file.clone(),
+    )
+    .await;
+    let merged = get_json(app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
+    assert_eq!(merged["cases"].as_array().expect("merged cases").len(), 2);
+    assert!(merged["cases"]
+        .as_array()
+        .expect("merged cases")
+        .iter()
+        .any(|case| case["id"] == original_case_id));
+
+    let mut replacement = merge_file;
+    replacement["cases"] = json!([replacement["cases"][1].clone()]);
+    let replace_dry_run = request_json(
+        app,
+        Method::POST,
+        &format!(
+            "/api/v1/eval-lab/datasets/import?mode=replace_dataset&target_dataset_id={dataset_id}&dry_run=true"
+        ),
+        replacement.clone(),
+    )
+    .await;
+    assert_eq!(replace_dry_run["cases_removed"], 1);
+    let replace_token = replace_dry_run["validation_token"]
+        .as_str()
+        .expect("replace token");
+    let unconfirmed = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!(
+                "/api/v1/eval-lab/datasets/import?mode=replace_dataset&target_dataset_id={dataset_id}&dry_run=false&validation_token={replace_token}"
+            ),
+            replacement.clone(),
+        ))
+        .await
+        .expect("unconfirmed replace response");
+    assert_eq!(unconfirmed.status(), StatusCode::BAD_REQUEST);
+    request_json(
+        app,
+        Method::POST,
+        &format!(
+            "/api/v1/eval-lab/datasets/import?mode=replace_dataset&target_dataset_id={dataset_id}&dry_run=false&confirm_replace=true&validation_token={replace_token}"
+        ),
+        replacement,
+    )
+    .await;
+    let replaced = get_json(app, &format!("/api/v1/eval-lab/datasets/{dataset_id}")).await;
+    assert_eq!(
+        replaced["cases"].as_array().expect("replaced cases").len(),
+        1
+    );
+    assert_eq!(
+        replaced["cases"][0]["case_key"],
+        "portable-policy-secondary"
+    );
+}
+
+#[tokio::test]
+async fn golden_dataset_validation_rejects_bad_versions_and_never_partially_writes() {
+    let context = support::authenticated_test_app().await;
+    let app = &context.router;
+    let upload = upload_text_file(app, "validation.md", "Validation evidence.").await;
+    let document_id = upload["documents"][0]["document"]["id"]
+        .as_str()
+        .expect("document id");
+    let chunk_id = upload["documents"][0]["preview_chunks"][0]["id"]
+        .as_str()
+        .expect("chunk id");
+    let dataset = create_dataset(app, "Validation fixture").await;
+    let dataset_id = dataset["id"].as_str().expect("dataset id");
+    create_case(
+        app,
+        dataset_id,
+        json!({
+            "name": "Validation case",
+            "query": "validation evidence",
+            "expected_document_ids": [document_id],
+            "expected_chunk_ids": [chunk_id]
+        }),
+    )
+    .await;
+    let export = get_text(
+        app,
+        &format!("/api/v1/eval-lab/datasets/{dataset_id}/export?content_mode=full"),
+    )
+    .await;
+    let mut invalid: Value = serde_json::from_str(&export).expect("portable export");
+    let mut duplicate = invalid["cases"][0].clone();
+    duplicate["expected_documents"][0]["document_checksum"] = json!("missing-document");
+    duplicate["provenance"] = json!({
+        "source_trace_id": "malformed",
+        "source": "native",
+        "privacy_mode": "full_local_only"
+    });
+    invalid["cases"]
+        .as_array_mut()
+        .expect("cases")
+        .push(duplicate);
+
+    let before = get_json(app, "/api/v1/eval-lab/datasets")
+        .await
+        .as_array()
+        .expect("datasets")
+        .len();
+    let summary = request_json(
+        app,
+        Method::POST,
+        "/api/v1/eval-lab/datasets/import?mode=validate_only",
+        invalid.clone(),
+    )
+    .await;
+    assert_eq!(summary["valid"], false);
+    assert_eq!(summary["applied"], false);
+    assert!(summary["invalid_cases"]
+        .as_array()
+        .expect("invalid cases")
+        .iter()
+        .any(|issue| issue["code"] == "duplicate_case_key"));
+    assert!(summary["invalid_cases"]
+        .as_array()
+        .expect("invalid cases")
+        .iter()
+        .any(|issue| issue["code"] == "malformed_id"));
+    assert_eq!(
+        summary["unresolved_evidence"]
+            .as_array()
+            .expect("unresolved evidence")
+            .len(),
+        1
+    );
+    assert_eq!(
+        get_json(app, "/api/v1/eval-lab/datasets")
+            .await
+            .as_array()
+            .expect("datasets after validation")
+            .len(),
+        before
+    );
+
+    let invalid_apply = request_json(
+        app,
+        Method::POST,
+        "/api/v1/eval-lab/datasets/import?mode=create_new&dry_run=false&validation_token=invalid",
+        invalid,
+    )
+    .await;
+    assert_eq!(invalid_apply["valid"], false);
+    assert_eq!(invalid_apply["applied"], false);
+    assert_eq!(
+        get_json(app, "/api/v1/eval-lab/datasets")
+            .await
+            .as_array()
+            .expect("datasets after invalid apply")
+            .len(),
+        before
+    );
+
+    for value in [json!({"schema_version": 0}), json!({"schema_version": 2})] {
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/eval-lab/datasets/import?mode=validate_only",
+                value,
+            ))
+            .await
+            .expect("version response");
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+
+    let api_key = request_json(
+        app,
+        Method::POST,
+        "/api/v1/api-keys",
+        json!({"name": "Golden fixture CI", "scopes": ["ci_eval_runs"]}),
+    )
+    .await;
+    let secret = api_key["secret"].as_str().expect("API key secret");
+    let portable: Value = serde_json::from_str(&export).expect("portable export");
+    let ci_validation = app
+        .clone()
+        .oneshot(bearer_json_request(
+            Method::POST,
+            "/api/v1/eval-lab/ci/datasets/import?mode=validate_only",
+            portable,
+            secret,
+        ))
+        .await
+        .expect("CI validation response");
+    assert_eq!(ci_validation.status(), StatusCode::OK);
+    assert_eq!(json_body(ci_validation).await["valid"], true);
+}
+
 async fn create_dataset(app: &axum::Router, name: &str) -> Value {
     request_json(
         app,
@@ -1339,6 +1684,19 @@ async fn get_json(app: &axum::Router, uri: &str) -> Value {
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
     json_body(response).await
+}
+
+async fn get_text(app: &axum::Router, uri: &str) -> String {
+    let response = app
+        .clone()
+        .oneshot(empty_request(Method::GET, uri))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response bytes");
+    String::from_utf8(bytes.to_vec()).expect("UTF-8 response")
 }
 
 async fn request_json(app: &axum::Router, method: Method, uri: &str, body: Value) -> Value {
@@ -1445,6 +1803,7 @@ async fn seed_dataset_cases(
                 dataset.id,
                 RetrievalEvalCase {
                     id: RetrievalEvalCaseId(Uuid::now_v7()),
+                    case_key: format!("bounded-case-{index}"),
                     name: format!("Bounded case {index}"),
                     query: format!("bounded experiment query {index}"),
                     top_k: 5,
