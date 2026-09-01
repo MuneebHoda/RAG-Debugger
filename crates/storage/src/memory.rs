@@ -23,8 +23,8 @@ use crate::{
     repository::{
         AuthRepository, CiEvalRepository, DemoRepository, DocumentRepository, EmbeddingRepository,
         EvalRepository, HealthRepository, ProjectRepository, ReportRepository,
-        RetrievalEvalCorpusSnapshot, RetrievalRepository, SourceRepository,
-        SubmittedExpectedEvidence, TraceRepository,
+        RetrievalEvalCorpusSnapshot, RetrievalEvalDatasetImportWrite, RetrievalRepository,
+        SourceRepository, SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
@@ -494,6 +494,44 @@ impl EmbeddingRepository for MemoryStore {
 
 #[async_trait]
 impl EvalRepository for MemoryStore {
+    async fn list_golden_dataset_evidence_identities(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<rag_debugger_core::GoldenDatasetEvidenceIdentity>, StorageError> {
+        let inner = self.lock()?;
+        let mut identities = Vec::new();
+        for document in inner
+            .documents
+            .values()
+            .filter(|document| workspace_owns_source(&inner, workspace_id, document.source_id))
+        {
+            identities.push(rag_debugger_core::GoldenDatasetEvidenceIdentity {
+                document_id: document.id,
+                document_checksum: document.checksum.clone(),
+                chunk_id: None,
+                chunk_checksum: None,
+                chunk_ordinal: None,
+            });
+            for chunk in inner.chunks.get(&document.id).into_iter().flatten() {
+                identities.push(rag_debugger_core::GoldenDatasetEvidenceIdentity {
+                    document_id: document.id,
+                    document_checksum: document.checksum.clone(),
+                    chunk_id: Some(chunk.id),
+                    chunk_checksum: Some(chunk.checksum.clone()),
+                    chunk_ordinal: Some(chunk.ordinal),
+                });
+            }
+        }
+        identities.sort_by_key(|identity| {
+            (
+                identity.document_id.0,
+                identity.chunk_ordinal,
+                identity.chunk_id.map(|id| id.0),
+            )
+        });
+        Ok(identities)
+    }
+
     async fn retrieval_eval_corpus_snapshot(
         &self,
         workspace_id: WorkspaceId,
@@ -534,6 +572,7 @@ impl EvalRepository for MemoryStore {
             &eval_case.query,
         )?;
         let dataset_id = ensure_default_eval_dataset(&mut inner, workspace_id)?.id;
+        validate_case_key_available(&inner, dataset_id, &eval_case.case_key, None)?;
         inner
             .retrieval_eval_case_datasets
             .insert(eval_case.id, dataset_id);
@@ -639,6 +678,14 @@ impl EvalRepository for MemoryStore {
         Ok(dataset)
     }
 
+    async fn apply_retrieval_eval_dataset_import(
+        &self,
+        workspace_id: WorkspaceId,
+        import: RetrievalEvalDatasetImportWrite,
+    ) -> Result<RetrievalEvalDataset, StorageError> {
+        apply_memory_dataset_import(self, workspace_id, import)
+    }
+
     async fn list_retrieval_eval_datasets(
         &self,
         workspace_id: WorkspaceId,
@@ -684,6 +731,7 @@ impl EvalRepository for MemoryStore {
         if !dataset_owned_by(&inner, workspace_id, dataset_id) {
             return Err(StorageError::NotFound);
         }
+        validate_case_key_available(&inner, dataset_id, &eval_case.case_key, None)?;
         validate_expected_evidence_owned(
             &inner,
             workspace_id,
@@ -1568,6 +1616,172 @@ fn workspace_owns_chunk(
         .chunks_by_id
         .get(&chunk_id)
         .is_some_and(|chunk| workspace_owns_source(inner, workspace_id, chunk.source_id))
+}
+
+fn apply_memory_dataset_import(
+    store: &MemoryStore,
+    workspace_id: WorkspaceId,
+    import: RetrievalEvalDatasetImportWrite,
+) -> Result<RetrievalEvalDataset, StorageError> {
+    let mut inner = store.lock()?;
+    let dataset_id = import.dataset.id;
+    let creating = import.expected_updated_at.is_none();
+    if creating {
+        if !inner.workspaces.contains_key(&workspace_id) {
+            return Err(StorageError::NotFound);
+        }
+        if inner.retrieval_eval_datasets.contains_key(&dataset_id) {
+            return Err(StorageError::Conflict(
+                "eval dataset already exists".to_owned(),
+            ));
+        }
+    } else {
+        if !dataset_owned_by(&inner, workspace_id, dataset_id) {
+            return Err(StorageError::NotFound);
+        }
+        if inner
+            .retrieval_eval_datasets
+            .get(&dataset_id)
+            .is_none_or(|dataset| Some(dataset.updated_at) != import.expected_updated_at)
+        {
+            return Err(StorageError::Conflict(
+                "eval dataset changed after import validation".to_owned(),
+            ));
+        }
+    }
+
+    let delete_ids = import
+        .case_ids_to_delete
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>();
+    if delete_ids.len() != import.case_ids_to_delete.len()
+        || delete_ids
+            .iter()
+            .any(|case_id| inner.retrieval_eval_case_datasets.get(case_id) != Some(&dataset_id))
+    {
+        return Err(StorageError::Conflict(
+            "import case deletion set is stale".to_owned(),
+        ));
+    }
+
+    let current_count = inner
+        .retrieval_eval_case_datasets
+        .values()
+        .filter(|candidate| **candidate == dataset_id)
+        .count();
+    let final_count = current_count - delete_ids.len() + import.cases_to_create.len();
+    if final_count > rag_debugger_core::RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES {
+        return Err(StorageError::Conflict(
+            "import exceeds the supported experiment case limit".to_owned(),
+        ));
+    }
+
+    let mut case_keys = inner
+        .retrieval_eval_case_datasets
+        .iter()
+        .filter(|(case_id, candidate)| **candidate == dataset_id && !delete_ids.contains(case_id))
+        .filter_map(|(case_id, _)| {
+            inner
+                .retrieval_eval_cases
+                .get(case_id)
+                .map(|case| case.case_key.clone())
+        })
+        .collect::<std::collections::HashSet<_>>();
+    for eval_case in &import.cases_to_update {
+        if inner.retrieval_eval_case_datasets.get(&eval_case.id) != Some(&dataset_id)
+            || inner
+                .retrieval_eval_cases
+                .get(&eval_case.id)
+                .is_none_or(|current| {
+                    current.case_key != eval_case.case_key
+                        || current.provenance != eval_case.provenance
+                })
+        {
+            return Err(StorageError::Conflict(
+                "import case update set is stale".to_owned(),
+            ));
+        }
+        validate_import_case(&inner, workspace_id, eval_case)?;
+    }
+    for eval_case in &import.cases_to_create {
+        if inner.retrieval_eval_cases.contains_key(&eval_case.id)
+            || !case_keys.insert(eval_case.case_key.clone())
+        {
+            return Err(StorageError::Conflict(
+                "import case key already exists".to_owned(),
+            ));
+        }
+        validate_import_case(&inner, workspace_id, eval_case)?;
+    }
+
+    for case_id in delete_ids {
+        inner.retrieval_eval_cases.remove(&case_id);
+        inner.retrieval_eval_case_datasets.remove(&case_id);
+    }
+    for eval_case in import.cases_to_update {
+        inner.retrieval_eval_cases.insert(eval_case.id, eval_case);
+    }
+    for eval_case in import.cases_to_create {
+        inner
+            .retrieval_eval_case_datasets
+            .insert(eval_case.id, dataset_id);
+        inner.retrieval_eval_cases.insert(eval_case.id, eval_case);
+    }
+    inner
+        .retrieval_eval_datasets
+        .insert(dataset_id, import.dataset.clone());
+    inner
+        .retrieval_eval_dataset_workspaces
+        .insert(dataset_id, workspace_id);
+
+    let mut dataset = import.dataset;
+    dataset.cases = cases_for_dataset(&inner, dataset_id);
+    Ok(dataset)
+}
+
+fn validate_import_case(
+    inner: &MemoryStoreInner,
+    workspace_id: WorkspaceId,
+    eval_case: &RetrievalEvalCase,
+) -> Result<(), StorageError> {
+    if !rag_debugger_core::is_valid_golden_dataset_key(&eval_case.case_key) {
+        return Err(StorageError::Conflict(
+            "import case key must not be empty".to_owned(),
+        ));
+    }
+    validate_expected_evidence_owned(
+        inner,
+        workspace_id,
+        &eval_case.expected_document_ids,
+        &eval_case.expected_chunk_ids,
+    )?;
+    validate_eval_case_provenance_owned(
+        inner,
+        workspace_id,
+        &eval_case.provenance,
+        &eval_case.query,
+    )
+}
+
+fn validate_case_key_available(
+    inner: &MemoryStoreInner,
+    dataset_id: RetrievalEvalDatasetId,
+    case_key: &str,
+    except: Option<RetrievalEvalCaseId>,
+) -> Result<(), StorageError> {
+    if !rag_debugger_core::is_valid_golden_dataset_key(case_key)
+        || inner.retrieval_eval_cases.values().any(|candidate| {
+            except != Some(candidate.id)
+                && candidate.case_key == case_key
+                && inner.retrieval_eval_case_datasets.get(&candidate.id) == Some(&dataset_id)
+        })
+    {
+        return Err(StorageError::Conflict(
+            "eval case key already exists".to_owned(),
+        ));
+    }
+    Ok(())
 }
 
 fn dataset_owned_by(

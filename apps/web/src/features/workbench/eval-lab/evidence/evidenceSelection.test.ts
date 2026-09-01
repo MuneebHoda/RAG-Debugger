@@ -405,6 +405,7 @@ describe("evidence selection helpers", () => {
 
 const caseFixture: RetrievalEvalCase = {
   id: "case-1",
+  case_key: "gpu-indexing",
   name: "GPU indexing",
   query: "How does GPU indexing work?",
   top_k: 5,

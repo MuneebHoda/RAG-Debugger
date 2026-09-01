@@ -151,8 +151,8 @@ describe("guided Eval Lab workflow", () => {
       screen.getByText(/eval lab is the measurement step/i),
     ).toBeInTheDocument();
     expect(
-      await screen.findByText("Production corpus gate"),
-    ).toBeInTheDocument();
+      await screen.findAllByText("Production corpus gate"),
+    ).not.toHaveLength(0);
     expect(await screen.findAllByText("failed")).not.toHaveLength(0);
     expect(screen.getByText(/quality trend/i)).toBeInTheDocument();
     expect(screen.getAllByText(/regressed/i).length).toBeGreaterThan(0);
@@ -1299,6 +1299,7 @@ function dataset() {
     cases: [
       {
         id: caseId,
+        case_key: "gpu-indexing-evidence",
         name: "GPU indexing evidence",
         query: "Which evidence explains GPU indexing workers?",
         top_k: 5,
@@ -1743,6 +1744,7 @@ function experimentProvenance() {
 function legacyCase(): RetrievalEvalCase {
   return {
     ...dataset().cases[0],
+    case_key: "legacy-stale-evidence",
     name: "Legacy stale evidence",
     query: "Which legacy evidence is required?",
     expected_chunk_ids: [staleChunkId],

@@ -275,6 +275,7 @@ pub(super) fn retrieval_eval_case_from_row(
 
     Ok(RetrievalEvalCase {
         id: RetrievalEvalCaseId(row.try_get("id")?),
+        case_key: row.try_get("case_key")?,
         name: row.try_get("name")?,
         query: row.try_get("query")?,
         top_k: as_u32(top_k, "top_k")?,

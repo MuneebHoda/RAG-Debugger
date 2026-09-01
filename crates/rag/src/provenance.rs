@@ -1134,6 +1134,7 @@ mod tests {
             description: None,
             cases: vec![RetrievalEvalCase {
                 id: RetrievalEvalCaseId(id(7)),
+                case_key: "private-case".to_owned(),
                 name: "Private case".to_owned(),
                 query: "PRIVATE query text".to_owned(),
                 top_k: 5,

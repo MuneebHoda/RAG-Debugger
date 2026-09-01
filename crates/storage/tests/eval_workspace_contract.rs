@@ -16,7 +16,8 @@ use rag_debugger_storage::{
     postgres::PostgresStore,
     repository::{
         AuthRepository, CiEvalRepository, DocumentRepository, EmbeddingRepository, EvalRepository,
-        ProjectRepository, SourceRepository, SubmittedExpectedEvidence, TraceRepository,
+        ProjectRepository, RetrievalEvalDatasetImportWrite, SourceRepository,
+        SubmittedExpectedEvidence, TraceRepository,
     },
     StorageError,
 };
@@ -51,6 +52,21 @@ async fn postgres_ci_baseline_lookup_reaches_past_one_hundred_incompatible_runs(
         .await
         .expect("connect Postgres store");
     run_ci_baseline_history_contract(&store).await;
+}
+
+#[tokio::test]
+async fn memory_golden_dataset_import_is_atomic_and_workspace_scoped() {
+    run_golden_dataset_import_contract(&MemoryStore::default()).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a migrated Postgres database"]
+async fn postgres_golden_dataset_import_is_atomic_and_workspace_scoped() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    let store = PostgresStore::connect(&database_url)
+        .await
+        .expect("connect Postgres store");
+    run_golden_dataset_import_contract(&store).await;
 }
 
 #[tokio::test]
@@ -629,6 +645,214 @@ where
     assert_eq!(selected.id, baseline_run.id);
 }
 
+async fn run_golden_dataset_import_contract<R>(repository: &R)
+where
+    R: AuthRepository + ProjectRepository + SourceRepository + DocumentRepository + EvalRepository,
+{
+    let workspace_a = create_workspace(repository, "golden-import-a").await;
+    let workspace_b = create_workspace(repository, "golden-import-b").await;
+    let (document_a, chunk_a) = create_eval_evidence(repository, workspace_a, "a").await;
+    let (document_b, chunk_b) = create_eval_evidence(repository, workspace_b, "b").await;
+
+    let identities_a = repository
+        .list_golden_dataset_evidence_identities(workspace_a)
+        .await
+        .expect("list workspace A portable evidence");
+    assert!(identities_a
+        .iter()
+        .all(|identity| identity.document_id == document_a.id));
+    assert!(!identities_a
+        .iter()
+        .any(|identity| identity.document_id == document_b.id));
+
+    let now = OffsetDateTime::now_utc();
+    let dataset = RetrievalEvalDataset {
+        id: RetrievalEvalDatasetId(Uuid::now_v7()),
+        name: "Imported golden dataset".to_owned(),
+        description: Some("Versioned fixture".to_owned()),
+        cases: Vec::new(),
+        created_at: now,
+        updated_at: now,
+    };
+    let mut foreign_case = eval_case("foreign-evidence");
+    foreign_case.expected_document_ids = vec![document_b.id];
+    foreign_case.expected_chunk_ids = vec![chunk_b.id];
+    let rejected = repository
+        .apply_retrieval_eval_dataset_import(
+            workspace_a,
+            RetrievalEvalDatasetImportWrite {
+                dataset: dataset.clone(),
+                expected_updated_at: None,
+                cases_to_create: vec![foreign_case],
+                cases_to_update: Vec::new(),
+                case_ids_to_delete: Vec::new(),
+            },
+        )
+        .await;
+    assert!(matches!(rejected, Err(StorageError::UnavailableEvidence)));
+    assert!(matches!(
+        repository
+            .get_retrieval_eval_dataset(workspace_a, dataset.id)
+            .await,
+        Err(StorageError::NotFound)
+    ));
+
+    let mut alpha = eval_case("alpha");
+    alpha.expected_document_ids = vec![document_a.id];
+    alpha.expected_chunk_ids = vec![chunk_a.id];
+    let created = repository
+        .apply_retrieval_eval_dataset_import(
+            workspace_a,
+            RetrievalEvalDatasetImportWrite {
+                dataset: dataset.clone(),
+                expected_updated_at: None,
+                cases_to_create: vec![alpha.clone()],
+                cases_to_update: Vec::new(),
+                case_ids_to_delete: Vec::new(),
+            },
+        )
+        .await
+        .expect("create imported dataset atomically");
+    assert_eq!(created.cases.len(), 1);
+    assert_eq!(created.cases[0].case_key, "alpha");
+
+    let stale = repository
+        .apply_retrieval_eval_dataset_import(
+            workspace_a,
+            RetrievalEvalDatasetImportWrite {
+                dataset: RetrievalEvalDataset {
+                    updated_at: now + Duration::seconds(1),
+                    ..created.clone()
+                },
+                expected_updated_at: Some(now - Duration::seconds(1)),
+                cases_to_create: vec![eval_case("must-not-persist")],
+                cases_to_update: Vec::new(),
+                case_ids_to_delete: Vec::new(),
+            },
+        )
+        .await;
+    assert!(matches!(stale, Err(StorageError::Conflict(_))));
+
+    let mut changed_alpha = created.cases[0].clone();
+    changed_alpha.notes = Some("merged change".to_owned());
+    let mut beta = eval_case("beta");
+    beta.expected_document_ids = vec![document_a.id];
+    beta.expected_chunk_ids = vec![chunk_a.id];
+    let merged = repository
+        .apply_retrieval_eval_dataset_import(
+            workspace_a,
+            RetrievalEvalDatasetImportWrite {
+                dataset: RetrievalEvalDataset {
+                    updated_at: created.updated_at + Duration::seconds(1),
+                    cases: Vec::new(),
+                    ..created.clone()
+                },
+                expected_updated_at: Some(created.updated_at),
+                cases_to_create: vec![beta],
+                cases_to_update: vec![changed_alpha],
+                case_ids_to_delete: Vec::new(),
+            },
+        )
+        .await
+        .expect("merge imported cases atomically");
+    assert_eq!(merged.cases.len(), 2);
+    assert!(merged
+        .cases
+        .iter()
+        .any(|case| case.case_key == "alpha" && case.notes.as_deref() == Some("merged change")));
+    assert!(!merged
+        .cases
+        .iter()
+        .any(|case| case.case_key == "must-not-persist"));
+
+    let alpha_id = merged
+        .cases
+        .iter()
+        .find(|case| case.case_key == "alpha")
+        .expect("alpha case")
+        .id;
+    let replaced = repository
+        .apply_retrieval_eval_dataset_import(
+            workspace_a,
+            RetrievalEvalDatasetImportWrite {
+                dataset: RetrievalEvalDataset {
+                    updated_at: merged.updated_at + Duration::seconds(1),
+                    cases: Vec::new(),
+                    ..merged.clone()
+                },
+                expected_updated_at: Some(merged.updated_at),
+                cases_to_create: Vec::new(),
+                cases_to_update: Vec::new(),
+                case_ids_to_delete: vec![alpha_id],
+            },
+        )
+        .await
+        .expect("replace removes omitted cases");
+    assert_eq!(replaced.cases.len(), 1);
+    assert_eq!(replaced.cases[0].case_key, "beta");
+}
+
+async fn create_eval_evidence<R>(
+    repository: &R,
+    workspace_id: WorkspaceId,
+    label: &str,
+) -> (Document, Chunk)
+where
+    R: ProjectRepository + SourceRepository + DocumentRepository,
+{
+    let project = repository
+        .ensure_default_project(workspace_id)
+        .await
+        .expect("default evidence project");
+    let source = Source {
+        id: SourceId(Uuid::now_v7()),
+        project_id: project.id,
+        name: format!("Golden source {label}"),
+        kind: SourceKind::FileSet {
+            root_hint: label.to_owned(),
+        },
+        sync_policy: SourceSyncPolicy::Manual,
+        chunking: ChunkingConfig::default(),
+    };
+    repository
+        .create_source(workspace_id, source.clone())
+        .await
+        .expect("create golden source");
+    let document = Document {
+        id: DocumentId(Uuid::now_v7()),
+        source_id: source.id,
+        path: format!("{label}.md"),
+        mime_type: Some("text/markdown".to_owned()),
+        checksum: format!("document-{label}"),
+        byte_size: 8,
+        profile: DocumentProfile::TechnicalDocs,
+        extraction_quality: ExtractionQuality::High,
+        warnings: Vec::new(),
+    };
+    let chunk = Chunk {
+        id: ChunkId(Uuid::now_v7()),
+        source_id: source.id,
+        document_id: document.id,
+        ordinal: 0,
+        text: format!("evidence {label}"),
+        token_count: 2,
+        byte_range: ByteRange { start: 0, end: 8 },
+        checksum: format!("chunk-{label}"),
+        strategy: ChunkingStrategy::Structured,
+        section_title: None,
+        split_reason: ChunkSplitReason::DocumentEnd,
+        quality_flags: Vec::new(),
+        is_duplicate: false,
+        text_density: 1.0,
+        evidence_score_hint: 1.0,
+    };
+    repository
+        .insert_document_with_chunks(workspace_id, document.clone(), vec![chunk.clone()])
+        .await
+        .expect("insert golden evidence");
+    (document, chunk)
+}
+
 async fn create_workspace<R>(repository: &R, label: &str) -> WorkspaceId
 where
     R: AuthRepository,
@@ -680,6 +904,7 @@ fn dataset(name: &str) -> RetrievalEvalDataset {
 fn eval_case(name: &str) -> RetrievalEvalCase {
     RetrievalEvalCase {
         id: RetrievalEvalCaseId(Uuid::now_v7()),
+        case_key: name.to_ascii_lowercase().replace(' ', "-"),
         name: name.to_owned(),
         query: format!("{name} query"),
         top_k: 5,

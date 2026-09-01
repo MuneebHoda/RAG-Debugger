@@ -1,4 +1,4 @@
-import { jsonRequest, requestJson } from "./client";
+import { API_BASE_URL, jsonRequest, requestJson } from "./client";
 import type { EmbeddingModelInfo } from "./embeddings";
 import type { RetrievalMode } from "./retrieval";
 import type {
@@ -20,6 +20,7 @@ export interface CreateRetrievalEvalCaseRequest {
 
 export interface RetrievalEvalCase {
   id: string;
+  case_key: string;
   name: string;
   query: string;
   top_k: number;
@@ -101,6 +102,82 @@ export interface RetrievalEvalDataset {
 export interface CreateRetrievalEvalDatasetRequest {
   name: string;
   description?: string | null;
+}
+
+export type GoldenDatasetContentMode = "full" | "metadata_only";
+export type GoldenDatasetImportMode =
+  | "create_new"
+  | "merge_by_case_key"
+  | "replace_dataset"
+  | "validate_only";
+
+export interface GoldenDataset {
+  schema_version: number;
+  content_mode: GoldenDatasetContentMode;
+  dataset: {
+    key: string;
+    name: string;
+    description: string | null;
+  };
+  cases: GoldenDatasetCase[];
+}
+
+export interface GoldenDatasetCase {
+  case_key: string;
+  name: string;
+  query: string | null;
+  top_k: number;
+  expected_documents: Array<{ document_checksum: string }>;
+  expected_chunks: Array<{
+    document_checksum: string;
+    chunk_checksum: string;
+    ordinal: number;
+  }>;
+  notes: string | null;
+  provenance?: {
+    source_trace_id: string;
+    source: "native" | "otlp_http";
+    privacy_mode: "metadata_only" | "snippets_allowed" | "full_local_only";
+  };
+}
+
+export interface GoldenDatasetImportOptions {
+  mode: GoldenDatasetImportMode;
+  targetDatasetId?: string;
+  dryRun: boolean;
+  confirmReplace: boolean;
+  validationToken?: string | null;
+}
+
+export interface GoldenDatasetImportSummary {
+  schema_version: number;
+  mode: GoldenDatasetImportMode;
+  dry_run: boolean;
+  valid: boolean;
+  applied: boolean;
+  action: "create_dataset" | "update_dataset" | "validate_only";
+  dataset_id: string | null;
+  cases_total: number;
+  cases_added: number;
+  cases_changed: number;
+  cases_skipped: number;
+  cases_removed: number;
+  invalid_cases: Array<{
+    case_key: string;
+    code: string;
+    message: string;
+  }>;
+  unresolved_evidence: Array<{
+    case_key: string;
+    kind: "document" | "chunk";
+    document_checksum: string;
+    chunk_checksum: string | null;
+    ordinal: number | null;
+  }>;
+  privacy_sensitive_fields: Array<
+    "queries" | "notes" | "evidence_references" | "provenance"
+  >;
+  validation_token: string | null;
 }
 
 export interface UpdateRetrievalEvalCaseRequest {
@@ -521,6 +598,27 @@ export function getEvalLabDataset(
   return requestJson<RetrievalEvalDataset>(
     `/api/v1/eval-lab/datasets/${datasetId}`,
     { signal },
+  );
+}
+
+export function goldenDatasetExportUrl(
+  datasetId: string,
+  contentMode: GoldenDatasetContentMode,
+): string {
+  return `${API_BASE_URL}/api/v1/eval-lab/datasets/${datasetId}/export?content_mode=${contentMode}`;
+}
+
+export function importGoldenDataset(
+  dataset: GoldenDataset,
+  options: GoldenDatasetImportOptions,
+): Promise<GoldenDatasetImportSummary> {
+  let params = `mode=${options.mode}&dry_run=${options.dryRun}&confirm_replace=${options.confirmReplace}&validation_token=${options.validationToken ?? ""}`;
+  if (options.targetDatasetId) {
+    params += `&target_dataset_id=${options.targetDatasetId}`;
+  }
+  return requestJson<GoldenDatasetImportSummary>(
+    `/api/v1/eval-lab/datasets/import?${params}`,
+    jsonRequest("POST", dataset),
   );
 }
 

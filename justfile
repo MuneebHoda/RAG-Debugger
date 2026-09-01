@@ -64,6 +64,7 @@ ci-check: governance-check rust-check web-check
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test evidence_repository_contract postgres_evidence_repository_is_deterministic_and_bounded -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test eval_workspace_contract postgres_eval_repository_enforces_workspace_ownership -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test eval_workspace_contract postgres_ci_baseline_lookup_reaches_past_one_hundred_incompatible_runs -- --ignored
+    DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test eval_workspace_contract postgres_golden_dataset_import_is_atomic_and_workspace_scoped -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test eval_workspace_contract postgres_eval_corpus_snapshot_stays_consistent_across_concurrent_mutation -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test runtime_workspace_contract postgres_runtime_repository_enforces_workspace_ownership -- --ignored
     DATABASE_URL='{{ database_url }}' cargo test -p rag-debugger-storage --test workspace_migration workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity -- --ignored

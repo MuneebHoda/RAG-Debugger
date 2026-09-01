@@ -1,3 +1,5 @@
+use std::collections::{HashMap, HashSet};
+
 use rag_debugger_core::*;
 use sqlx::{types::Json, Postgres, Row, Transaction};
 use time::OffsetDateTime;
@@ -5,11 +7,47 @@ use uuid::Uuid;
 
 use super::{codec::*, PostgresStore};
 use crate::{
-    repository::{RetrievalEvalCorpusSnapshot, SubmittedExpectedEvidence},
+    repository::{
+        RetrievalEvalCorpusSnapshot, RetrievalEvalDatasetImportWrite, SubmittedExpectedEvidence,
+    },
     StorageError,
 };
 
 impl PostgresStore {
+    pub(super) async fn list_golden_dataset_evidence_identities(
+        &self,
+        workspace_id: WorkspaceId,
+    ) -> Result<Vec<GoldenDatasetEvidenceIdentity>, StorageError> {
+        let rows = sqlx::query(
+            "SELECT d.id AS document_id, d.checksum AS document_checksum,
+                    c.id AS chunk_id, c.checksum AS chunk_checksum, c.ordinal AS chunk_ordinal
+             FROM documents d
+             INNER JOIN sources s ON s.id = d.source_id
+             INNER JOIN projects p ON p.id = s.project_id
+             LEFT JOIN chunks c ON c.document_id = d.id
+             WHERE p.workspace_id = $1
+             ORDER BY d.id, c.ordinal, c.id",
+        )
+        .bind(workspace_id.0)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.iter()
+            .map(|row| {
+                Ok(GoldenDatasetEvidenceIdentity {
+                    document_id: DocumentId(row.try_get("document_id")?),
+                    document_checksum: row.try_get("document_checksum")?,
+                    chunk_id: row.try_get::<Option<Uuid>, _>("chunk_id")?.map(ChunkId),
+                    chunk_checksum: row.try_get("chunk_checksum")?,
+                    chunk_ordinal: row
+                        .try_get::<Option<i32>, _>("chunk_ordinal")?
+                        .map(|ordinal| as_u32(ordinal, "chunk ordinal"))
+                        .transpose()?,
+                })
+            })
+            .collect()
+    }
+
     pub(super) async fn retrieval_eval_corpus_snapshot(
         &self,
         workspace_id: WorkspaceId,
@@ -44,6 +82,7 @@ impl PostgresStore {
         workspace_id: WorkspaceId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError> {
+        validate_eval_case_key(&eval_case.case_key)?;
         let dataset_id = ensure_default_eval_dataset(&self.pool, workspace_id).await?;
         let expected_chunk_ids = eval_case
             .expected_chunk_ids
@@ -73,13 +112,14 @@ impl PostgresStore {
         .await?;
         sqlx::query(
             "INSERT INTO retrieval_eval_cases (
-                id, dataset_id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
+                id, dataset_id, case_key, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
                 source_trace_id, source_ingestion_source, source_privacy_mode, created_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(eval_case.id.0)
         .bind(dataset_id.0)
+        .bind(&eval_case.case_key)
         .bind(&eval_case.name)
         .bind(&eval_case.query)
         .bind(eval_case.top_k as i32)
@@ -91,7 +131,8 @@ impl PostgresStore {
         .bind(eval_case.provenance.as_ref().map(|value| value.privacy_mode.as_str()))
         .bind(eval_case.created_at)
         .execute(&mut *transaction)
-        .await?;
+        .await
+        .map_err(eval_case_insert_error)?;
         transaction.commit().await?;
 
         Ok(eval_case)
@@ -102,7 +143,7 @@ impl PostgresStore {
         workspace_id: WorkspaceId,
     ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
         let rows = sqlx::query(
-            "SELECT c.id, c.name, c.query, c.top_k, c.expected_chunk_ids,
+            "SELECT c.id, c.case_key, c.name, c.query, c.top_k, c.expected_chunk_ids,
                     c.expected_document_ids, c.notes, c.source_trace_id,
                     c.source_ingestion_source, c.source_privacy_mode, c.created_at
              FROM retrieval_eval_cases c
@@ -124,7 +165,7 @@ impl PostgresStore {
     ) -> Result<Vec<RetrievalEvalCase>, StorageError> {
         let ids = case_ids.iter().map(|case_id| case_id.0).collect::<Vec<_>>();
         let rows = sqlx::query(
-            "SELECT c.id, c.name, c.query, c.top_k, c.expected_chunk_ids,
+            "SELECT c.id, c.case_key, c.name, c.query, c.top_k, c.expected_chunk_ids,
                     c.expected_document_ids, c.notes, c.source_trace_id,
                     c.source_ingestion_source, c.source_privacy_mode, c.created_at
              FROM retrieval_eval_cases c
@@ -146,7 +187,7 @@ impl PostgresStore {
         case_id: RetrievalEvalCaseId,
     ) -> Result<RetrievalEvalCase, StorageError> {
         let row = sqlx::query(
-            "SELECT c.id, c.name, c.query, c.top_k, c.expected_chunk_ids,
+            "SELECT c.id, c.case_key, c.name, c.query, c.top_k, c.expected_chunk_ids,
                     c.expected_document_ids, c.notes, c.source_trace_id,
                     c.source_ingestion_source, c.source_privacy_mode, c.created_at
              FROM retrieval_eval_cases c
@@ -329,6 +370,181 @@ impl PostgresStore {
         Ok(dataset)
     }
 
+    pub(super) async fn apply_retrieval_eval_dataset_import(
+        &self,
+        workspace_id: WorkspaceId,
+        import: RetrievalEvalDatasetImportWrite,
+    ) -> Result<RetrievalEvalDataset, StorageError> {
+        let mut transaction = self.pool.begin().await?;
+        let dataset_id = import.dataset.id;
+        if let Some(expected_updated_at) = import.expected_updated_at {
+            let stored_updated_at = sqlx::query_scalar::<_, OffsetDateTime>(
+                "SELECT updated_at
+                 FROM retrieval_eval_datasets
+                 WHERE id = $1 AND workspace_id = $2
+                 FOR UPDATE",
+            )
+            .bind(dataset_id.0)
+            .bind(workspace_id.0)
+            .fetch_optional(&mut *transaction)
+            .await?
+            .ok_or(StorageError::NotFound)?;
+            if stored_updated_at != expected_updated_at {
+                return Err(StorageError::Conflict(
+                    "eval dataset changed after import validation".to_owned(),
+                ));
+            }
+        } else {
+            let inserted = sqlx::query(
+                "INSERT INTO retrieval_eval_datasets (
+                     id, workspace_id, is_default, name, description, created_at, updated_at
+                 )
+                 SELECT $1, $2, FALSE, $3, $4, $5, $6
+                 WHERE EXISTS (SELECT 1 FROM workspaces WHERE id = $2)",
+            )
+            .bind(dataset_id.0)
+            .bind(workspace_id.0)
+            .bind(&import.dataset.name)
+            .bind(&import.dataset.description)
+            .bind(import.dataset.created_at)
+            .bind(import.dataset.updated_at)
+            .execute(&mut *transaction)
+            .await?;
+            if inserted.rows_affected() != 1 {
+                return Err(StorageError::NotFound);
+            }
+        }
+
+        let current_rows = sqlx::query(
+            "SELECT id, case_key, name, query, top_k, expected_chunk_ids,
+                    expected_document_ids, notes, source_trace_id,
+                    source_ingestion_source, source_privacy_mode, created_at
+             FROM retrieval_eval_cases
+             WHERE dataset_id = $1
+             ORDER BY case_key
+             FOR UPDATE",
+        )
+        .bind(dataset_id.0)
+        .fetch_all(&mut *transaction)
+        .await?;
+        let current_cases = current_rows
+            .iter()
+            .map(retrieval_eval_case_from_row)
+            .collect::<Result<Vec<_>, _>>()?;
+        let current_by_id = current_cases
+            .iter()
+            .map(|case| (case.id, case))
+            .collect::<HashMap<_, _>>();
+        let delete_ids = import
+            .case_ids_to_delete
+            .iter()
+            .copied()
+            .collect::<HashSet<_>>();
+        if delete_ids.len() != import.case_ids_to_delete.len()
+            || delete_ids
+                .iter()
+                .any(|case_id| !current_by_id.contains_key(case_id))
+        {
+            return Err(StorageError::Conflict(
+                "import case deletion set is stale".to_owned(),
+            ));
+        }
+        let final_count = current_cases.len() - delete_ids.len() + import.cases_to_create.len();
+        if final_count > RETRIEVAL_EVAL_EXPERIMENT_MAX_CASES {
+            return Err(StorageError::Conflict(
+                "import exceeds the supported experiment case limit".to_owned(),
+            ));
+        }
+
+        let mut case_keys = current_cases
+            .iter()
+            .filter(|case| !delete_ids.contains(&case.id))
+            .map(|case| case.case_key.clone())
+            .collect::<HashSet<_>>();
+        for eval_case in &import.cases_to_update {
+            if current_by_id.get(&eval_case.id).is_none_or(|current| {
+                delete_ids.contains(&eval_case.id)
+                    || current.case_key != eval_case.case_key
+                    || current.provenance != eval_case.provenance
+            }) {
+                return Err(StorageError::Conflict(
+                    "import case update set is stale".to_owned(),
+                ));
+            }
+            validate_import_case_on(&mut transaction, workspace_id, eval_case).await?;
+        }
+        let create_ids = import
+            .cases_to_create
+            .iter()
+            .map(|case| case.id.0)
+            .collect::<Vec<_>>();
+        if !create_ids.is_empty()
+            && sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (
+                     SELECT 1 FROM retrieval_eval_cases WHERE id = ANY($1)
+                 )",
+            )
+            .bind(&create_ids)
+            .fetch_one(&mut *transaction)
+            .await?
+        {
+            return Err(StorageError::Conflict(
+                "import case identifier already exists".to_owned(),
+            ));
+        }
+        for eval_case in &import.cases_to_create {
+            if !case_keys.insert(eval_case.case_key.clone()) {
+                return Err(StorageError::Conflict(
+                    "import case key already exists".to_owned(),
+                ));
+            }
+            validate_import_case_on(&mut transaction, workspace_id, eval_case).await?;
+        }
+
+        if !delete_ids.is_empty() {
+            let ids = delete_ids
+                .iter()
+                .map(|case_id| case_id.0)
+                .collect::<Vec<_>>();
+            let deleted = sqlx::query(
+                "DELETE FROM retrieval_eval_cases
+                 WHERE dataset_id = $1 AND id = ANY($2)",
+            )
+            .bind(dataset_id.0)
+            .bind(ids)
+            .execute(&mut *transaction)
+            .await?;
+            if deleted.rows_affected() != delete_ids.len() as u64 {
+                return Err(StorageError::Conflict(
+                    "import case deletion set is stale".to_owned(),
+                ));
+            }
+        }
+        for eval_case in &import.cases_to_update {
+            update_import_case_on(&mut transaction, dataset_id, eval_case).await?;
+        }
+        for eval_case in &import.cases_to_create {
+            insert_import_case_on(&mut transaction, dataset_id, eval_case).await?;
+        }
+        if import.expected_updated_at.is_some() {
+            sqlx::query(
+                "UPDATE retrieval_eval_datasets
+                 SET name = $2, description = $3, updated_at = $4
+                 WHERE id = $1 AND workspace_id = $5",
+            )
+            .bind(dataset_id.0)
+            .bind(&import.dataset.name)
+            .bind(&import.dataset.description)
+            .bind(import.dataset.updated_at)
+            .bind(workspace_id.0)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        transaction.commit().await?;
+        self.get_retrieval_eval_dataset(workspace_id, dataset_id)
+            .await
+    }
+
     pub(super) async fn list_retrieval_eval_datasets(
         &self,
         workspace_id: WorkspaceId,
@@ -376,7 +592,7 @@ impl PostgresStore {
         .ok_or(StorageError::NotFound)?;
 
         let case_rows = sqlx::query(
-            "SELECT id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
+            "SELECT id, case_key, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
                     source_trace_id, source_ingestion_source, source_privacy_mode, created_at
              FROM retrieval_eval_cases
              WHERE dataset_id = $1
@@ -405,6 +621,7 @@ impl PostgresStore {
         dataset_id: RetrievalEvalDatasetId,
         eval_case: RetrievalEvalCase,
     ) -> Result<RetrievalEvalCase, StorageError> {
+        validate_eval_case_key(&eval_case.case_key)?;
         let expected_chunk_ids = eval_case
             .expected_chunk_ids
             .iter()
@@ -446,13 +663,14 @@ impl PostgresStore {
 
         sqlx::query(
             "INSERT INTO retrieval_eval_cases (
-                id, dataset_id, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
+                id, dataset_id, case_key, name, query, top_k, expected_chunk_ids, expected_document_ids, notes,
                 source_trace_id, source_ingestion_source, source_privacy_mode, created_at
              )
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         )
         .bind(eval_case.id.0)
         .bind(dataset_id.0)
+        .bind(&eval_case.case_key)
         .bind(&eval_case.name)
         .bind(&eval_case.query)
         .bind(eval_case.top_k as i32)
@@ -464,7 +682,8 @@ impl PostgresStore {
         .bind(eval_case.provenance.as_ref().map(|value| value.privacy_mode.as_str()))
         .bind(eval_case.created_at)
         .execute(&mut *transaction)
-        .await?;
+        .await
+        .map_err(eval_case_insert_error)?;
 
         sqlx::query("UPDATE retrieval_eval_datasets SET updated_at = $1 WHERE id = $2")
             .bind(OffsetDateTime::now_utc())
@@ -798,6 +1017,171 @@ impl PostgresStore {
         };
 
         Ok(Some(eval_experiment_from_row(&row)?))
+    }
+}
+
+async fn validate_import_case_on(
+    transaction: &mut Transaction<'_, Postgres>,
+    workspace_id: WorkspaceId,
+    eval_case: &RetrievalEvalCase,
+) -> Result<(), StorageError> {
+    validate_eval_case_key(&eval_case.case_key)?;
+    let document_ids = eval_case
+        .expected_document_ids
+        .iter()
+        .map(|id| id.0)
+        .collect::<Vec<_>>();
+    let chunk_ids = eval_case
+        .expected_chunk_ids
+        .iter()
+        .map(|id| id.0)
+        .collect::<Vec<_>>();
+    validate_expected_evidence(transaction, workspace_id, &document_ids, &chunk_ids).await?;
+    validate_eval_case_provenance(
+        transaction,
+        workspace_id,
+        &eval_case.provenance,
+        &eval_case.query,
+    )
+    .await
+}
+
+fn validate_eval_case_key(case_key: &str) -> Result<(), StorageError> {
+    if rag_debugger_core::is_valid_golden_dataset_key(case_key) {
+        Ok(())
+    } else {
+        Err(StorageError::Conflict(
+            "eval case key has an invalid format".to_owned(),
+        ))
+    }
+}
+
+async fn insert_import_case_on(
+    transaction: &mut Transaction<'_, Postgres>,
+    dataset_id: RetrievalEvalDatasetId,
+    eval_case: &RetrievalEvalCase,
+) -> Result<(), StorageError> {
+    let expected_chunk_ids = eval_case
+        .expected_chunk_ids
+        .iter()
+        .map(|id| id.0)
+        .collect::<Vec<_>>();
+    let expected_document_ids = eval_case
+        .expected_document_ids
+        .iter()
+        .map(|id| id.0)
+        .collect::<Vec<_>>();
+    sqlx::query(
+        "INSERT INTO retrieval_eval_cases (
+             id, dataset_id, case_key, name, query, top_k, expected_chunk_ids,
+             expected_document_ids, notes, source_trace_id, source_ingestion_source,
+             source_privacy_mode, created_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+    )
+    .bind(eval_case.id.0)
+    .bind(dataset_id.0)
+    .bind(&eval_case.case_key)
+    .bind(&eval_case.name)
+    .bind(&eval_case.query)
+    .bind(eval_case.top_k as i32)
+    .bind(expected_chunk_ids)
+    .bind(expected_document_ids)
+    .bind(&eval_case.notes)
+    .bind(
+        eval_case
+            .provenance
+            .as_ref()
+            .map(|value| value.source_trace_id.0),
+    )
+    .bind(
+        eval_case
+            .provenance
+            .as_ref()
+            .map(|value| value.source.as_str()),
+    )
+    .bind(
+        eval_case
+            .provenance
+            .as_ref()
+            .map(|value| value.privacy_mode.as_str()),
+    )
+    .bind(eval_case.created_at)
+    .execute(&mut **transaction)
+    .await
+    .map_err(eval_case_insert_error)?;
+    Ok(())
+}
+
+async fn update_import_case_on(
+    transaction: &mut Transaction<'_, Postgres>,
+    dataset_id: RetrievalEvalDatasetId,
+    eval_case: &RetrievalEvalCase,
+) -> Result<(), StorageError> {
+    let expected_chunk_ids = eval_case
+        .expected_chunk_ids
+        .iter()
+        .map(|id| id.0)
+        .collect::<Vec<_>>();
+    let expected_document_ids = eval_case
+        .expected_document_ids
+        .iter()
+        .map(|id| id.0)
+        .collect::<Vec<_>>();
+    let updated = sqlx::query(
+        "UPDATE retrieval_eval_cases
+         SET name = $4, query = $5, top_k = $6, expected_chunk_ids = $7,
+             expected_document_ids = $8, notes = $9
+         WHERE id = $1 AND dataset_id = $2 AND case_key = $3
+           AND source_trace_id IS NOT DISTINCT FROM $10
+           AND source_ingestion_source IS NOT DISTINCT FROM $11
+           AND source_privacy_mode IS NOT DISTINCT FROM $12",
+    )
+    .bind(eval_case.id.0)
+    .bind(dataset_id.0)
+    .bind(&eval_case.case_key)
+    .bind(&eval_case.name)
+    .bind(&eval_case.query)
+    .bind(eval_case.top_k as i32)
+    .bind(expected_chunk_ids)
+    .bind(expected_document_ids)
+    .bind(&eval_case.notes)
+    .bind(
+        eval_case
+            .provenance
+            .as_ref()
+            .map(|value| value.source_trace_id.0),
+    )
+    .bind(
+        eval_case
+            .provenance
+            .as_ref()
+            .map(|value| value.source.as_str()),
+    )
+    .bind(
+        eval_case
+            .provenance
+            .as_ref()
+            .map(|value| value.privacy_mode.as_str()),
+    )
+    .execute(&mut **transaction)
+    .await?;
+    if updated.rows_affected() != 1 {
+        return Err(StorageError::Conflict(
+            "import case update set is stale".to_owned(),
+        ));
+    }
+    Ok(())
+}
+
+fn eval_case_insert_error(error: sqlx::Error) -> StorageError {
+    if error
+        .as_database_error()
+        .is_some_and(|database_error| database_error.code().as_deref() == Some("23505"))
+    {
+        StorageError::Conflict("eval case key already exists".to_owned())
+    } else {
+        StorageError::Sqlx(error)
     }
 }
 

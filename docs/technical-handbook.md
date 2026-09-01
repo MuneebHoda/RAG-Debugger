@@ -105,6 +105,8 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `GET /api/v1/eval-lab/datasets`: list Eval Lab datasets.
 - `POST /api/v1/eval-lab/datasets`: create an Eval Lab dataset.
 - `GET /api/v1/eval-lab/datasets/:dataset_id`: load a dataset with cases.
+- `GET /api/v1/eval-lab/datasets/:dataset_id/export`: download deterministic golden dataset schema v1 JSON in `metadata_only` or `full` mode.
+- `POST /api/v1/eval-lab/datasets/import`: validate or atomically apply a session-authenticated golden dataset import.
 - `POST /api/v1/eval-lab/evidence/query`: resolve selected evidence IDs and search bounded document/chunk candidates.
 - `POST /api/v1/eval-lab/datasets/:dataset_id/cases`: add a case to a dataset.
 - `PATCH /api/v1/eval-lab/cases/:case_id`: update a case.
@@ -114,6 +116,7 @@ All handler errors serialize as `{ "error": { "code", "message" } }`. Expected c
 - `GET /api/v1/eval-lab/experiments/:experiment_id`: load one experiment.
 - `POST /api/v1/eval-lab/experiments/:experiment_id/compare`: compare selected modes.
 - `POST /api/v1/eval-lab/ci/runs`: run an Eval Lab dataset from CI using an API key.
+- `POST /api/v1/eval-lab/ci/datasets/import`: validate or atomically apply the same import using the existing `ci_eval_runs` key scope.
 - `GET /api/v1/eval-lab/ci/runs`: list CI eval runs.
 - `GET /api/v1/eval-lab/ci/runs/:run_id`: load one CI eval run.
 - `GET /api/v1/eval-lab/ci/runs/:run_id/report`: load the export-ready CI gate report.
@@ -127,6 +130,8 @@ Manual and CI Eval Lab runs share one experiment runner. It rejects datasets abo
 Migrations are in `migrations`.
 
 Core tables include `organizations`, `workspaces`, `users`, `workspace_memberships`, `auth_sessions`, `api_keys`, `projects`, `sources`, `ingestion_runs`, `documents`, `chunks`, `chunk_embeddings`, `retrieval_playground_runs`, `retrieval_playground_hits`, `debug_traces`, `trace_rerun_experiments`, `retrieval_eval_datasets`, `retrieval_eval_cases`, `retrieval_eval_runs`, `retrieval_eval_results`, `retrieval_eval_experiments`, and `ci_eval_runs`.
+
+`retrieval_eval_cases.case_key` is a required, dataset-unique portable identity separate from the local UUID. The migration backfills a normalized case-name key and assigns deterministic numeric suffixes by creation time and UUID. New cases allocate the first available readable suffix in both storage adapters.
 
 Experiment provenance is an additive optional field inside the existing `retrieval_eval_experiments.experiment_json` JSONB snapshot. No migration or legacy rewrite is required. MemoryStore and Postgres reject duplicate experiment IDs, validate provenance workspace/project ownership, and retain legacy JSON without provenance as readable `legacy_unknown` data.
 
@@ -271,6 +276,12 @@ The web UI exposes `/app/traces` as a searchable saved-run list. `/app/traces/:t
 ## Eval System
 
 Eval Lab is the primary quality-control workflow. Datasets group cases by product area, customer workflow, release gate, or corpus. Cases store a query plus expected chunk IDs, document IDs, or both. Experiments run a dataset across selected retrieval modes and freeze a config snapshot with `top_k`, scoring weights, embedding model metadata, and dataset case count.
+
+Golden dataset schema v1 makes those cases portable without exporting local UUIDs or corpus bodies. The core crate owns the typed wire contract; the RAG crate owns canonical serialization, checksum/ordinal evidence mapping, semantic validation, stable key generation, and deterministic import planning. Cases are sorted by stable key and evidence references by checksum tuple, producing byte-identical pretty JSON with one final newline. Tags, severity, and importance are omitted because the current Eval domain does not support them.
+
+Import modes are exactly `create_new`, `merge_by_case_key`, `replace_dataset`, and `validate_only`. All use the shared 250-case limit and workspace-scoped evidence identity repository query. A dry run returns counts, validation issues, unresolved references, privacy classes, and an apply token bound to the canonical file and target revision. MemoryStore commits the validated plan under one lock; PostgreSQL locks the target dataset and applies it in one transaction. Replace requires separate confirmation, stale tokens conflict, and invalid/validation-only plans never write.
+
+Portable evidence references contain document checksum or document checksum plus chunk checksum and ordinal. They contain no path, text, snippet, embedding, or local UUID and must resolve uniquely inside the target workspace. Metadata-only export omits description, queries, notes, and evidence. Full export is placed behind a UI privacy warning and is prohibited for datasets with full-local provenance; CI import also rejects full-local provenance. ADR 0009 records the schema and boundary.
 
 Metrics include recall@k, precision@k, MRR, top hit rank, citation coverage, weak evidence count, missing embedding failures, and latency p50/p95. Failure labels include expected evidence missing, correct document wrong chunk, low precision, weak evidence, missing embeddings, heading-only evidence, and duplicate evidence.
 
