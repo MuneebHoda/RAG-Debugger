@@ -70,4 +70,6 @@ As of the current quality baseline, the API emits one structured startup event c
 
 Add request tracing only with explicit sensitive-header marking and route-template logging. Any new logging or telemetry path triggers the privacy checklist.
 
+The approved hosted contract is in [Private-Alpha Deployment Architecture](deployment-architecture.md). Hosted JSON request telemetry, provider retention settings, alert delivery, and support bundles remain implementation work for #108. Until then, the current text logger is not sufficient evidence to activate production. Staging targets seven days of privacy-safe log retention and production targets fourteen; neither provider access logs nor application logs may capture request/response bodies, raw URLs, forwarded headers, Access identity claims, or credential values.
+
 Trace-ingestion handlers emit one fixed structured event per request. Allowed fields are source, outcome, stable rejection code, accepted/rejected request and span counts, complete/partial trace counts, mapping status, payload bytes, and parse/mapping latency. Request bodies, authorization/project headers, trace/span IDs, resource attributes, labels, queries, prompts, answers, snippets, exception messages, and stack traces are prohibited. OTLP partial-success messages contain stable reason-code counts only.

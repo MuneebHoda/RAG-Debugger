@@ -20,6 +20,8 @@ async fn test_app(environment: RuntimeEnvironment) -> axum::Router {
     let store = MemoryStore::default();
     let config = ApiConfig {
         environment,
+        release_sha: "test".to_owned(),
+        log_filter: "info".to_owned(),
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
         database_url: String::new(),

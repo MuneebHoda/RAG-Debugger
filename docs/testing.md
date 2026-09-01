@@ -162,8 +162,11 @@ When changing commands, paths, or architecture, update:
 - `docs/privacy-review-checklist.md`
 - `docs/logging-redaction.md`
 - `docs/technical-handbook.md`
+- `docs/deployment-architecture.md`
 - `docs/frontend-architecture.md`
 - Relevant ADRs in `docs/adr`
+
+`npm run governance:check` verifies the private-alpha deployment document, its required decision sections, ADR 0010, and cross-document links. API config unit tests exercise the staging/production URL, database TLS, cookie, release, logging, storage, auth, embedding, and upload contract without mutating process-global environment state.
 
 Generate and visually check the handbook PDF when architecture or API documentation changes:
 

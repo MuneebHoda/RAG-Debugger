@@ -213,6 +213,8 @@ async fn setup() -> TestContext {
     let store = Arc::new(MemoryStore::default());
     let config = ApiConfig {
         environment: RuntimeEnvironment::Local,
+        release_sha: "test".to_owned(),
+        log_filter: "info".to_owned(),
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
         database_url: String::new(),

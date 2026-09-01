@@ -18,6 +18,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Private-alpha deployment ADR and environment contract covering the Cloudflare/Render trust boundary, isolated staging/production configuration, fail-closed hosted startup, immutable promotion, migrations, recovery, cost limits, and scoped implementation ownership for issues #103–#108.
 - Versioned golden dataset schema v1 with stable persisted case keys, deterministic privacy-aware JSON export, mandatory dry-run import modes, atomic workspace-scoped MemoryStore/Postgres application, CI-key validation/import, and practical Eval Lab transfer controls.
 - Versioned immutable Eval Lab experiment provenance with deterministic canonical SHA-256 identities for datasets, corpus/document checksums, chunking/chunk sets, embedding configuration/indexes, retrieval/scoring/filters/runtime flags, and privacy-safe build/CI metadata.
 - Typed baseline compatibility with machine-readable reasons and changed fields, strict fully compatible automatic selection, explicit warned cross-configuration comparisons, legacy-unknown handling, Experiment Detail provenance, and privacy-safe audit-report context.

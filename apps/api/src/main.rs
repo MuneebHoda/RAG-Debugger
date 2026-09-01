@@ -14,7 +14,7 @@ use tracing::info;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = ApiConfig::from_env()?;
-    telemetry::init();
+    telemetry::init(&config.log_filter);
 
     let repository: Arc<dyn AppRepository> = match config.storage_backend {
         StorageBackend::Postgres => {
@@ -40,6 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!(
         address = %config.bind_addr,
         environment = ?config.environment,
+        release_sha = %config.release_sha,
         storage_backend = ?config.storage_backend,
         "starting corpuslab api"
     );

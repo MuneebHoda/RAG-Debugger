@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEPLOYMENT_CONTRACT_SECTIONS,
   PRIVATE_ADVISORY_URL,
   extractMarkdownLinkDestinations,
   markdownOutsideCode,
   validateCanonicalAdvisoryLinks,
+  validateDeploymentContract,
 } from "./validate-governance.mjs";
 
 function reportingLink(destination) {
@@ -122,5 +124,26 @@ test("rejects a non-canonical reference beside the canonical link", () => {
   assert.throws(
     () => validateCanonicalAdvisoryLinks("mixed.md", markdown),
     /non-canonical vulnerability-reporting URL/,
+  );
+});
+
+test("requires every deployment contract section and ADR link", () => {
+  const complete = [
+    "[ADR](adr/0010-private-alpha-deployment.md)",
+    ...DEPLOYMENT_CONTRACT_SECTIONS.map(
+      (heading) => `## ${heading}\n\nDefined.`,
+    ),
+  ].join("\n\n");
+
+  assert.doesNotThrow(() =>
+    validateDeploymentContract("deployment.md", complete),
+  );
+  assert.throws(
+    () =>
+      validateDeploymentContract(
+        "deployment.md",
+        complete.replace("## Operational Baseline", "## Operations"),
+      ),
+    /must define the Operational Baseline section/,
   );
 });

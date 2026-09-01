@@ -196,6 +196,10 @@ When adding a new tunable value:
 3. Add an entry to `.env.example`.
 4. Display it in Settings only if it is safe for users to see.
 
+The complete local/test/staging/production matrix is [Private-Alpha Deployment Architecture](deployment-architecture.md). `RAG_DEBUGGER_ENV=staging` and `production` use the same fail-closed hosted validation: explicit non-loopback bind, exact HTTPS origins, Postgres with required TLS and non-default credentials, hosted deployment mode, secure environment-specific `__Host-` cookies, local auth/embeddings, bounded uploads, non-verbose logs, and a full `RAG_DEBUGGER_RELEASE_SHA`.
+
+The production image, hosted migration command, and runtime web configuration do not exist yet; they belong to #103. Continue using `VITE_API_BASE_URL` only for local/test builds. Do not treat setting hosted environment variables on `cargo run` as a supported deployment.
+
 ## Technical Handbook
 
 The source handbook is `docs/technical-handbook.md`. Generate `docs/technical-handbook.pdf` with:

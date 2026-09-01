@@ -42,6 +42,14 @@ RAG Debugger handles sensitive traces, prompts, retrieved context, and source do
 
 Changes that move data, add external providers, alter auth/retention/export behavior, or add telemetry must complete the [`Privacy Review Checklist`](privacy-review-checklist.md). Hosted sync and external model-provider boundaries require an ADR.
 
+## Private-Alpha Provider Boundary
+
+The approved but not yet provisioned hosted topology is defined in [Private-Alpha Deployment Architecture](deployment-architecture.md). GitHub processes source and build metadata; GHCR stores the API image; Cloudflare Pages stores public web assets; Cloudflare Access/Tunnel terminates ingress and can technically observe API requests after TLS termination; Render runs the private API and stores hosted rows/backups in Postgres. Provider access is technical visibility, not permission to inspect customer data.
+
+Raw documents remain local by default. A user who deliberately uploads approved content to the hosted alpha sends it through Cloudflare and Render API memory; original file bytes are discarded, while extracted chunks and derived data persist in Render Postgres. Cloudflare/Render logs must never retain bodies, filenames, paths, queries, chunks, answers, traces, credentials, or cookies. `full_local_only` content is ineligible for hosted transfer, and no automatic local-to-hosted sync is introduced.
+
+Pull-request and staging systems use synthetic or explicitly sanitized data. Production databases, secrets, backups, and recovery copies never become general lower-environment fixtures. A production-derived restore drill uses an isolated access-restricted database and deletes it after verification. Contractual data residency is not claimed because Cloudflare edge processing is global; partners requiring a fixed jurisdiction are blocked pending a reviewed provider/region decision.
+
 ## Golden Dataset Boundary
 
 Schema v1 golden dataset JSON is a user-directed local export. It never includes raw document/chunk text, snippets, raw paths, embeddings, credentials, headers, cookies, database IDs, or timestamps. Portable document and chunk identity uses checksums plus chunk ordinal. Checksums are workspace-owned metadata and may still reveal corpus identity, so the full-export warning treats them as sensitive.
