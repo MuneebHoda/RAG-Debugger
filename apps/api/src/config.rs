@@ -12,8 +12,6 @@ use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use thiserror::Error;
 use tracing_subscriber::EnvFilter;
 
-const LOCAL_API_PORT: u16 = 8080;
-const LOCAL_WEB_PORT: u16 = 5173;
 const HOSTED_MAX_FILES_PER_REQUEST: u32 = 10;
 const HOSTED_MAX_FILE_BYTES: u64 = 20 * 1024 * 1024;
 const HOSTED_MAX_REQUEST_BYTES: u64 = 50 * 1024 * 1024;
@@ -105,19 +103,20 @@ impl ApiConfig {
             &std::env::var("RAG_DEBUGGER_ENV").unwrap_or_else(|_| "local".to_owned()),
         )?;
 
-        let host = environment_value(
-            "RAG_DEBUGGER_API_HOST",
-            Ipv4Addr::LOCALHOST.to_string(),
-            environment,
-        )?
+        let host = if environment.is_hosted() {
+            required_env_string("RAG_DEBUGGER_API_HOST")?
+        } else {
+            std::env::var("RAG_DEBUGGER_API_HOST")
+                .unwrap_or_else(|_| Ipv4Addr::LOCALHOST.to_string())
+        }
         .parse::<IpAddr>()
         .map_err(|error| ConfigError::InvalidHost(error.to_string()))?;
 
-        let port = environment_value(
-            "RAG_DEBUGGER_API_PORT",
-            LOCAL_API_PORT.to_string(),
-            environment,
-        )?
+        let port = if environment.is_hosted() {
+            required_env_string("RAG_DEBUGGER_API_PORT")?
+        } else {
+            std::env::var("RAG_DEBUGGER_API_PORT").unwrap_or_else(|_| 8080_u16.to_string())
+        }
         .parse::<u16>()
         .map_err(|error| ConfigError::InvalidPort(error.to_string()))?;
 
@@ -126,16 +125,18 @@ impl ApiConfig {
             StorageBackend::Postgres => required_env_string("DATABASE_URL")?,
             StorageBackend::Memory => std::env::var("DATABASE_URL").unwrap_or_default(),
         };
-        let web_origin = environment_value(
-            "RAG_DEBUGGER_WEB_ORIGIN",
-            local_http_origin(LOCAL_WEB_PORT),
-            environment,
-        )?;
-        let api_base_url = environment_value(
-            "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
-            local_http_origin(LOCAL_API_PORT),
-            environment,
-        )?;
+        let web_origin = if environment.is_hosted() {
+            required_env_string("RAG_DEBUGGER_WEB_ORIGIN")?
+        } else {
+            std::env::var("RAG_DEBUGGER_WEB_ORIGIN")
+                .unwrap_or_else(|_| format!("http://{}:5173", Ipv4Addr::LOCALHOST))
+        };
+        let api_base_url = if environment.is_hosted() {
+            required_env_string("RAG_DEBUGGER_PUBLIC_API_BASE_URL")?
+        } else {
+            std::env::var("RAG_DEBUGGER_PUBLIC_API_BASE_URL")
+                .unwrap_or_else(|_| format!("http://{}:8080", Ipv4Addr::LOCALHOST))
+        };
         let product = ProductConfig {
             product: ProductInfo {
                 name: env_string("RAG_DEBUGGER_PRODUCT_NAME", "CorpusLab"),
@@ -350,22 +351,6 @@ fn parse_runtime_environment(value: &str) -> Result<RuntimeEnvironment, ConfigEr
         "production" | "prod" => Ok(RuntimeEnvironment::Production),
         other => Err(ConfigError::InvalidEnvironment(other.to_owned())),
     }
-}
-
-fn environment_value(
-    name: &'static str,
-    default: String,
-    environment: RuntimeEnvironment,
-) -> Result<String, ConfigError> {
-    if environment.is_hosted() {
-        required_env_string(name)
-    } else {
-        Ok(env_string(name, &default))
-    }
-}
-
-fn local_http_origin(port: u16) -> String {
-    format!("http://{}:{port}", Ipv4Addr::LOCALHOST)
 }
 
 fn ensure_hosted(
