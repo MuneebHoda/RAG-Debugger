@@ -91,6 +91,8 @@ just check
 just ci-check
 just full-check
 just docs-pdf
+just production-artifacts-check
+just production-e2e
 just api
 just web
 ```
@@ -100,6 +102,8 @@ just web
 - `check`: the fast local gate combining `rust-check` and `web-check`.
 - `ci-check`: the release gate adding bundle budgets, Playwright, handbook generation, Postgres, and migrations.
 - `full-check`: backward-compatible alias for `ci-check`.
+- `production-artifacts-check`: builds and inspects the Linux AMD64 API image and reproducible web artifact.
+- `production-e2e`: runs the packaged guided workflow against the opt-in Postgres 17 stack.
 
 ## Database Flow
 
@@ -198,7 +202,7 @@ When adding a new tunable value:
 
 The complete local/test/staging/production matrix is [Private-Alpha Deployment Architecture](deployment-architecture.md). `RAG_DEBUGGER_ENV=staging` and `production` use the same fail-closed hosted validation: explicit non-loopback bind, exact HTTPS origins, Postgres with required TLS and non-default credentials, hosted deployment mode, secure environment-specific `__Host-` cookies, local auth/embeddings, bounded uploads, non-verbose logs, and a full `RAG_DEBUGGER_RELEASE_SHA`.
 
-The production image, hosted migration command, and runtime web configuration do not exist yet; they belong to #103. Continue using `VITE_API_BASE_URL` only for local/test builds. Do not treat setting hosted environment variables on `cargo run` as a supported deployment.
+The production image, explicit migration command, runtime web configuration, and opt-in packaged stack are documented in [Production Artifacts](production-artifacts.md). Continue using `VITE_API_BASE_URL` only for local/test builds; hosted artifacts use `/runtime-config.js`.
 
 ## Technical Handbook
 

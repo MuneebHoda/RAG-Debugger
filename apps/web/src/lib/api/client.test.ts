@@ -1,8 +1,33 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, readJsonResponse, readTextResponse } from "./client";
+import {
+  API_BASE_URL,
+  ApiError,
+  readJsonResponse,
+  readTextResponse,
+} from "./client";
 
 describe("API client errors", () => {
+  afterEach(() => {
+    delete window.CORPUSLAB;
+  });
+
+  it("uses the local build-time API origin without runtime configuration", () => {
+    expect(API_BASE_URL).toBe("http://127.0.0.1:8080");
+  });
+
+  it("prefers the public runtime API origin", async () => {
+    window.CORPUSLAB = {
+      apiBaseUrl: "https://api.staging.example.test",
+      environment: "staging",
+      releaseSha: "a".repeat(40),
+    };
+    vi.resetModules();
+
+    const runtimeClient = await import("./client");
+
+    expect(runtimeClient.API_BASE_URL).toBe("https://api.staging.example.test");
+  });
   it("parses the structured backend error envelope", async () => {
     const body = JSON.stringify({
       error: {

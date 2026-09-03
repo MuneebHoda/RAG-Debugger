@@ -441,6 +441,19 @@ where
             .provenance,
         experiment_b.provenance
     );
+    assert!(repository
+        .latest_retrieval_eval_experiment(workspace_a)
+        .await
+        .expect("read alpha latest experiment")
+        .is_none());
+    assert_eq!(
+        repository
+            .latest_retrieval_eval_experiment(workspace_b)
+            .await
+            .expect("read beta latest experiment")
+            .map(|experiment| experiment.id),
+        Some(experiment_b.id)
+    );
     assert!(matches!(
         repository
             .save_retrieval_eval_experiment(workspace_b, experiment_b.clone())

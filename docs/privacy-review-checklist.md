@@ -1,5 +1,13 @@
 # Privacy Review Checklist
 
+Issue #103 packaging review: the API image contains only the binary and CA
+bundle; SQLx migrations are embedded code, not data. The Vite artifact contains
+only public application assets and a public runtime-config placeholder. The
+served runtime config permits only API origin, environment, and release SHA.
+The production-parity workflow uses synthetic fixtures and local-only
+credentials, disables static access logs, publishes nothing, and introduces no
+provider, telemetry, retention, sharing, export, or customer-data movement.
+
 Privacy review is required whenever a change can alter where customer data moves, who can access it, how long it remains available, or what appears in diagnostics. The author completes this checklist before review; a reviewer other than the author confirms material privacy-boundary changes.
 
 ## Review Triggers

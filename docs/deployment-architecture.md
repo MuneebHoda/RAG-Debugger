@@ -4,7 +4,7 @@ This document is the environment and deployment contract for CorpusLab's small h
 
 ## Current State And Approved Target
 
-Today the API runs from Cargo, the web app runs from Vite, Docker Compose starts only local Postgres, migrations run inside API startup, and `VITE_API_BASE_URL` is compiled into the web bundle. `/healthz` reports process liveness; `/readyz` pings storage and deliberately reports unavailable in the `test` environment. CORS permits one configured credentialed web origin. The API ignores forwarded headers and emits privacy-safe startup and trace-ingestion events, but does not yet provide hosted JSON request telemetry, packaged artifacts, deployment automation, backups, or provider resources.
+The API and Vite app now have hardened production images plus an opt-in Postgres 17 production-parity stack. Hosted/test migrations run through the packaged explicit command while local startup retains automatic migration. The immutable browser bundle reads a separate public runtime config. `/healthz` reports process liveness and `/readyz` pings configured storage. CORS permits one configured credentialed web origin. The API ignores forwarded headers and emits privacy-safe startup and trace-ingestion events, but does not yet provide hosted JSON request telemetry, artifact publication, deployment automation, backups, or provider resources.
 
 Issue #102 adds a first-class `staging` runtime value, release-SHA labeling, and fail-closed staging/production validation. It does not add infrastructure. The approved target is the following bounded stack:
 
@@ -187,7 +187,7 @@ These values are non-secret API runtime configuration. Defaults are safe locally
 
 | Value | Class, location, and rule |
 | --- | --- |
-| `VITE_API_BASE_URL` | Public build-time; local/test only. It currently selects the API origin in `apps/web/src/lib/api/client.ts`. Hosted artifacts must not bake an environment URL; #103 replaces hosted use with public runtime config. |
+| `VITE_API_BASE_URL` | Public build-time; local/test fallback only. Hosted artifacts select the API origin from `/runtime-config.js`. |
 | Runtime `apiBaseUrl` | Public runtime, stored beside the deployed web artifact; exact HTTPS API origin. |
 | Runtime `environment` | Public runtime; `staging` or `production`. |
 | Runtime `releaseSha` | Public runtime; must match the promoted release manifest. |
@@ -308,7 +308,7 @@ Required invariants:
 
 - Staging and production use separate Postgres instances, credentials, network rules, backups, and migration histories. Database branches/schemas on one shared credential are insufficient isolation.
 - The API runtime role receives only required DML/schema usage. A distinct migration role owns DDL and SQLx migration-table updates. Backup/restore uses a third provider/operator identity where supported.
-- Current API startup runs SQLx migrations. That remains local-development behavior only. #103 must provide an explicit packaged migration command and disable startup-coupled hosted migration before production activation.
+- Local API startup runs embedded SQLx migrations. Test, staging, and production use the explicit packaged `migrate` command; normal startup verifies the embedded migration set without applying it.
 - #106 invokes migrations once, under deployment concurrency, before the new API becomes ready. Runtime replicas never race to migrate.
 - Migrations are append-only and forward-only. Applied files are never edited, deleted, or reordered.
 - Every schema change must be compatible with the currently running and last-known-good application, or declare an expand/migrate/contract sequence that prevents application rollback until safe.
@@ -373,7 +373,7 @@ Move to stronger paid availability only after a measured trigger: more than five
 
 ## Follow-Up Issue Map
 
-- **#103:** production API image, immutable static web artifact, runtime web config, explicit hosted migration command, graceful shutdown, and production-parity local stack.
+- **#103:** implemented production API image, immutable static web artifact, runtime web config, explicit hosted migration command, graceful shutdown, and production-parity local stack.
 - **#104:** trusted immutable GHCR/web publication, SBOM, provenance, scanning, attestations, and release manifest.
 - **#105:** separate Cloudflare/Render staging and production resources, regions, domains, one concrete two-host multi-domain Access application per environment with eager cookies and `OPTIONS`-only bypass, tunnels, databases, roles, secrets, quotas, and provider configuration.
 - **#106:** automatic staging deployment and maintainer-approved promotion of the same artifacts, with concurrency, migration, readiness, and rollback records.

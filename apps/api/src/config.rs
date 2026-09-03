@@ -44,6 +44,11 @@ pub struct AuthConfig {
     pub bootstrap_workspace_name: String,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct MigrationConfig {
+    pub database_url: String,
+}
+
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum AuthProviderKind {
     Local,
@@ -67,6 +72,19 @@ pub enum RuntimeEnvironment {
 impl RuntimeEnvironment {
     pub fn is_hosted(self) -> bool {
         matches!(self, Self::Staging | Self::Production)
+    }
+}
+
+impl MigrationConfig {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let environment = parse_runtime_environment(
+            &std::env::var("RAG_DEBUGGER_ENV").unwrap_or_else(|_| "local".to_owned()),
+        )?;
+        let database_url = required_env_string("DATABASE_URL")?;
+        if environment.is_hosted() {
+            validate_hosted_database_url(&database_url)?;
+        }
+        Ok(Self { database_url })
     }
 }
 

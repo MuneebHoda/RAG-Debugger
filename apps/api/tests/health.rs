@@ -62,7 +62,7 @@ async fn healthz_returns_ok() {
 
 #[tokio::test]
 async fn readyz_returns_ok_when_ready() {
-    let response = app(test_state(RuntimeEnvironment::Local))
+    let response = app(test_state(RuntimeEnvironment::Test))
         .oneshot(
             Request::builder()
                 .uri("/readyz")

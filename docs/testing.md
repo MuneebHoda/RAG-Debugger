@@ -192,6 +192,20 @@ request reaches the API without a second Access login or manual API-host visit
 
 Use the public `/api/v1/config` response to prove the initial Access and CORS path, then assert that a protected route still requires CorpusLab login. The same suite must prove that preflight is approved only for the configured web origin, a non-allowed or unauthenticated Access user cannot reach non-`OPTIONS` API traffic, and neither a Render/provider-default hostname nor a connector address bypasses Access/Tunnel. The [`OPTIONS`-only bypass and exact-origin expectations](deployment-architecture.md#107-access-and-cors-qualification) are part of the test oracle; wildcard CORS and a manual first visit to the API are failures.
 
+## Production Artifact Qualification
+
+Run `just production-artifacts-check` to build the Linux AMD64 API and web
+images, enforce the API's 100 MiB uncompressed size budget, inspect its final
+filesystem and non-root identity, verify OCI labels and invalid-config failure,
+compare two Vite output trees, and scan browser assets for secret-shaped
+values.
+
+Run `just production-e2e` to build the opt-in Compose stack, migrate a fresh
+Postgres 17 volume through the packaged `migrate` command, require API
+readiness, serve the actual Vite `dist`, and exercise the real guided login →
+sample → index → retrieve → trace → report workflow in Chromium. The recipe
+removes its synthetic database volume on exit.
+
 ## Trace Ingestion
 
 Trace ingestion has pure privacy/validation and OTLP mapper tests, Axum native/protobuf integration tests, and a shared memory/PostgreSQL repository contract. The process-global log-capture regression lives in its own integration-test binary so parallel ingestion tests cannot replace or inherit its subscriber. Run the hermetic protobuf path with `just trace-ingestion-smoke`; `just ci-check` runs the PostgreSQL variant after migrations.

@@ -1,6 +1,7 @@
 set dotenv-load := true
 
 database_url := env_var_or_default("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/rag_debugger")
+release_sha := `git rev-parse HEAD`
 
 fmt:
     cargo fmt --check
@@ -38,6 +39,23 @@ db-down:
 
 db-migrate:
     DATABASE_URL='{{ database_url }}' sqlx migrate run
+
+production-artifacts-check:
+    CORPUSLAB_RELEASE_SHA='{{ release_sha }}' ./scripts/verify-production-artifacts.sh
+
+production-up:
+    CORPUSLAB_RELEASE_SHA='{{ release_sha }}' docker compose -f docker-compose.production.yml --profile production up --build --wait
+
+production-down:
+    CORPUSLAB_RELEASE_SHA='{{ release_sha }}' docker compose -f docker-compose.production.yml --profile production down
+
+production-e2e:
+    #!/usr/bin/env sh
+    set -eu
+    trap 'CORPUSLAB_RELEASE_SHA={{ release_sha }} docker compose -f docker-compose.production.yml --profile production down -v' EXIT INT TERM
+    CORPUSLAB_RELEASE_SHA='{{ release_sha }}' docker compose -f docker-compose.production.yml --profile production down -v
+    CORPUSLAB_RELEASE_SHA='{{ release_sha }}' docker compose -f docker-compose.production.yml --profile production up --build --wait
+    (cd apps/web && npx playwright test --config playwright.production.config.ts)
 
 governance-check:
     cd apps/web && npm run governance:check

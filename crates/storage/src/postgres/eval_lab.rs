@@ -1006,7 +1006,7 @@ impl PostgresStore {
              FROM retrieval_eval_experiments e
              INNER JOIN retrieval_eval_datasets d ON d.id = e.dataset_id
              WHERE d.workspace_id = $1
-             ORDER BY created_at DESC
+             ORDER BY e.created_at DESC
              LIMIT 1",
         )
         .bind(workspace_id.0)

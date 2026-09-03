@@ -2,6 +2,13 @@
 
 CorpusLab diagnostics must help operators investigate reliability without turning logs into a second corpus. This policy applies to API logs, workers, collectors, CI output, browser diagnostics, hosted telemetry, and support bundles.
 
+The packaged static web server disables access logs so browser paths and query
+strings are not copied into container logs. Its startup validation reports only
+the name of an invalid public runtime-config field, never its value. The API
+image preserves the existing allowlisted startup fields (`address`,
+`environment`, `release_sha`, and `storage_backend`) and does not log migration
+credentials or database URLs.
+
 ## Allowed By Default
 
 Logs may contain:

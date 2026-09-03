@@ -4,6 +4,7 @@ import { testCredentials } from "./tests/e2e/support/testCredentials";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: "production-parity.spec.ts",
   timeout: 30_000,
   use: {
     baseURL: "http://127.0.0.1:15173",
