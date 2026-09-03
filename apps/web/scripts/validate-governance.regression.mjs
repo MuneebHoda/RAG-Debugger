@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  DEPLOYMENT_ACCESS_MARKERS,
   DEPLOYMENT_CONTRACT_SECTIONS,
   PRIVATE_ADVISORY_URL,
   extractMarkdownLinkDestinations,
@@ -130,6 +131,7 @@ test("rejects a non-canonical reference beside the canonical link", () => {
 test("requires every deployment contract section and ADR link", () => {
   const complete = [
     "[ADR](adr/0010-private-alpha-deployment.md)",
+    DEPLOYMENT_ACCESS_MARKERS.join("\n\n"),
     ...DEPLOYMENT_CONTRACT_SECTIONS.map(
       (heading) => `## ${heading}\n\nDefined.`,
     ),
@@ -145,5 +147,13 @@ test("requires every deployment contract section and ADR link", () => {
         complete.replace("## Operational Baseline", "## Operations"),
       ),
     /must define the Operational Baseline section/,
+  );
+  assert.throws(
+    () =>
+      validateDeploymentContract(
+        "deployment.md",
+        complete.replace("Eager redirect cookie", "deferred cookie behavior"),
+      ),
+    /must retain the deployment requirement: Eager redirect cookie/,
   );
 });

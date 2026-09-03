@@ -40,6 +40,11 @@ export const DEPLOYMENT_CONTRACT_SECTIONS = [
   "Cost And Growth Boundary",
   "Follow-Up Issue Map",
 ];
+export const DEPLOYMENT_ACCESS_MARKERS = [
+  "multi-domain Access application",
+  "Eager redirect cookie",
+  "### #107 Access And CORS Qualification",
+];
 const DEPLOYMENT_DOCUMENT_LINKS = new Map([
   ["docs/architecture.md", "deployment-architecture.md"],
   ["docs/privacy-security.md", "deployment-architecture.md"],
@@ -217,6 +222,12 @@ export function validateDeploymentContract(relativePath, markdown) {
     destinations.includes("adr/0010-private-alpha-deployment.md"),
     `${relativePath} must link to ADR 0010`,
   );
+  for (const marker of DEPLOYMENT_ACCESS_MARKERS) {
+    assert(
+      markdown.includes(marker),
+      `${relativePath} must retain the deployment requirement: ${marker}`,
+    );
+  }
 }
 
 async function readRepositoryFile(relativePath) {

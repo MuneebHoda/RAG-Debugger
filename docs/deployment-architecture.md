@@ -54,16 +54,33 @@ production: https://app.<operator-domain>
 
 Names above are templates, not committed provider IDs. #105 records the actual domain and region in protected environment configuration.
 
+Each environment has exactly one Cloudflare Access self-hosted multi-domain application with two concrete domains and the same default-deny human policy:
+
+```text
+staging Access application:
+  app.staging.<operator-domain>
+  api.staging.<operator-domain>
+
+production Access application:
+  app.<operator-domain>
+  api.<operator-domain>
+```
+
+The applications must not use wildcard hostnames. Cloudflare's [Eager redirect cookie](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/#multi-domain-applications) setting is enabled so authentication at the app hostname preemptively issues a host-specific `CF_Authorization` cookie for both concrete hostnames. The browser can then call the API with `credentials: include` without first visiting the API hostname, encountering a second login, or adding a Worker/service credential to browser traffic.
+
 ### Request And Trust Flow
 
 1. Cloudflare Access denies users not on the private-alpha allowlist before Pages or the API tunnel is reached.
-2. Pages returns the immutable Vite bundle. A public runtime configuration supplies only API origin, environment, and release SHA.
-3. The browser calls the sibling API origin with `credentials: include`. The API returns a host-only `__Host-` CorpusLab session cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/`.
-4. The API CORS policy names one exact HTTPS web origin, permits credentials, and never uses `*`.
-5. Cloudflare carries API traffic through an outbound tunnel connector. The Render API is private and has no provider-default public origin.
-6. The API connects to the same-environment Postgres instance using required TLS and the runtime database role.
+2. A successful login at the app hostname completes the multi-domain application's eager redirect sequence and sets `CF_Authorization` for both concrete hosts.
+3. Pages returns the immutable Vite bundle. A public runtime configuration supplies only API origin, environment, and release SHA.
+4. The browser calls the sibling API origin with `credentials: include`; Access accepts the already-issued API-host cookie without a second login.
+5. The API CORS policy names one exact HTTPS web origin, permits credentials, and never uses `*`. CorpusLab login then returns its separate host-only `__Host-` session cookie with `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/`.
+6. Cloudflare carries API traffic through an outbound tunnel connector. The Render API is private and has no provider-default public origin.
+7. The API connects to the same-environment Postgres instance using required TLS and the runtime database role.
 
-Cloudflare Access admits an alpha participant; it does not replace CorpusLab authentication or workspace authorization. CorpusLab sessions, roles, repository ownership checks, and API-key scopes remain authoritative. Browser users authenticate at both boundaries. CI and collectors use an Access service token plus a separately scoped CorpusLab API key.
+Cloudflare Access admits an alpha participant; it does not replace CorpusLab authentication or workspace authorization. Its cookie is not accepted as a CorpusLab session. CorpusLab sessions, roles, repository ownership checks, and API-key scopes remain authoritative. Browser users authenticate at both boundaries. CI and collectors use an Access service token plus a separately scoped CorpusLab API key.
+
+Browsers do not send cookies on preflight requests. The Access application therefore enables Cloudflare's [bypass OPTIONS requests to origin](https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/cors/#bypass-options-requests-to-origin) setting. This bypass is limited to `OPTIONS`; API-host preflights still reach Axum only through the private tunnel. Axum's existing CORS layer remains the single policy source: it returns credentialed preflight headers only for the configured web origin, and disallowed origins receive no approval. Access still gates every non-`OPTIONS` API request, and CORS is never `*`.
 
 ### TLS And Trusted Proxies
 
@@ -77,8 +94,8 @@ The application currently does not consume `Forwarded`, `X-Forwarded-For`, or `X
 | --- | --- | --- | --- | --- | --- |
 | Local | Development. Developer-owned local or synthetic data; private content stays on that machine. | Developer command; no approval. | Web `http://127.0.0.1:5173`; API `http://127.0.0.1:8080`. | Ignored `.env`; local Docker Postgres or MemoryStore; cookie `corpuslab_session`; exact localhost CORS; `environment=local`, release `development`. | Developer controlled. No backup is implied. |
 | Test/PR/preview | Repository qualification with checked-in synthetic fixtures only. There is no remotely deployed PR preview by default. | Pull request; CI gates only; never deployable. | Playwright web `http://127.0.0.1:15173`; API `http://127.0.0.1:18080`; other jobs use ephemeral ports. | Synthetic credentials; MemoryStore or ephemeral CI Postgres; cookie `corpuslab_test_session`; exact test CORS; `environment=test` and untrusted commit identity; no staging/production secrets, database, tunnel, or Access identity. | Job lifetime. Sanitized CI logs/artifacts follow the repository's bounded GitHub retention setting. |
-| Staging | Release rehearsal and synthetic canaries. Sanitized data requires an explicit owner and one-way export review; production clones are forbidden. | Trusted `main` artifact after all gates; automatic staging deployment; no production approval. | `app.staging.<operator-domain>` and `api.staging.<operator-domain>`. | Separate Cloudflare Pages project, Access app, tunnel, connector, Render environment/API, database, runtime/migration roles, GitHub Environment, secrets, and `__Host-corpuslab_staging_session`. Exact staging CORS; `environment=staging`. | Rebuildable. Application data at most 30 days; privacy-safe logs at most 7 days unless an incident hold is approved. No dependency on production backups. |
-| Production/private alpha | Approved alpha data only. Hosted raw uploads are an explicit partner choice; automatic local sync and `full_local_only` transfer are forbidden. | Promotion of the staging-qualified immutable artifacts; protected `production` Environment and maintainer approval. | `app.<operator-domain>` and `api.<operator-domain>`. | Separate production Pages project, Access app, tunnel, connector, Render environment/API, paid database, runtime/migration roles, secrets, and `__Host-corpuslab_alpha_session`. Exact production CORS; `environment=production`. | Rows remain while the alpha workspace is active; removal and backup-expiry requests are operator-owned until #108 adds the runbook. Privacy-safe logs target 14 days. Paid PITR/recovery retention is recorded from the selected provider plan. |
+| Staging | Release rehearsal and synthetic canaries. Sanitized data requires an explicit owner and one-way export review; production clones are forbidden. | Trusted `main` artifact after all gates; automatic staging deployment; no production approval. | `app.staging.<operator-domain>` and `api.staging.<operator-domain>`. | Separate Cloudflare Pages project, one two-host multi-domain Access app with eager cookies, tunnel, connector, Render environment/API, database, runtime/migration roles, GitHub Environment, secrets, and `__Host-corpuslab_staging_session`. Exact staging CORS; `environment=staging`. | Rebuildable. Application data at most 30 days; privacy-safe logs at most 7 days unless an incident hold is approved. No dependency on production backups. |
+| Production/private alpha | Approved alpha data only. Hosted raw uploads are an explicit partner choice; automatic local sync and `full_local_only` transfer are forbidden. | Promotion of the staging-qualified immutable artifacts; protected `production` Environment and maintainer approval. | `app.<operator-domain>` and `api.<operator-domain>`. | Separate production Pages project, one two-host multi-domain Access app with eager cookies, tunnel, connector, Render environment/API, paid database, runtime/migration roles, secrets, and `__Host-corpuslab_alpha_session`. Exact production CORS; `environment=production`. | Rows remain while the alpha workspace is active; removal and backup-expiry requests are operator-owned until #108 adds the runbook. Privacy-safe logs target 14 days. Paid PITR/recovery retention is recorded from the selected provider plan. |
 
 Production data does not flow to test, previews, or staging by default. Restore drills target a new isolated non-production database and use synthetic data or a specifically approved, access-restricted production recovery copy; they never overwrite another environment. A production-derived recovery copy is not general staging data and is deleted after the drill.
 
@@ -88,7 +105,7 @@ Production data does not flow to test, previews, or staging by default. Restore 
 - The staging deploy identity can update staging services only.
 - The production deploy identity is released only after GitHub Environment approval and can update production services only.
 - Production approval identifies the release owner, rollback owner, API digest, web checksum, runtime-config checksum, migration set, recovery point, and qualification run.
-- Cloudflare Access is default-deny. Human policies list approved alpha identities; automation policies accept separately rotated service tokens.
+- Each environment's two concrete hostnames share one default-deny multi-domain Cloudflare Access application with eager redirect cookies enabled. Human policies list approved alpha identities; automation policies accept separately rotated service tokens.
 - Provider dashboards are maintainer-only with MFA. Runtime services receive no broad provider administration credential.
 
 ## Runtime Configuration Inventory
@@ -314,6 +331,30 @@ These are activation requirements; #107/#108 implement and verify them.
 - Cost alerts fire at 75 percent of the environment budget. Maximum instances, database storage, egress, build minutes, Pages uploads, and log volume are capped where providers support it.
 - One maintainer is deployment, rollback, privacy-incident, and provider-escalation owner for each release. The alpha pauses when no owner is available.
 
+### #107 Access And CORS Qualification
+
+#107 must run the following flow in a fresh standard browser session against the concrete staging hostnames:
+
+```text
+visit app hostname
+    ↓
+authenticate once through the environment's multi-domain Access application
+    ↓
+complete the eager redirect sequence and load the SPA
+    ↓
+SPA sends a credentialed request to the API hostname
+    ↓
+Access accepts the API-host cookie without another login or manual API visit
+```
+
+The first request targets the public CorpusLab configuration endpoint so success proves the Access/CORS path. The same qualification then verifies that a protected API route still returns the CorpusLab authentication response until the user logs in to CorpusLab. It must also prove:
+
+- an allowed-origin credentialed preflight succeeds through the `OPTIONS`-only Access bypass with the exact staging web origin;
+- a preflight from any other origin receives no CORS approval;
+- a user outside the Access allowlist cannot reach any non-`OPTIONS` API route;
+- no Render/provider-default hostname or direct connector address can reach the API around Access/Tunnel; and
+- after Access admission, CorpusLab session and workspace authorization remain unchanged and required.
+
 ## Cost And Growth Boundary
 
 The no-SLA evaluation profile is synthetic-only, may sleep or expire, has no managed backup guarantee, and is capped at USD 25/month. It is useful for proving #103–#107, not for production data.
@@ -334,9 +375,9 @@ Move to stronger paid availability only after a measured trigger: more than five
 
 - **#103:** production API image, immutable static web artifact, runtime web config, explicit hosted migration command, graceful shutdown, and production-parity local stack.
 - **#104:** trusted immutable GHCR/web publication, SBOM, provenance, scanning, attestations, and release manifest.
-- **#105:** separate Cloudflare/Render staging and production resources, regions, domains, Access/Tunnel, databases, roles, secrets, quotas, and provider configuration.
+- **#105:** separate Cloudflare/Render staging and production resources, regions, domains, one concrete two-host multi-domain Access application per environment with eager cookies and `OPTIONS`-only bypass, tunnels, databases, roles, secrets, quotas, and provider configuration.
 - **#106:** automatic staging deployment and maintainer-approved promotion of the same artifacts, with concurrency, migration, readiness, and rollback records.
-- **#107:** packaged/staging qualification and bounded synthetic production canaries across TLS, CORS, cookies, migrations, restart, and privacy behavior.
+- **#107:** packaged/staging qualification and bounded synthetic production canaries across TLS, the fresh-browser single-Access-login sibling-origin flow, exact preflight CORS, Access denial/bypass resistance, CorpusLab re-authentication, cookies, migrations, restart, and privacy behavior.
 - **#108:** hosted JSON telemetry, alerts/SLOs, backup/PITR configuration, isolated restore evidence, retention/deletion procedures, incident/runbook ownership, and recovery drills.
 
 Production promotion stays disabled until #107 succeeds against staging. Approved design-partner data stays out until #108 proves alert delivery, backup freshness, isolated restore, last-known-good artifact availability, and rollback ownership.

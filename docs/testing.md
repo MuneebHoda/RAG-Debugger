@@ -174,6 +174,24 @@ Generate and visually check the handbook PDF when architecture or API documentat
 just docs-pdf
 ```
 
+## Hosted Access Qualification
+
+Issue #107 must qualify the provisioned staging boundary in a fresh standard browser session; local mocks are insufficient for the Cloudflare behavior:
+
+```text
+visit app hostname
+    ↓
+authenticate through the environment's two-host Access application
+    ↓
+SPA loads after the eager redirect-cookie sequence
+    ↓
+SPA sends a credentialed request to the API hostname
+    ↓
+request reaches the API without a second Access login or manual API-host visit
+```
+
+Use the public `/api/v1/config` response to prove the initial Access and CORS path, then assert that a protected route still requires CorpusLab login. The same suite must prove that preflight is approved only for the configured web origin, a non-allowed or unauthenticated Access user cannot reach non-`OPTIONS` API traffic, and neither a Render/provider-default hostname nor a connector address bypasses Access/Tunnel. The [`OPTIONS`-only bypass and exact-origin expectations](deployment-architecture.md#107-access-and-cors-qualification) are part of the test oracle; wildcard CORS and a manual first visit to the API are failures.
+
 ## Trace Ingestion
 
 Trace ingestion has pure privacy/validation and OTLP mapper tests, Axum native/protobuf integration tests, and a shared memory/PostgreSQL repository contract. The process-global log-capture regression lives in its own integration-test binary so parallel ingestion tests cannot replace or inherit its subscriber. Run the hermetic protobuf path with `just trace-ingestion-smoke`; `just ci-check` runs the PostgreSQL variant after migrations.

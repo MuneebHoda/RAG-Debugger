@@ -12,6 +12,8 @@ use sqlx::postgres::{PgConnectOptions, PgSslMode};
 use thiserror::Error;
 use tracing_subscriber::EnvFilter;
 
+const LOCAL_API_PORT: u16 = 8080;
+const LOCAL_WEB_PORT: u16 = 5173;
 const HOSTED_MAX_FILES_PER_REQUEST: u32 = 10;
 const HOSTED_MAX_FILE_BYTES: u64 = 20 * 1024 * 1024;
 const HOSTED_MAX_REQUEST_BYTES: u64 = 50 * 1024 * 1024;
@@ -105,15 +107,19 @@ impl ApiConfig {
 
         let host = environment_value(
             "RAG_DEBUGGER_API_HOST",
-            &Ipv4Addr::LOCALHOST.to_string(),
+            Ipv4Addr::LOCALHOST.to_string(),
             environment,
         )?
         .parse::<IpAddr>()
         .map_err(|error| ConfigError::InvalidHost(error.to_string()))?;
 
-        let port = environment_value("RAG_DEBUGGER_API_PORT", "8080", environment)?
-            .parse::<u16>()
-            .map_err(|error| ConfigError::InvalidPort(error.to_string()))?;
+        let port = environment_value(
+            "RAG_DEBUGGER_API_PORT",
+            LOCAL_API_PORT.to_string(),
+            environment,
+        )?
+        .parse::<u16>()
+        .map_err(|error| ConfigError::InvalidPort(error.to_string()))?;
 
         let storage_backend = env_storage_backend("RAG_DEBUGGER_STORAGE_BACKEND")?;
         let database_url = match storage_backend {
@@ -122,12 +128,12 @@ impl ApiConfig {
         };
         let web_origin = environment_value(
             "RAG_DEBUGGER_WEB_ORIGIN",
-            "http://127.0.0.1:5173",
+            local_http_origin(LOCAL_WEB_PORT),
             environment,
         )?;
         let api_base_url = environment_value(
             "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
-            "http://127.0.0.1:8080",
+            local_http_origin(LOCAL_API_PORT),
             environment,
         )?;
         let product = ProductConfig {
@@ -348,14 +354,18 @@ fn parse_runtime_environment(value: &str) -> Result<RuntimeEnvironment, ConfigEr
 
 fn environment_value(
     name: &'static str,
-    default: &str,
+    default: String,
     environment: RuntimeEnvironment,
 ) -> Result<String, ConfigError> {
     if environment.is_hosted() {
         required_env_string(name)
     } else {
-        Ok(env_string(name, default))
+        Ok(env_string(name, &default))
     }
+}
+
+fn local_http_origin(port: u16) -> String {
+    format!("http://{}:{port}", Ipv4Addr::LOCALHOST)
 }
 
 fn ensure_hosted(
