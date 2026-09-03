@@ -188,6 +188,7 @@ fn provenance_information(
             match state.config().environment {
                 RuntimeEnvironment::Local => "local",
                 RuntimeEnvironment::Test => "test",
+                RuntimeEnvironment::Staging => "staging",
                 RuntimeEnvironment::Production => "production",
             }
             .to_owned(),

@@ -105,6 +105,8 @@ pub async fn authenticated_test_app() -> AuthenticatedTestApp {
 pub fn test_config() -> ApiConfig {
     ApiConfig {
         environment: RuntimeEnvironment::Test,
+        release_sha: "test".to_owned(),
+        log_filter: "info".to_owned(),
         bind_addr: "127.0.0.1:0".parse().expect("valid test socket"),
         storage_backend: StorageBackend::Memory,
         database_url: String::new(),

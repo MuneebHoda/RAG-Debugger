@@ -29,6 +29,30 @@ const SENSITIVE_DATA_MARKERS = [
   "traces",
   "sensitive data",
 ];
+export const DEPLOYMENT_CONTRACT_SECTIONS = [
+  "Approved Topology",
+  "Environment Contract",
+  "Runtime Configuration Inventory",
+  "Provider And Data Processing Inventory",
+  "Build And Release Contract",
+  "Database And Migrations Contract",
+  "Operational Baseline",
+  "Cost And Growth Boundary",
+  "Follow-Up Issue Map",
+];
+export const DEPLOYMENT_ACCESS_MARKERS = [
+  "multi-domain Access application",
+  "Eager redirect cookie",
+  "### #107 Access And CORS Qualification",
+];
+const DEPLOYMENT_DOCUMENT_LINKS = new Map([
+  ["docs/architecture.md", "deployment-architecture.md"],
+  ["docs/privacy-security.md", "deployment-architecture.md"],
+  ["docs/logging-redaction.md", "deployment-architecture.md"],
+  ["docs/development.md", "deployment-architecture.md"],
+  ["docs/releasing.md", "deployment-architecture.md"],
+  ["docs/technical-handbook.md", "deployment-architecture.md"],
+]);
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = path.resolve(scriptDirectory, "../../..");
@@ -183,6 +207,27 @@ function extractLevelTwoSection(markdown, heading) {
       : headingIndex + 1 + nextHeadingOffset;
 
   return lines.slice(headingIndex + 1, sectionEnd).join("\n");
+}
+
+export function validateDeploymentContract(relativePath, markdown) {
+  for (const heading of DEPLOYMENT_CONTRACT_SECTIONS) {
+    assert(
+      extractLevelTwoSection(markdown, heading) !== undefined,
+      `${relativePath} must define the ${heading} section`,
+    );
+  }
+
+  const destinations = extractMarkdownLinkDestinations(markdown);
+  assert(
+    destinations.includes("adr/0010-private-alpha-deployment.md"),
+    `${relativePath} must link to ADR 0010`,
+  );
+  for (const marker of DEPLOYMENT_ACCESS_MARKERS) {
+    assert(
+      markdown.includes(marker),
+      `${relativePath} must retain the deployment requirement: ${marker}`,
+    );
+  }
 }
 
 async function readRepositoryFile(relativePath) {
@@ -378,8 +423,29 @@ async function main() {
     );
   }
 
+  const deploymentPath = "docs/deployment-architecture.md";
+  validateDeploymentContract(
+    deploymentPath,
+    await readRepositoryFile(deploymentPath),
+  );
+  const deploymentAdrPath = "docs/adr/0010-private-alpha-deployment.md";
+  const deploymentAdr = await readRepositoryFile(deploymentAdrPath);
+  assert(
+    extractMarkdownLinkDestinations(deploymentAdr).includes(
+      "../deployment-architecture.md#follow-up-issue-map",
+    ),
+    `${deploymentAdrPath} must link to the deployment follow-up map`,
+  );
+  for (const [relativePath, destination] of DEPLOYMENT_DOCUMENT_LINKS) {
+    const markdown = await readRepositoryFile(relativePath);
+    assert(
+      extractMarkdownLinkDestinations(markdown).includes(destination),
+      `${relativePath} must link to ${destination}`,
+    );
+  }
+
   console.log(
-    `Governance validation passed for ${templateNames.length} public issue forms.`,
+    `Governance validation passed for ${templateNames.length} public issue forms and the deployment contract.`,
   );
 }
 

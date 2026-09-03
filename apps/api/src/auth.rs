@@ -201,9 +201,10 @@ pub fn set_cookie_header(cookie: &SessionCookie) -> Result<HeaderValue, ApiError
 }
 
 pub fn clear_cookie_header(config: &AuthConfig) -> Result<HeaderValue, ApiError> {
+    let secure = if config.cookie_secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
-        "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
-        config.session_cookie_name
+        "{}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax{}",
+        config.session_cookie_name, secure
     ))
     .map_err(|_| ApiError::Internal)
 }
@@ -248,4 +249,30 @@ fn bearer_token(headers: &HeaderMap) -> Option<String> {
         .map(str::trim)
         .filter(|token| !token.is_empty())
         .map(str::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::AuthProviderKind;
+
+    #[test]
+    fn clearing_a_secure_host_cookie_keeps_required_attributes() {
+        let config = AuthConfig {
+            provider: AuthProviderKind::Local,
+            session_cookie_name: "__Host-corpuslab_alpha_session".to_owned(),
+            session_ttl_hours: 24,
+            cookie_secure: true,
+            bootstrap_email: "owner@example.test".to_owned(),
+            bootstrap_password: "test-only-bootstrap-password".to_owned(),
+            bootstrap_user_name: "Alpha Owner".to_owned(),
+            bootstrap_organization_name: "Alpha Organization".to_owned(),
+            bootstrap_workspace_name: "Alpha Workspace".to_owned(),
+        };
+
+        let header = clear_cookie_header(&config).expect("valid clear-cookie header");
+        let value = header.to_str().expect("ASCII cookie header");
+        assert!(value.starts_with("__Host-corpuslab_alpha_session=;"));
+        assert!(value.contains("HttpOnly; SameSite=Lax; Secure"));
+    }
 }

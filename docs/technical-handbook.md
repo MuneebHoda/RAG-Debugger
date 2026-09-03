@@ -342,7 +342,7 @@ Local auth now implements the first hosted boundary: signup/login/logout/current
 
 `docs/privacy-review-checklist.md` defines the mandatory review gate for data movement, external providers, hosted features, auth, retention, sharing, exports, and telemetry. `docs/logging-redaction.md` defines an allowlist for safe structured metadata and prohibits raw corpus/query content, vectors, credentials, headers, cookies, and secret hashes. Queries are sensitive by default, and future hosted sync must show and redact its payload before crossing the local boundary.
 
-The current logging audit found one API startup event containing bind address, environment, and storage backend kind. Request bodies and sensitive RAG/auth data are not logged. Adding request tracing requires route-template logging and explicit sensitive-header handling.
+The current logging audit found one API startup event containing bind address, environment, release SHA, and storage backend kind. Request bodies and sensitive RAG/auth data are not logged. Adding request tracing requires route-template logging and explicit sensitive-header handling.
 
 Hosted mode will still need tenant isolation hardening, invitations, SSO/SAML, SCIM, audit events, upload scanning, and configurable data retention.
 
@@ -371,7 +371,7 @@ See `docs/guided-demo.md` for the exact walkthrough, versioning policy, privacy 
 - `UiConfig`
 - `AuthConfig`
 
-`apps/api/src/config.rs` loads environment values, validates numeric fields, and exposes safe config through `GET /api/v1/config`.
+`apps/api/src/config.rs` loads environment values, validates numeric fields, and exposes safe config through `GET /api/v1/config`. Local/test retain developer defaults. First-class `staging` and `production` values fail before connection/listener startup unless network origins, Postgres TLS/credentials, hosted mode, cookie namespace/security, local auth/embedding boundaries, upload ceilings, log level, and full release SHA satisfy the hosted contract.
 
 All major defaults should be changed through `.env.example` values rather than hidden route constants.
 
@@ -435,6 +435,24 @@ Handbook PDF:
 ```bash
 just docs-pdf
 ```
+
+## Private-Alpha Deployment Contract
+
+[Private-Alpha Deployment Architecture](deployment-architecture.md) and [ADR 0010](adr/0010-private-alpha-deployment.md) approve the implementation target for issues #103–#108:
+
+```text
+browser
+  ├─ Cloudflare Access/TLS → immutable Pages web artifact
+  └─ Cloudflare Access/Tunnel → Render connector
+                                  → private Axum API
+                                    → isolated Render Postgres
+```
+
+Staging and production use sibling web/API origins under one operator domain, exact credentialed CORS, distinct secure `__Host-` cookies, separate Access/Tunnel/Render/GitHub identities, and separate databases. Each environment has one two-host Cloudflare Access application with eager redirect cookies, so the first app-host login also prepares the API-host cookie before the SPA calls it. Only preflight `OPTIONS` bypasses Access; API-host preflights still traverse the private tunnel, Axum approves only the exact web origin, every non-`OPTIONS` request remains Access-gated, and CorpusLab login remains separately required. Pull requests are synthetic and ephemeral; staging is synthetic or explicitly sanitized; production data is not copied down by default. Cloudflare can technically observe API content after TLS termination, and Render can observe API memory and persisted database content, so hosted use is deliberate and local-first remains the default.
+
+GitHub Actions will build one trusted commit into one attested GHCR digest and one checksummed web artifact. Staging qualifies them and a maintainer promotes those same identities to production. Runtime web config is public and separate from the immutable bundle. Hosted migrations move from current startup coupling to one explicit forward-only pre-deploy command using a migration role; the API runtime role has no DDL authority. Application rollback redeploys a retained compatible digest, never automatically reverses a migration, and stops when compatibility is uncertain.
+
+The no-SLA evaluation profile is synthetic-only and may sleep, expire, or lack backups. Approved alpha data requires paid always-on API/connector capacity, paid database recovery capability, privacy-safe operational evidence, and a named release/rollback owner. Production stays disabled until #107 proves a fresh browser can authenticate once at the app host, call the API host without another Access login, pass only approved-origin preflight, resist Access/provider-host bypass, and still require CorpusLab auth; #108 must then prove alert, backup, isolated restore, retention, and rollback behavior.
 
 ## Roadmap To Hosted Team Product
 

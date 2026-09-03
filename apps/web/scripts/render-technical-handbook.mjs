@@ -109,6 +109,7 @@ function renderMarkdown(source) {
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <base href="https://github.com/MuneebHoda/RAG-Debugger/blob/main/docs/" />
   <title>CorpusLab Technical Handbook</title>
   <style>
     body {
@@ -123,6 +124,7 @@ function renderMarkdown(source) {
     p { margin: 0 0 9px; }
     ul { margin: 0 0 10px 20px; padding: 0; }
     li { margin: 0 0 4px; }
+    a { color: #2458a6; text-decoration: none; }
     code { background: #eef3f6; border-radius: 4px; font-size: 9.5pt; padding: 1px 4px; }
     pre { background: #17202a; border-radius: 8px; color: #f6f8fb; overflow: hidden; padding: 12px; }
     pre code { background: transparent; color: inherit; padding: 0; }
@@ -133,7 +135,9 @@ function renderMarkdown(source) {
 }
 
 function inline(value) {
-  return escapeHtml(value).replace(/`([^`]+)`/g, "<code>$1</code>");
+  return escapeHtml(value)
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
 
 function escapeHtml(value) {
