@@ -12,7 +12,7 @@ CorpusLab is a RAG debugging, evaluation, and audit platform for teams building 
 > [!IMPORTANT]
 > CorpusLab currently runs locally in the user's environment. Hosted access, public SaaS signup, and billing are not available. The current offering is controlled local-first design-partner validation, not a public SaaS launch. Sensitive data does not need to leave the machine running CorpusLab.
 > CorpusLab is public pre-release software. `main` receives best-effort security support, but APIs and compatibility may evolve before a stable release.
-> The repository does not currently include a software license.
+> CorpusLab is licensed under the [MIT License](LICENSE).
 
 ## Fastest Local Demo
 
@@ -45,6 +45,7 @@ The demo requires no external model, hosted service, or paid API. Use the [Desig
 - [Development and Quality](#development-and-quality)
 - [Documentation](#documentation)
 - [Contributing and Security](#contributing-and-security)
+- [License](#license)
 
 ## Why CorpusLab
 
@@ -357,3 +358,7 @@ Contributions should be focused, typed, tested, and documented. Read [CONTRIBUTI
 Do not report vulnerabilities in public issues. Follow the private reporting process in [SECURITY.md](SECURITY.md), and never include credentials or private corpus, query, trace, or report content in a vulnerability report.
 
 CorpusLab remains public pre-release software. Follow the [roadmap](docs/roadmap.md) for current project direction and the [changelog](CHANGELOG.md) for completed milestones.
+
+## License
+
+CorpusLab is available under the [MIT License](LICENSE).
