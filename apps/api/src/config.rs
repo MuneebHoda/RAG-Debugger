@@ -370,21 +370,36 @@ fn validate_https_origin(name: &'static str, value: &str) -> Result<(), ConfigEr
         .parse::<Uri>()
         .map_err(|_| ConfigError::UnsafeHostedConfiguration {
             name,
-            requirement: "must be an absolute HTTPS origin without a path, query, or fragment",
+            requirement:
+                "must be a non-local absolute HTTPS origin without a path, query, or fragment",
         })?;
-    let exact_origin = uri
-        .authority()
-        .is_some_and(|authority| value == format!("https://{authority}"));
+    let valid_authority = uri.authority().is_some_and(|authority| {
+        value == format!("https://{authority}")
+            && is_non_local_host(authority.host())
+            && !authority.as_str().contains('@')
+    });
     ensure_hosted(
-        uri.scheme_str() == Some("https")
-            && uri.authority().is_some()
-            && !uri
-                .authority()
-                .is_some_and(|authority| authority.as_str().contains('@'))
-            && exact_origin,
+        uri.scheme_str() == Some("https") && valid_authority,
         name,
-        "must be an absolute HTTPS origin without a path, query, or fragment",
+        "must be a non-local absolute HTTPS origin without a path, query, or fragment",
     )
+}
+
+fn is_non_local_host(host: &str) -> bool {
+    let host = host
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.');
+    let is_localhost = host.eq_ignore_ascii_case("localhost")
+        || host
+            .rsplit_once('.')
+            .is_some_and(|(_, suffix)| suffix.eq_ignore_ascii_case("localhost"));
+
+    !host.is_empty()
+        && !is_localhost
+        && host
+            .parse::<IpAddr>()
+            .map_or(true, |address| !address.is_loopback())
 }
 
 fn validate_hosted_database_url(value: &str) -> Result<(), ConfigError> {
@@ -406,11 +421,7 @@ fn validate_hosted_database_url(value: &str) -> Result<(), ConfigError> {
     });
     ensure_hosted(
         options.get_socket().is_none()
-            && options.get_host() != "localhost"
-            && options
-                .get_host()
-                .parse::<IpAddr>()
-                .map_or(true, |host| !host.is_loopback())
+            && is_non_local_host(options.get_host())
             && !options.get_username().is_empty()
             && options
                 .get_database()
@@ -611,7 +622,12 @@ fn env_retrieval_mode(name: &str) -> RetrievalMode {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Command;
+
     use super::*;
+
+    const FROM_ENV_EXPECTATION: &str = "CORPUSLAB_CONFIG_TEST_EXPECTATION";
+    const FROM_ENV_EXPECTED_NAME: &str = "CORPUSLAB_CONFIG_TEST_EXPECTED_NAME";
 
     #[test]
     fn default_config_is_localhost() {
@@ -668,6 +684,208 @@ mod tests {
                 bootstrap_workspace_name: "Alpha Workspace".to_owned(),
             },
             product,
+        }
+    }
+
+    fn generated_test_value(character: char, length: usize) -> String {
+        std::iter::repeat_n(character, length).collect()
+    }
+
+    fn hosted_from_env_command(
+        environment: &str,
+        expectation: &str,
+        expected_name: &str,
+    ) -> Command {
+        let mut command = Command::new(std::env::current_exe().expect("current test executable"));
+        command
+            .arg("--exact")
+            .arg("config::tests::hosted_from_env_subprocess")
+            .arg("--nocapture");
+
+        for (name, _) in std::env::vars_os() {
+            let name_text = name.to_string_lossy();
+            if name_text == "DATABASE_URL"
+                || name_text.starts_with("RAG_DEBUGGER_")
+                || name_text.starts_with("CORPUSLAB_CONFIG_TEST_")
+            {
+                command.env_remove(name);
+            }
+        }
+
+        command
+            .env(FROM_ENV_EXPECTATION, expectation)
+            .env(FROM_ENV_EXPECTED_NAME, expected_name)
+            .env("RAG_DEBUGGER_ENV", environment)
+            .env("RAG_DEBUGGER_API_HOST", "0.0.0.0")
+            .env("RAG_DEBUGGER_API_PORT", "10000")
+            .env("RAG_DEBUGGER_STORAGE_BACKEND", "postgres")
+            .env(
+                "DATABASE_URL",
+                format!(
+                    "postgres://corpuslab:{}@db.internal/corpuslab?sslmode=require",
+                    generated_test_value('d', 24)
+                ),
+            )
+            .env("RAG_DEBUGGER_WEB_ORIGIN", "https://app.alpha.example.com")
+            .env(
+                "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
+                "https://api.alpha.example.com",
+            )
+            .env("RAG_DEBUGGER_DEPLOYMENT_MODE", "hosted")
+            .env("RAG_DEBUGGER_RELEASE_SHA", generated_test_value('a', 40))
+            .env("RAG_DEBUGGER_LOG", "info")
+            .env("RAG_DEBUGGER_AUTH_PROVIDER", "local")
+            .env(
+                "RAG_DEBUGGER_SESSION_COOKIE_NAME",
+                "__Host-corpuslab_alpha_session",
+            )
+            .env("RAG_DEBUGGER_SESSION_TTL_HOURS", "24")
+            .env("RAG_DEBUGGER_SESSION_COOKIE_SECURE", "true")
+            .env(
+                "RAG_DEBUGGER_BOOTSTRAP_PASSWORD",
+                generated_test_value('p', 24),
+            )
+            .env("RAG_DEBUGGER_EMBEDDING_PROVIDER", "local")
+            .env("RAG_DEBUGGER_MAX_FILES_PER_REQUEST", "10")
+            .env("RAG_DEBUGGER_MAX_FILE_BYTES", "20971520")
+            .env("RAG_DEBUGGER_MAX_REQUEST_BYTES", "52428800");
+
+        command
+    }
+
+    fn run_hosted_from_env(command: &mut Command) {
+        let output = command.output().expect("run isolated config test");
+        assert!(
+            output.status.success(),
+            "isolated config test failed\nstdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[test]
+    fn hosted_from_env_subprocess() {
+        let Ok(expectation) = std::env::var(FROM_ENV_EXPECTATION) else {
+            return;
+        };
+        let expected_name = std::env::var(FROM_ENV_EXPECTED_NAME).expect("expected config name");
+        let result = ApiConfig::from_env();
+
+        match expectation.as_str() {
+            "valid" => {
+                let config = result.expect("valid hosted environment");
+                assert_eq!(
+                    config.environment,
+                    parse_runtime_environment(
+                        &std::env::var("RAG_DEBUGGER_ENV").expect("hosted environment")
+                    )
+                    .expect("valid hosted environment name")
+                );
+                assert_eq!(
+                    config.bind_addr,
+                    "0.0.0.0:10000".parse().expect("valid bind address")
+                );
+                assert_eq!(config.web_origin, "https://app.alpha.example.com");
+                assert_eq!(
+                    config.product.ui.api_base_url,
+                    "https://api.alpha.example.com"
+                );
+            }
+            "missing" => assert!(matches!(
+                result,
+                Err(ConfigError::MissingEnvironmentVariable { name }) if name == expected_name
+            )),
+            "empty" => assert!(matches!(
+                result,
+                Err(ConfigError::EmptyEnvironmentVariable { name }) if name == expected_name
+            )),
+            "unsafe" => assert!(matches!(
+                result,
+                Err(ConfigError::UnsafeHostedConfiguration { name, .. }) if name == expected_name
+            )),
+            other => panic!("unknown config-test expectation: {other}"),
+        }
+    }
+
+    #[test]
+    fn hosted_from_env_loads_valid_staging_and_production() {
+        for environment in ["staging", "production"] {
+            run_hosted_from_env(&mut hosted_from_env_command(environment, "valid", ""));
+        }
+    }
+
+    #[test]
+    fn hosted_from_env_requires_nonempty_values() {
+        for name in [
+            "RAG_DEBUGGER_API_HOST",
+            "RAG_DEBUGGER_API_PORT",
+            "DATABASE_URL",
+            "RAG_DEBUGGER_WEB_ORIGIN",
+            "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
+            "RAG_DEBUGGER_RELEASE_SHA",
+            "RAG_DEBUGGER_BOOTSTRAP_PASSWORD",
+        ] {
+            let mut missing = hosted_from_env_command("staging", "missing", name);
+            missing.env_remove(name);
+            run_hosted_from_env(&mut missing);
+
+            let mut empty = hosted_from_env_command("production", "empty", name);
+            empty.env(name, "   ");
+            run_hosted_from_env(&mut empty);
+        }
+    }
+
+    #[test]
+    fn hosted_from_env_rejects_local_network_configuration() {
+        let database_credential = generated_test_value('d', 24);
+        let cases = [
+            (
+                "RAG_DEBUGGER_API_HOST",
+                "127.0.0.1".to_owned(),
+                "RAG_DEBUGGER_API_HOST/RAG_DEBUGGER_API_PORT",
+            ),
+            (
+                "DATABASE_URL",
+                format!(
+                    "postgres://corpuslab:{database_credential}@localhost/corpuslab?sslmode=require"
+                ),
+                "DATABASE_URL",
+            ),
+            (
+                "DATABASE_URL",
+                format!(
+                    "postgres://corpuslab:{database_credential}@127.0.0.2/corpuslab?sslmode=require"
+                ),
+                "DATABASE_URL",
+            ),
+            (
+                "DATABASE_URL",
+                format!(
+                    "postgres://corpuslab:{database_credential}@[::1]/corpuslab?sslmode=require"
+                ),
+                "DATABASE_URL",
+            ),
+            (
+                "RAG_DEBUGGER_WEB_ORIGIN",
+                "https://localhost".to_owned(),
+                "RAG_DEBUGGER_WEB_ORIGIN",
+            ),
+            (
+                "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
+                "https://127.0.0.1".to_owned(),
+                "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
+            ),
+            (
+                "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
+                "https://[::1]".to_owned(),
+                "RAG_DEBUGGER_PUBLIC_API_BASE_URL",
+            ),
+        ];
+
+        for (name, value, expected_name) in cases {
+            let mut command = hosted_from_env_command("staging", "unsafe", expected_name);
+            command.env(name, value);
+            run_hosted_from_env(&mut command);
         }
     }
 

@@ -128,8 +128,8 @@ Hosted values are set in the matching Render service/environment or supplied to 
 | `RAG_DEBUGGER_LOG` | Non-secret API runtime | `info` | `info`, `warn`, or `error` directives only; `debug`/`trace` fail | Yes |
 | `RAG_DEBUGGER_API_HOST` | Non-secret API runtime | `127.0.0.1` | Required non-loopback bind, normally `0.0.0.0` | Yes |
 | `RAG_DEBUGGER_API_PORT` | Non-secret API runtime | `8080` | Required provider-assigned non-zero port | Yes |
-| `RAG_DEBUGGER_WEB_ORIGIN` | Non-secret API runtime/CORS | `http://127.0.0.1:5173` | Required exact HTTPS web origin with no path/query/fragment | Yes |
-| `RAG_DEBUGGER_PUBLIC_API_BASE_URL` | Public API runtime config | `http://127.0.0.1:8080` | Required exact HTTPS API origin with no path/query/fragment | Yes |
+| `RAG_DEBUGGER_WEB_ORIGIN` | Non-secret API runtime/CORS | `http://127.0.0.1:5173` | Required exact non-local HTTPS web origin with no path/query/fragment | Yes |
+| `RAG_DEBUGGER_PUBLIC_API_BASE_URL` | Public API runtime config | `http://127.0.0.1:8080` | Required exact non-local HTTPS API origin with no path/query/fragment | Yes |
 | `RAG_DEBUGGER_STORAGE_BACKEND` | Non-secret API runtime | `postgres`; `memory` permitted | Required `postgres`; MemoryStore fails | Yes |
 | `DATABASE_URL` | Secret API runtime | Required for Postgres; Docker-only example credential | Required credentialed non-local PostgreSQL URL with `sslmode=require`, `verify-ca`, or `verify-full`; local default fails | Never |
 | `RAG_DEBUGGER_DEPLOYMENT_MODE` | Non-secret API/product config | `hybrid` | Required `hosted` | Yes |
@@ -207,7 +207,7 @@ These values are non-secret API runtime configuration. Defaults are safe locally
 For `staging` and `production`, the API exits before database connection or listener startup unless all of these hold:
 
 - API host/port, web origin, API origin, and release SHA are explicitly present;
-- origins are absolute HTTPS origins with no path, query, fragment, or user information;
+- origins are non-local absolute HTTPS origins with no path, query, fragment, or user information;
 - the bind address is non-loopback and the port is non-zero;
 - storage is Postgres and `DATABASE_URL` is credentialed, non-local, named, and requires TLS;
 - deployment mode is `hosted`, the implemented auth provider remains `local`, and embeddings remain local;
