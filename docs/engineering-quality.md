@@ -96,6 +96,12 @@ just full-check
 
 Use `just rust-check` or `just web-check` for focused iteration. `just check` composes both fast gates. `just ci-check` is the explicit release-equivalent gate, and `just full-check` remains its backward-compatible alias.
 
+Packaging changes also run `just production-artifacts-check` and
+`just production-e2e`. CI's separate Production artifacts job builds the real
+Linux AMD64 images, inspects the API filesystem and size, verifies deterministic
+browser assets, migrates fresh Postgres, and runs the packaged guided workflow.
+It does not publish or deploy either image.
+
 ## Coverage Baseline
 
 The separate `Coverage` workflow measures the complete locked Rust workspace with all features and every production TypeScript and TSX file under `apps/web/src`. Rust uses `cargo-llvm-cov 0.8.7`; the web uses Vitest's V8 provider through the matching `@vitest/coverage-v8 4.1.9` development dependency. Both jobs publish explicit LCOV reports to Codecov with `rust` and `web` flags.

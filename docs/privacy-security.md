@@ -1,5 +1,13 @@
 # Privacy and Security
 
+Production packaging keeps runtime secrets and corpus-derived data outside the
+API image and static web artifact. The browser runtime configuration is limited
+to API origin, environment label, and release SHA; see
+[Production Artifacts](production-artifacts.md). Artifact verification inspects
+the final API filesystem and scans built web assets for database URLs,
+credential assignments, and private-key material. No external telemetry or new
+data processor is introduced.
+
 RAG Debugger handles sensitive traces, prompts, retrieved context, and source documents. Privacy is a product feature, not a later compliance task.
 
 ## Defaults

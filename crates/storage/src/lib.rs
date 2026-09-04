@@ -20,6 +20,8 @@ pub enum StorageError {
     Internal(String),
     #[error("storage operation is not implemented yet: {0}")]
     NotImplemented(&'static str),
+    #[error("database migration {0} has not been applied")]
+    PendingMigration(i64),
     #[error(transparent)]
     Migrate(#[from] sqlx::migrate::MigrateError),
     #[error(transparent)]

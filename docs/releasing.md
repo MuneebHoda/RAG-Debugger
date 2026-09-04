@@ -5,7 +5,7 @@ checkpoints rather than claims that hosted deployment infrastructure exists.
 This guide complements [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 [engineering quality policy](engineering-quality.md).
 
-The separate [Private-Alpha Deployment Architecture](deployment-architecture.md) defines future hosted artifact publication and promotion. This guide remains the current source/tag release process until #103–#106 implement and activate that contract.
+The [Private-Alpha Deployment Architecture](deployment-architecture.md) defines hosted artifact promotion. [Production Artifacts](production-artifacts.md) implements local packaging and qualification; publication and deployment remain disabled until #104–#106 implement them.
 
 ## Version Policy
 

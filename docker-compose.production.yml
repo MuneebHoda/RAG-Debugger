@@ -1,0 +1,129 @@
+name: corpuslab-production-parity
+
+x-api-environment: &api-environment
+  RAG_DEBUGGER_ENV: test
+  RAG_DEBUGGER_RELEASE_SHA: ${CORPUSLAB_RELEASE_SHA:-0000000000000000000000000000000000000000}
+  RAG_DEBUGGER_LOG: info
+  RAG_DEBUGGER_API_HOST: 0.0.0.0
+  RAG_DEBUGGER_API_PORT: 8080
+  RAG_DEBUGGER_WEB_ORIGIN: http://127.0.0.1:15173
+  RAG_DEBUGGER_PUBLIC_API_BASE_URL: http://127.0.0.1:18080
+  RAG_DEBUGGER_STORAGE_BACKEND: postgres
+  DATABASE_URL: postgres://corpuslab:${CORPUSLAB_PARITY_DATABASE_PASSWORD:-corpuslab-parity-only}@postgres:5432/corpuslab
+  RAG_DEBUGGER_DEPLOYMENT_MODE: hosted
+  RAG_DEBUGGER_AUTH_PROVIDER: local
+  RAG_DEBUGGER_SESSION_COOKIE_NAME: corpuslab_test_session
+  RAG_DEBUGGER_SESSION_TTL_HOURS: 24
+  RAG_DEBUGGER_SESSION_COOKIE_SECURE: "false"
+  RAG_DEBUGGER_BOOTSTRAP_EMAIL: ${CORPUSLAB_PARITY_BOOTSTRAP_EMAIL:-playwright-bootstrap@example.test}
+  RAG_DEBUGGER_BOOTSTRAP_PASSWORD: ${CORPUSLAB_PARITY_BOOTSTRAP_PASSWORD:-playwright-only-bootstrap-password}
+  RAG_DEBUGGER_BOOTSTRAP_USER_NAME: Synthetic Alpha Owner
+  RAG_DEBUGGER_BOOTSTRAP_ORGANIZATION: Synthetic Alpha Organization
+  RAG_DEBUGGER_BOOTSTRAP_WORKSPACE: Synthetic Alpha Workspace
+  RAG_DEBUGGER_EMBEDDING_PROVIDER: local
+  RAG_DEBUGGER_SHOW_LOCAL_BADGES: "false"
+
+x-api-build: &api-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    OCI_REVISION: ${CORPUSLAB_RELEASE_SHA:-0000000000000000000000000000000000000000}
+    OCI_VERSION: ${CORPUSLAB_VERSION:-0.1.0}
+
+services:
+  postgres:
+    profiles: [production]
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_DB: corpuslab
+      POSTGRES_USER: corpuslab
+      POSTGRES_PASSWORD: ${CORPUSLAB_PARITY_DATABASE_PASSWORD:-corpuslab-parity-only}
+    volumes:
+      - production-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U corpuslab -d corpuslab]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+
+  migrate:
+    profiles: [production]
+    platform: linux/amd64
+    image: corpuslab-api:${CORPUSLAB_RELEASE_SHA:-local}
+    build: *api-build
+    command: [migrate]
+    environment: *api-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: "no"
+
+  api:
+    profiles: [production]
+    platform: linux/amd64
+    image: corpuslab-api:${CORPUSLAB_RELEASE_SHA:-local}
+    build: *api-build
+    environment: *api-environment
+    ports:
+      - 18080:8080
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, /usr/local/bin/rag-debugger-api, readycheck]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  web:
+    profiles: [production]
+    image: corpuslab-web:${CORPUSLAB_RELEASE_SHA:-local}
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        OCI_REVISION: ${CORPUSLAB_RELEASE_SHA:-0000000000000000000000000000000000000000}
+        OCI_VERSION: ${CORPUSLAB_VERSION:-0.1.0}
+    environment:
+      CORPUSLAB_PUBLIC_API_BASE_URL: http://127.0.0.1:18080
+      CORPUSLAB_ENVIRONMENT: test
+      CORPUSLAB_RELEASE_SHA: ${CORPUSLAB_RELEASE_SHA:-0000000000000000000000000000000000000000}
+    ports:
+      - 15173:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1:8080/]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+
+volumes:
+  production-postgres-data:

@@ -121,7 +121,7 @@ Postgres stores organizations, workspaces, users, memberships, sessions, API key
 
 The approved small private-alpha topology is documented in [Private-Alpha Deployment Architecture](deployment-architecture.md) and [ADR 0010](adr/0010-private-alpha-deployment.md). It uses immutable GitHub-built artifacts, Cloudflare Pages/Access/Tunnel, a private image-backed Render API, and isolated Render Postgres. Staging and production are separate trust and data boundaries; production data never enters pull-request or staging environments by default.
 
-The current repository does not yet contain the production image, provider resources, publishing/deployment workflow, hosted observability, or recovery runbooks. Issues #103–#108 own that implementation. Hosted `staging` and `production` configuration already fails before startup when origins, TLS database configuration, secure cookie namespace, release identity, local embedding boundary, or upload limits are unsafe.
+The repository contains the hardened production API image, static web artifact, public runtime-config boundary, explicit packaged migration command, and opt-in production-parity Compose stack documented in [Production Artifacts](production-artifacts.md). Provider resources, publishing/deployment workflows, hosted observability, and recovery runbooks remain owned by issues #104–#108. Hosted `staging` and `production` configuration fails before startup when origins, TLS database configuration, secure cookie namespace, release identity, local embedding boundary, or upload limits are unsafe.
 
 The codebase now has the first hosted/team foundation without billing, invitations, SSO, or SCIM:
 

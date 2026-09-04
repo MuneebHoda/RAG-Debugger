@@ -1,5 +1,6 @@
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8080";
+  window.CORPUSLAB?.apiBaseUrl ??
+  (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8080");
 
 export class ApiError extends Error {
   constructor(
@@ -18,7 +19,7 @@ export async function requestJson<T>(
   init: RequestInit = {},
   okStatuses: number[] = [200],
 ): Promise<T> {
-  const response = await fetch(apiUrl(path), {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: "include",
     ...init,
   });
@@ -30,7 +31,7 @@ export async function requestText(
   init: RequestInit = {},
   okStatuses: number[] = [200],
 ): Promise<string> {
-  const response = await fetch(apiUrl(path), {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     credentials: "include",
     ...init,
   });
@@ -111,12 +112,4 @@ async function responseError(response: Response): Promise<ApiError> {
     body,
     error.code,
   );
-}
-
-function apiUrl(path: string): string {
-  if (path.startsWith("http://") || path.startsWith("https://")) {
-    return path;
-  }
-
-  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }

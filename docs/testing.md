@@ -30,7 +30,7 @@ Expected coverage in the scaffold:
 - Report API tests for session auth, trace/experiment/CI creation, default privacy, workspace-scoped list/detail, Markdown headers, missing reports, and full-local export rejection.
 - MemoryStore contract coverage for health, project bootstrap, source/document/chunk persistence, chunk ordering, embedding candidates, and embedding status transitions.
 - Evidence repository contract coverage for direct ordered ID resolution, bounded deterministic search, exclusions, source/path/section/body/ID matching, compact UTF-8 previews, and empty-query browsing across MemoryStore and migrated Postgres. MemoryStore instrumentation verifies examined browse entries over 10,000 documents and 60,000 chunks, ordered-index synchronization after replacement/removal/demo merging, direct exact-ID behavior, and bounded text-search retention. An API call-count fake guards the fixed lookup shape: one document resolution, one chunk resolution, and at most one candidate search; case validation never invokes candidate search.
-- Workspace isolation contracts run against MemoryStore and migrated Postgres for corpus evidence, embedding status/writes, retrieval candidates/runs, traces, datasets, cases, atomic golden dataset imports, immutable experiment provenance, duplicate experiment IDs, and legacy eval runs. Golden import parity covers scoped checksum lookup, foreign evidence rejection, stale-plan rollback, merge, and replace. Two-workspace API tests cover trace creation/list/detail/rerun/report paths, Overview counts, and embedding mutation. A temporary-database migration test verifies singleton ownership backfill and ambiguous multi-workspace quarantine for projects, Eval records, retrieval runs, and traces.
+- Workspace isolation contracts run against MemoryStore and migrated Postgres for corpus evidence, embedding status/writes, retrieval candidates/runs, traces, datasets, cases, atomic golden dataset imports, immutable experiment provenance, duplicate experiment IDs, and legacy eval runs. Golden import parity covers scoped checksum lookup, foreign evidence rejection, stale-plan rollback, merge, and replace. Two-workspace API tests cover trace creation/list/detail/rerun/report paths, Overview counts, and embedding mutation. Temporary-database migration tests verify singleton ownership backfill, ambiguous multi-workspace quarantine, compatible schema acceptance, and rejection of pending, dirty, unexpected, or checksum-mismatched migration state.
 - ReportRepository contract coverage for snapshot ordering, duplicate IDs, missing reports, and workspace isolation.
 - Domain serialization tests as contracts become public.
 - Audit-report contract tests for source discriminators, privacy-mode wire values, optional evidence metadata, RFC3339 timestamps, and JSON round trips.
@@ -191,6 +191,21 @@ request reaches the API without a second Access login or manual API-host visit
 ```
 
 Use the public `/api/v1/config` response to prove the initial Access and CORS path, then assert that a protected route still requires CorpusLab login. The same suite must prove that preflight is approved only for the configured web origin, a non-allowed or unauthenticated Access user cannot reach non-`OPTIONS` API traffic, and neither a Render/provider-default hostname nor a connector address bypasses Access/Tunnel. The [`OPTIONS`-only bypass and exact-origin expectations](deployment-architecture.md#107-access-and-cors-qualification) are part of the test oracle; wildcard CORS and a manual first visit to the API are failures.
+
+## Production Artifact Qualification
+
+Run `just production-artifacts-check` to build the Linux AMD64 API and web
+images, enforce the API's 100 MiB uncompressed size budget, inspect its final
+filesystem and non-root identity, verify OCI labels and invalid-config failure,
+compare two Vite application-artifact trees, prove their checksum excludes the
+separately checksummed environment-specific runtime config, and scan browser
+assets for secret-shaped values.
+
+Run `just production-e2e` to build the opt-in Compose stack, migrate a fresh
+Postgres 17 volume through the packaged `migrate` command, require API
+readiness, serve the actual Vite `dist`, and exercise the real guided login →
+sample → index → retrieve → trace → report workflow in Chromium. The recipe
+removes its synthetic database volume on exit.
 
 ## Trace Ingestion
 

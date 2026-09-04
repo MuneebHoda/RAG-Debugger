@@ -114,17 +114,48 @@ jobs:
           --test trace_ingestion_repository_contract
           postgres_trace_ingestion_repository_contract
           -- --ignored
-      - name: Verify workspace ownership migration
+      - name: Verify migration behavior
         run: >-
           cargo test -p rag-debugger-storage
           --test workspace_migration
-          workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity
           -- --ignored
       - name: Verify Postgres evidence query plans
         run: >-
           cargo test -p rag-debugger-storage
           postgres_evidence_query_plans_are_index_compatible
           -- --ignored
+
+  production-artifacts:
+    name: Production artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        run: npm --prefix apps/web ci
+      - name: Install Playwright
+        run: npx --prefix apps/web playwright install --with-deps chromium
+      - name: Verify production artifacts
+        env:
+          CORPUSLAB_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: ./scripts/verify-production-artifacts.sh
+      - name: Start production-parity stack
+        env:
+          CORPUSLAB_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: docker compose -f docker-compose.production.yml --profile production up --build --wait
+      - name: Run packaged browser workflow
+        working-directory: apps/web
+        run: npx playwright test --config playwright.production.config.ts
+      - name: Stop production-parity stack
+        if: always()
+        env:
+          CORPUSLAB_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: docker compose -f docker-compose.production.yml --profile production down -v
 
   docs:
     name: Documentation

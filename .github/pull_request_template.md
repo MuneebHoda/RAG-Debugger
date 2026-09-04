@@ -26,6 +26,8 @@
 - [ ] `cd apps/web && npx playwright test`
 - [ ] `just docs-pdf`
 - [ ] `docker compose up -d postgres && sqlx migrate run`
+- [ ] `just production-artifacts-check` (packaging changes)
+- [ ] `just production-e2e` (packaging changes)
 
 ## Migrations / Compatibility
 

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rag_debugger_storage::repository::AppRepository;
 
-use crate::config::{ApiConfig, RuntimeEnvironment};
+use crate::config::ApiConfig;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -42,10 +42,6 @@ impl AppState {
     }
 
     pub async fn is_ready(&self) -> bool {
-        if matches!(self.config().environment, RuntimeEnvironment::Test) {
-            return false;
-        }
-
         match self.repository() {
             Some(repository) => repository.ping().await.is_ok(),
             None => false,

@@ -1,8 +1,8 @@
-use std::path::Path;
+use std::collections::HashMap;
 
 use async_trait::async_trait;
 use rag_debugger_core::*;
-use sqlx::{postgres::PgPoolOptions, PgPool};
+use sqlx::{migrate::Migrate, postgres::PgPoolOptions, PgPool};
 
 use crate::{
     repository::{
@@ -27,6 +27,8 @@ mod reports;
 mod retrieval;
 mod traces;
 
+static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../migrations");
+
 #[derive(Debug, Clone)]
 pub struct PostgresStore {
     pool: PgPool,
@@ -49,9 +51,41 @@ impl PostgresStore {
         &self.pool
     }
 
-    pub async fn run_migrations(&self, migrations_path: &Path) -> Result<(), StorageError> {
-        let migrator = sqlx::migrate::Migrator::new(migrations_path).await?;
-        migrator.run(&self.pool).await?;
+    pub async fn run_migrations(&self) -> Result<(), StorageError> {
+        MIGRATOR.run(&self.pool).await?;
+        Ok(())
+    }
+
+    pub async fn verify_migrations(&self) -> Result<(), StorageError> {
+        let mut connection = self.pool.acquire().await?;
+        if let Some(version) = connection.dirty_version().await? {
+            return Err(sqlx::migrate::MigrateError::Dirty(version).into());
+        }
+        let applied = connection
+            .list_applied_migrations()
+            .await?
+            .into_iter()
+            .map(|migration| (migration.version, migration))
+            .collect::<HashMap<_, _>>();
+
+        if let Some(version) = applied
+            .keys()
+            .find(|version| !MIGRATOR.version_exists(**version))
+        {
+            return Err(sqlx::migrate::MigrateError::VersionMissing(*version).into());
+        }
+
+        for migration in MIGRATOR
+            .iter()
+            .filter(|migration| !migration.migration_type.is_down_migration())
+        {
+            let Some(applied) = applied.get(&migration.version) else {
+                return Err(StorageError::PendingMigration(migration.version));
+            };
+            if migration.checksum != applied.checksum {
+                return Err(sqlx::migrate::MigrateError::VersionMismatch(migration.version).into());
+            }
+        }
         Ok(())
     }
 }
