@@ -1,9 +1,10 @@
 # Privacy Review Checklist
 
 Issue #103 packaging review: the API image contains only the binary and CA
-bundle; SQLx migrations are embedded code, not data. The Vite artifact contains
-only public application assets and a public runtime-config placeholder. The
-served runtime config permits only API origin, environment, and release SHA.
+bundle; SQLx migrations are embedded code, not data. The immutable Vite
+application identity excludes the separately generated public runtime config.
+That config permits only API origin, environment, and release SHA and has its
+own deployment-time checksum.
 The production-parity workflow uses synthetic fixtures and local-only
 credentials, disables static access logs, publishes nothing, and introduces no
 provider, telemetry, retention, sharing, export, or customer-data movement.

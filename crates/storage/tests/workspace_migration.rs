@@ -1,6 +1,11 @@
 use std::{borrow::Cow, path::PathBuf};
 
-use sqlx::{migrate::Migrator, postgres::PgPoolOptions, Executor, PgPool};
+use rag_debugger_storage::{postgres::PostgresStore, StorageError};
+use sqlx::{
+    migrate::{MigrateError, Migrator},
+    postgres::PgPoolOptions,
+    Executor, PgPool,
+};
 use uuid::Uuid;
 
 const WORKSPACE_ISOLATION_MIGRATION: i64 = 20_260_726_120_000;
@@ -12,6 +17,83 @@ async fn workspace_ownership_migration_backfills_singletons_and_quarantines_ambi
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
     run_single_workspace_backfill(&database_url).await;
     run_ambiguous_workspace_quarantine(&database_url).await;
+}
+
+#[tokio::test]
+#[ignore = "creates temporary Postgres databases"]
+async fn postgres_migration_verification_rejects_incompatible_states() {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL is required");
+    let database = TemporaryDatabase::create(&database_url, "verification").await;
+    let store = PostgresStore::new(database.pool.clone());
+
+    assert!(matches!(
+        store.verify_migrations().await,
+        Err(StorageError::PendingMigration(
+            WORKSPACE_ISOLATION_MIGRATION
+        ))
+    ));
+
+    database.apply_workspace_migration().await;
+    store
+        .verify_migrations()
+        .await
+        .expect("fully migrated database verifies");
+
+    let latest_version =
+        sqlx::query_scalar::<_, Option<i64>>("SELECT MAX(version) FROM _sqlx_migrations")
+            .fetch_one(&database.pool)
+            .await
+            .expect("read latest migration version")
+            .expect("at least one migration");
+    sqlx::query("UPDATE _sqlx_migrations SET success = FALSE WHERE version = $1")
+        .bind(latest_version)
+        .execute(&database.pool)
+        .await
+        .expect("mark migration dirty");
+    assert!(matches!(
+        store.verify_migrations().await,
+        Err(StorageError::Migrate(MigrateError::Dirty(version))) if version == latest_version
+    ));
+    sqlx::query("UPDATE _sqlx_migrations SET success = TRUE WHERE version = $1")
+        .bind(latest_version)
+        .execute(&database.pool)
+        .await
+        .expect("restore migration success state");
+
+    let unexpected_version = 99_999_999_999_999_i64;
+    sqlx::query(
+        "INSERT INTO _sqlx_migrations (
+             version, description, installed_on, success, checksum, execution_time
+         )
+         VALUES ($1, 'unexpected test migration', NOW(), TRUE, decode('00', 'hex'), 0)",
+    )
+    .bind(unexpected_version)
+    .execute(&database.pool)
+    .await
+    .expect("insert unexpected migration");
+    assert!(matches!(
+        store.verify_migrations().await,
+        Err(StorageError::Migrate(MigrateError::VersionMissing(version)))
+            if version == unexpected_version
+    ));
+    sqlx::query("DELETE FROM _sqlx_migrations WHERE version = $1")
+        .bind(unexpected_version)
+        .execute(&database.pool)
+        .await
+        .expect("remove unexpected migration");
+
+    sqlx::query("UPDATE _sqlx_migrations SET checksum = decode('00', 'hex') WHERE version = $1")
+        .bind(latest_version)
+        .execute(&database.pool)
+        .await
+        .expect("replace migration checksum");
+    assert!(matches!(
+        store.verify_migrations().await,
+        Err(StorageError::Migrate(MigrateError::VersionMismatch(version)))
+            if version == latest_version
+    ));
+
+    database.drop().await;
 }
 
 async fn run_single_workspace_backfill(database_url: &str) {

@@ -77,9 +77,7 @@ impl RuntimeEnvironment {
 
 impl MigrationConfig {
     pub fn from_env() -> Result<Self, ConfigError> {
-        let environment = parse_runtime_environment(
-            &std::env::var("RAG_DEBUGGER_ENV").unwrap_or_else(|_| "local".to_owned()),
-        )?;
+        let environment = parse_runtime_environment(&required_env_string("RAG_DEBUGGER_ENV")?)?;
         let database_url = required_env_string("DATABASE_URL")?;
         if environment.is_hosted() {
             validate_hosted_database_url(&database_url)?;
@@ -779,6 +777,96 @@ mod tests {
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    fn migration_from_env_command(expectation: &str, expected_name: &str) -> Command {
+        let mut command = Command::new(std::env::current_exe().expect("current test executable"));
+        command
+            .arg("--exact")
+            .arg("config::tests::migration_from_env_subprocess")
+            .arg("--nocapture");
+
+        for name in [
+            "DATABASE_URL",
+            "RAG_DEBUGGER_ENV",
+            FROM_ENV_EXPECTATION,
+            FROM_ENV_EXPECTED_NAME,
+        ] {
+            command.env_remove(name);
+        }
+
+        command
+            .env(FROM_ENV_EXPECTATION, expectation)
+            .env(FROM_ENV_EXPECTED_NAME, expected_name)
+            .env("RAG_DEBUGGER_ENV", "local")
+            .env(
+                "DATABASE_URL",
+                "postgres://postgres:postgres@localhost:5432/rag_debugger",
+            );
+        command
+    }
+
+    #[test]
+    fn migration_from_env_subprocess() {
+        let Ok(expectation) = std::env::var(FROM_ENV_EXPECTATION) else {
+            return;
+        };
+        let expected_name = std::env::var(FROM_ENV_EXPECTED_NAME).expect("expected config name");
+        let result = MigrationConfig::from_env();
+
+        match expectation.as_str() {
+            "valid" => assert!(result.is_ok()),
+            "missing" => assert!(matches!(
+                result,
+                Err(ConfigError::MissingEnvironmentVariable { name }) if name == expected_name
+            )),
+            "empty" => assert!(matches!(
+                result,
+                Err(ConfigError::EmptyEnvironmentVariable { name }) if name == expected_name
+            )),
+            "unsafe" => assert!(matches!(
+                result,
+                Err(ConfigError::UnsafeHostedConfiguration { name, .. }) if name == expected_name
+            )),
+            other => panic!("unknown migration-config expectation: {other}"),
+        }
+    }
+
+    #[test]
+    fn migration_from_env_requires_explicit_environment_and_database() {
+        for name in ["RAG_DEBUGGER_ENV", "DATABASE_URL"] {
+            let mut missing = migration_from_env_command("missing", name);
+            missing.env_remove(name);
+            run_hosted_from_env(&mut missing);
+
+            let mut empty = migration_from_env_command("empty", name);
+            empty.env(name, "   ");
+            run_hosted_from_env(&mut empty);
+        }
+    }
+
+    #[test]
+    fn migration_from_env_allows_explicit_local_configuration() {
+        run_hosted_from_env(&mut migration_from_env_command("valid", ""));
+    }
+
+    #[test]
+    fn migration_from_env_enforces_hosted_database_safety() {
+        for environment in ["staging", "production"] {
+            let mut valid = migration_from_env_command("valid", "");
+            valid.env("RAG_DEBUGGER_ENV", environment).env(
+                "DATABASE_URL",
+                "postgres://corpuslab:managed-secret@db.internal/corpuslab?sslmode=require",
+            );
+            run_hosted_from_env(&mut valid);
+
+            let mut unsafe_database = migration_from_env_command("unsafe", "DATABASE_URL");
+            unsafe_database.env("RAG_DEBUGGER_ENV", environment).env(
+                "DATABASE_URL",
+                "postgres://postgres:postgres@localhost:5432/rag_debugger",
+            );
+            run_hosted_from_env(&mut unsafe_database);
+        }
     }
 
     #[test]

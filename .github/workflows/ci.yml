@@ -114,11 +114,10 @@ jobs:
           --test trace_ingestion_repository_contract
           postgres_trace_ingestion_repository_contract
           -- --ignored
-      - name: Verify workspace ownership migration
+      - name: Verify migration behavior
         run: >-
           cargo test -p rag-debugger-storage
           --test workspace_migration
-          workspace_ownership_migration_backfills_singletons_and_quarantines_ambiguity
           -- --ignored
       - name: Verify Postgres evidence query plans
         run: >-

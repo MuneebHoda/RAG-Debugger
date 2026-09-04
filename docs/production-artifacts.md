@@ -28,7 +28,8 @@ The uncompressed Docker image size budget is 100 MiB. Run
 `just production-artifacts-check` to enforce the budget, labels, non-root user,
 allowed filesystem contents, fail-closed hosted configuration, deterministic
 web output, and secret-shaped artifact scan. The check prints the measured API
-size and web artifact checksum.
+size, immutable web application-artifact checksum, and separately rendered
+runtime-config checksum.
 
 ## Forward-Only Migrations
 
@@ -38,6 +39,11 @@ into the runtime image and no parallel schema mechanism exists. Local
 developer workflow. Test, staging, and production startup never apply schema
 changes: they verify every embedded migration is present with the expected
 checksum before bootstrapping data or binding the listener.
+
+The `migrate` command requires both `RAG_DEBUGGER_ENV` and `DATABASE_URL`.
+Explicit `local` remains available for manual local migration. Staging and
+production reject local hosts, default credentials, missing database names, and
+connections that do not require TLS before connecting.
 
 For staging or production, use the exact API image digest selected for the
 release and a dedicated migration credential:
@@ -51,7 +57,8 @@ docker run --rm \
 
 The operator sequence is:
 
-1. Select the immutable API digest and matching web checksum.
+1. Select the immutable API digest, web application-artifact checksum, and
+   environment-specific runtime-config checksum.
 2. Verify the environment recovery point and acquire the migration identity.
 3. Run `<api-image> migrate` once and require exit status zero.
 4. Start the API with the lower-privilege runtime database identity.
@@ -73,10 +80,15 @@ npm --prefix apps/web ci
 npm --prefix apps/web run build
 ```
 
-`apps/web/dist` is the immutable application artifact. It loads
-`/runtime-config.js` before the application module. `VITE_API_BASE_URL` remains
-the local/test fallback only; staging and production must supply this public
-runtime object beside the promoted artifact:
+The files in `apps/web/dist` other than `runtime-config.js` form the immutable
+application artifact. Its checksum deliberately excludes `runtime-config.js`.
+The placeholder copied from `apps/web/public` keeps local preview behavior
+predictable, but it is not part of the release/application identity.
+
+The application loads `/runtime-config.js` before its module.
+`VITE_API_BASE_URL` remains the local/test fallback only; staging and production
+must generate this separate public deployment-time artifact beside the promoted
+application:
 
 ```js
 window.CORPUSLAB = {
@@ -90,9 +102,11 @@ Those are the only supported browser-visible runtime fields. The file must
 never contain database URLs, passwords, provider tokens, CorpusLab API keys,
 cookie values, corpus content, queries, traces, or reports. The deployment job
 generates this separate public file from protected environment metadata,
-validates the API origin and full commit SHA, and records its checksum beside
-the unchanged application artifact checksum. Staging and production therefore
-reuse the same compiled JS/CSS without source edits or environment rebuilds.
+validates the API origin and full commit SHA, and records its own checksum
+beside the unchanged application-artifact checksum. Changing any runtime-config
+value must change only the runtime-config checksum. Staging and production
+therefore reuse the same compiled application identity without source edits or
+environment rebuilds.
 
 The production web image serves the same `dist` through unprivileged Nginx and
 generates `/runtime-config.js` at container start from

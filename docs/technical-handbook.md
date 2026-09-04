@@ -151,10 +151,11 @@ The production API image embeds this same forward-only migration set. Local
 startup applies it automatically; test and hosted startup only verify schema
 compatibility. Operators run the immutable image with the `migrate` command
 before starting hosted replicas. The final scratch image runs non-root and
-contains only the API binary and CA bundle. The immutable Vite artifact reads a
-separately checksummed public runtime config containing only API origin,
-environment, and release SHA. Build, Compose, size, shutdown, and packaged E2E
-details are in `docs/production-artifacts.md`.
+contains only the API binary and CA bundle. The immutable Vite application
+identity explicitly excludes its separately checksummed public runtime config,
+which contains only API origin, environment, and release SHA. Build, Compose,
+size, shutdown, and packaged E2E details are in
+`docs/production-artifacts.md`.
 
 ## File Ingestion Pipeline
 

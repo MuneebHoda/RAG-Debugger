@@ -20,9 +20,18 @@ if [ "${#CORPUSLAB_RELEASE_SHA}" -ne 40 ] || printf '%s' "$CORPUSLAB_RELEASE_SHA
   exit 1
 fi
 
-printf 'window.CORPUSLAB={apiBaseUrl:"%s",environment:"%s",releaseSha:"%s"};\n' \
-  "$CORPUSLAB_PUBLIC_API_BASE_URL" \
-  "$CORPUSLAB_ENVIRONMENT" \
-  "$CORPUSLAB_RELEASE_SHA" > /tmp/runtime-config.js
+render_runtime_config() {
+  printf 'window.CORPUSLAB={apiBaseUrl:"%s",environment:"%s",releaseSha:"%s"};\n' \
+    "$CORPUSLAB_PUBLIC_API_BASE_URL" \
+    "$CORPUSLAB_ENVIRONMENT" \
+    "$CORPUSLAB_RELEASE_SHA"
+}
+
+if [ "${1:-}" = "render-runtime-config" ]; then
+  render_runtime_config
+  exit 0
+fi
+
+render_runtime_config > /tmp/runtime-config.js
 
 exec nginx -g 'daemon off;'
