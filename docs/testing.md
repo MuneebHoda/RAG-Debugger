@@ -207,6 +207,24 @@ readiness, serve the actual Vite `dist`, and exercise the real guided login →
 sample → index → retrieve → trace → report workflow in Chromium. The recipe
 removes its synthetic database volume on exit.
 
+## Release Publication Qualification
+
+`node --test scripts/release-artifacts.test.mjs` covers deterministic web and
+migration checksum behavior, runtime-config exclusion, required lockfiles,
+attestation requirements, Trivy fail policy, and the complete named-check gate.
+`npm --prefix apps/web run governance:check` also validates trusted triggers,
+canonical-repository/fork guards, least-privilege job permissions, full-SHA
+Action pins, immutable selectors, and bounded retention.
+
+Every pull request and main push runs the read-only `Release dry run` CI job. It
+builds the release inputs without registry authentication, verifies a repeated
+web ZIP is byte-identical, generates SPDX 2.3 SBOMs, scans the final API image
+and web files, exercises generated secret and vulnerability negative fixtures,
+and validates a manifest marked `dry-run`. Registry digest, GitHub OIDC
+attestations, pull-by-digest, fresh-Postgres migration, and published-image
+readiness are intentionally exercised only by the trusted-main publication job
+after merge. See [Artifact Publication](artifact-publication.md).
+
 ## Trace Ingestion
 
 Trace ingestion has pure privacy/validation and OTLP mapper tests, Axum native/protobuf integration tests, and a shared memory/PostgreSQL repository contract. The process-global log-capture regression lives in its own integration-test binary so parallel ingestion tests cannot replace or inherit its subscriber. Run the hermetic protobuf path with `just trace-ingestion-smoke`; `just ci-check` runs the PostgreSQL variant after migrations.

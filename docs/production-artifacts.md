@@ -2,8 +2,9 @@
 
 CorpusLab packages one non-root API image and one immutable Vite application
 artifact. These artifacts implement the boundaries approved in
-[ADR 0010](adr/0010-private-alpha-deployment.md); they do not publish or deploy
-anything.
+[ADR 0010](adr/0010-private-alpha-deployment.md). The trusted workflow described
+in [Artifact Publication](artifact-publication.md) publishes them without
+deploying anything.
 
 ## API Image
 
@@ -30,6 +31,12 @@ allowed filesystem contents, fail-closed hosted configuration, deterministic
 web output, and secret-shaped artifact scan. The check prints the measured API
 size, immutable web application-artifact checksum, and separately rendered
 runtime-config checksum.
+
+Trusted `main` publication preserves these labels and records the
+registry-returned GHCR digest. The full source SHA is the required package tag;
+an approved semantic release may add a tag for the same digest. Neither tag is
+a deployment selector: consumers use
+`ghcr.io/muneebhoda/rag-debugger@sha256:<digest>`.
 
 ## Forward-Only Migrations
 
@@ -107,6 +114,10 @@ beside the unchanged application-artifact checksum. Changing any runtime-config
 value must change only the runtime-config checksum. Staging and production
 therefore reuse the same compiled application identity without source edits or
 environment rebuilds.
+
+Publication packages the application files as a deterministic ZIP, retains the
+per-file checksum manifest, and records both the #103 application checksum and
+the ZIP transport checksum. `runtime-config.js` is absent from the ZIP.
 
 The production web image serves the same `dist` through unprivileged Nginx and
 generates `/runtime-config.js` at container start from

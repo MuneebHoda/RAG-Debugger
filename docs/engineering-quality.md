@@ -102,6 +102,12 @@ Linux AMD64 images, inspects the API filesystem and size, verifies deterministic
 browser assets, migrates fresh Postgres, and runs the packaged guided workflow.
 It does not publish or deploy either image.
 
+CI's read-only `Release dry run` separately exercises the trusted packager,
+SPDX generation, Trivy and production npm advisory policy, deterministic web
+archive, migration identity, release manifest, and negative security fixtures.
+The publication workflow runs only after protected-main checks succeed and is
+documented in [Artifact Publication](artifact-publication.md).
+
 ## Coverage Baseline
 
 The separate `Coverage` workflow measures the complete locked Rust workspace with all features and every production TypeScript and TSX file under `apps/web/src`. Rust uses `cargo-llvm-cov 0.8.7`; the web uses Vitest's V8 provider through the matching `@vitest/coverage-v8 4.1.9` development dependency. Both jobs publish explicit LCOV reports to Codecov with `rust` and `web` flags.

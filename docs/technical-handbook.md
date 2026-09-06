@@ -421,6 +421,13 @@ just web-check
 just ci-check
 ```
 
+Release-policy checks also run through `just check`: Node regression coverage
+proves deterministic web/migration identities and fail-closed scan,
+attestation, lockfile, and required-check handling, while governance validation
+locks publication triggers, permissions, Action pins, and retention. Pull
+requests run a read-only build/SBOM/scan/manifest dry run; no registry or OIDC
+write is available there.
+
 Workbench UI quality is enforced through a typed Playwright route matrix at
 1440, 1280, 1024, 768, and 390 pixel widths. It verifies semantic headings,
 primary or empty-state actions, active navigation, keyboard behavior, reduced
@@ -460,7 +467,7 @@ browser
 
 Staging and production use sibling web/API origins under one operator domain, exact credentialed CORS, distinct secure `__Host-` cookies, separate Access/Tunnel/Render/GitHub identities, and separate databases. Each environment has one two-host Cloudflare Access application with eager redirect cookies, so the first app-host login also prepares the API-host cookie before the SPA calls it. Only preflight `OPTIONS` bypasses Access; API-host preflights still traverse the private tunnel, Axum approves only the exact web origin, every non-`OPTIONS` request remains Access-gated, and CorpusLab login remains separately required. Pull requests are synthetic and ephemeral; staging is synthetic or explicitly sanitized; production data is not copied down by default. Cloudflare can technically observe API content after TLS termination, and Render can observe API memory and persisted database content, so hosted use is deliberate and local-first remains the default.
 
-GitHub Actions will build one trusted commit into one attested GHCR digest and one checksummed web artifact. Staging qualifies them and a maintainer promotes those same identities to production. Runtime web config is public and separate from the immutable bundle. Hosted migrations move from current startup coupling to one explicit forward-only pre-deploy command using a migration role; the API runtime role has no DDL authority. Application rollback redeploys a retained compatible digest, never automatically reverses a migration, and stops when compatibility is uncertain.
+GitHub Actions builds one trusted commit into one attested GHCR digest and one checksummed web artifact after protected-main quality/security checks pass. The 30-day workflow bundle contains the deterministic web ZIP, migration identity, SPDX SBOMs, scan reports, and verified schema-v1 release manifest; approved version releases retain the same bundle and may add a same-digest informational image tag. Runtime web config is public and separate from the immutable bundle. Future staging qualification and production promotion must consume these exact digest/checksum identities. Hosted migrations use the packaged explicit forward-only command with a migration role; the API runtime role has no DDL authority. Application rollback redeploys a retained compatible digest, never automatically reverses a migration, and stops when compatibility is uncertain. See [Trusted Artifact Publication](artifact-publication.md).
 
 The no-SLA evaluation profile is synthetic-only and may sleep, expire, or lack backups. Approved alpha data requires paid always-on API/connector capacity, paid database recovery capability, privacy-safe operational evidence, and a named release/rollback owner. Production stays disabled until #107 proves a fresh browser can authenticate once at the app host, call the API host without another Access login, pass only approved-origin preflight, resist Access/provider-host bypass, and still require CorpusLab auth; #108 must then prove alert, backup, isolated restore, retention, and rollback behavior.
 

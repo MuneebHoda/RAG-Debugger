@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "governance:check": "npm run governance:test && node scripts/validate-governance.mjs",
-    "governance:test": "node --test scripts/validate-governance.regression.mjs",
+    "governance:check": "npm run governance:test && node scripts/validate-governance.mjs && node scripts/validate-release-workflow.mjs",
+    "governance:test": "node --test scripts/*.regression.mjs",
     "size:check": "node scripts/check-bundle-budget.mjs",
     "lint": "eslint . --max-warnings 0",
     "test": "npm run governance:check && vitest run",
@@ -27,7 +27,7 @@
     "motion": "^12.42.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.0"
+    "react-router-dom": "^7.18.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

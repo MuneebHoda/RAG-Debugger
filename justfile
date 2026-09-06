@@ -58,6 +58,7 @@ production-e2e:
     (cd apps/web && npx playwright test --config playwright.production.config.ts)
 
 governance-check:
+    node --test scripts/release-artifacts.test.mjs
     cd apps/web && npm run governance:check
 
 rust-check:
