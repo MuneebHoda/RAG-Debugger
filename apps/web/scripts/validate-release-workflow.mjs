@@ -80,7 +80,12 @@ export function validateReleaseWorkflow(source, workflow, verifierSource = "") {
   const jobs = workflow.jobs ?? {};
   permissionsExactly(
     jobs["gate-main"]?.permissions,
-    { checks: "read", contents: "read" },
+    {
+      checks: "read",
+      contents: "read",
+      "pull-requests": "read",
+      "security-events": "read",
+    },
     "gate-main",
   );
   permissionsExactly(
@@ -100,6 +105,16 @@ export function validateReleaseWorkflow(source, workflow, verifierSource = "") {
     "resolve-release",
   );
   permissionsExactly(
+    jobs["verify-release"]?.permissions,
+    {
+      actions: "read",
+      attestations: "read",
+      contents: "read",
+      packages: "read",
+    },
+    "verify-release",
+  );
+  permissionsExactly(
     jobs["version-alias"]?.permissions,
     { actions: "read", contents: "write", packages: "write" },
     "version-alias",
@@ -110,10 +125,13 @@ export function validateReleaseWorkflow(source, workflow, verifierSource = "") {
     "publication must depend on the trusted-main gate",
   );
   invariant(
-    jobs["version-alias"]?.needs === "resolve-release",
-    "version aliases must depend on release resolution",
+    jobs["verify-release"]?.needs === "resolve-release" &&
+      JSON.stringify(jobs["version-alias"]?.needs) ===
+        JSON.stringify(["resolve-release", "verify-release"]),
+    "version aliases must depend on independent release resolution and verification",
   );
   const mainGate = jobs["gate-main"]?.if ?? "";
+  const mainPublicationGate = jobs["publish-main"]?.if ?? "";
   const releaseGate = jobs["resolve-release"]?.if ?? "";
   invariant(
     mainGate.includes("github.event_name == 'push'") &&
@@ -122,8 +140,18 @@ export function validateReleaseWorkflow(source, workflow, verifierSource = "") {
   );
   invariant(
     mainGate.includes("github.repository == 'MuneebHoda/RAG-Debugger'") &&
+      mainPublicationGate.includes(
+        "github.repository == 'MuneebHoda/RAG-Debugger'",
+      ) &&
       releaseGate.includes("github.repository == 'MuneebHoda/RAG-Debugger'"),
     "publication must reject fork repositories",
+  );
+  invariant(
+    mainPublicationGate.includes("github.event_name == 'push'") &&
+      mainPublicationGate.includes("github.ref == 'refs/heads/main'") &&
+      source.includes("CORPUSLAB_RELEASE_SHA: ${{ github.sha }}") &&
+      !source.includes("needs.gate-main.outputs.source-sha"),
+    "privileged main publication must use the trusted push SHA directly",
   );
   invariant(
     !/\b(?:pull_request_target|pull_request|issue_comment|issues|workflow_dispatch):/.test(
@@ -150,6 +178,10 @@ export function validateReleaseWorkflow(source, workflow, verifierSource = "") {
     "publication must verify required quality/security checks",
   );
   invariant(
+    source.includes("security-events: read"),
+    "publication must fail closed on open CodeQL alerts",
+  );
+  invariant(
     /^\s+\[\[ "\$object_type" = tag \]\]\s*$/m.test(source),
     "version publication must require an annotated release tag",
   );
@@ -157,6 +189,30 @@ export function validateReleaseWorkflow(source, workflow, verifierSource = "") {
     source.includes("verify-manifest") &&
       source.includes("verify-published-release.sh"),
     "publication must verify manifests and attestations",
+  );
+  invariant(
+    !collectUses(jobs["version-alias"]).some((action) =>
+      action.startsWith("actions/checkout@"),
+    ),
+    "the write-capable version alias job must not checkout repository source",
+  );
+  const releaseCheckout = jobs["verify-release"]?.steps?.find((step) =>
+    step.uses?.startsWith("actions/checkout@"),
+  );
+  invariant(
+    releaseCheckout?.with?.ref === "main" &&
+      releaseCheckout.with["persist-credentials"] === false &&
+      source.includes('git checkout --detach "$CORPUSLAB_RELEASE_SHA"'),
+    "read-only release verification must start from trusted main and select the resolved commit without credentials",
+  );
+  invariant(
+    source.includes(".head_sha == $source_sha") &&
+      source.includes('.head_branch == "main"') &&
+      source.includes(".workflow.run_id == $run_id") &&
+      source.includes("EXPECTED_MANIFEST_SHA256") &&
+      verifierSource.includes("independently resolved source") &&
+      verifierSource.includes("independently resolved version"),
+    "version aliases must bind the resolved source and version to the exact verified publication",
   );
   invariant(
     verifierSource.includes("--source-digest"),

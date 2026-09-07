@@ -77,8 +77,8 @@ test("rejects pull-request and fork-capable publication triggers", async () => {
 test("rejects broad package permissions and mutable selectors", async () => {
   const broad = await workflow((value) =>
     value.replace(
-      "      checks: read\n      contents: read",
-      "      packages: write\n      checks: read",
+      "      checks: read\n      contents: read\n      pull-requests: read\n      security-events: read",
+      "      packages: write\n      checks: read\n      contents: read\n      pull-requests: read",
     ),
   );
   assert.throws(
@@ -112,6 +112,33 @@ test("rejects broad package permissions and mutable selectors", async () => {
         runtimeSecret.verifier,
       ),
     /runtime\/provider secrets/,
+  );
+});
+
+test("rejects checkout or missing identity binding in the mutation job", async () => {
+  const checkout = await workflow((value) =>
+    value.replace(
+      "    steps:\n      - name: Download and bind the independently verified release bundle",
+      "    steps:\n      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803\n      - name: Download and bind the independently verified release bundle",
+    ),
+  );
+  assert.throws(
+    () =>
+      validateReleaseWorkflow(
+        checkout.source,
+        checkout.parsed,
+        checkout.verifier,
+      ),
+    /must not checkout/,
+  );
+
+  const unbound = await workflow((value) =>
+    value.replace(".head_sha == $source_sha", ".head_sha != null"),
+  );
+  assert.throws(
+    () =>
+      validateReleaseWorkflow(unbound.source, unbound.parsed, unbound.verifier),
+    /bind the resolved source/,
   );
 });
 

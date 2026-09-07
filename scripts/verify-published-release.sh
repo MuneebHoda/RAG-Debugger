@@ -8,8 +8,12 @@ manifest=${1:-}
 [[ -f "$manifest" ]] || { echo "usage: verify-published-release.sh <release-manifest.json>" >&2; exit 1; }
 [[ "${GITHUB_REPOSITORY:-}" = "MuneebHoda/RAG-Debugger" ]] || { echo "published verification requires the canonical repository" >&2; exit 1; }
 
-release_sha=$(jq -r '.source.commit' "$manifest")
-version=$(jq -r '.release.application_version' "$manifest")
+release_sha=${CORPUSLAB_RELEASE_SHA:-}
+version=${CORPUSLAB_VERSION:-}
+[[ "$release_sha" =~ ^[a-f0-9]{40}$ ]] || { echo "CORPUSLAB_RELEASE_SHA must independently identify the expected source commit" >&2; exit 1; }
+[[ "$version" =~ ^0\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?$ ]] || { echo "CORPUSLAB_VERSION must independently identify the expected application version" >&2; exit 1; }
+[[ "$(jq -r '.source.commit' "$manifest")" = "$release_sha" ]] || { echo "release manifest source commit does not match the independently resolved source" >&2; exit 1; }
+[[ "$(jq -r '.release.application_version' "$manifest")" = "$version" ]] || { echo "release manifest application version does not match the independently resolved version" >&2; exit 1; }
 image=$(jq -r '.api.image' "$manifest")
 digest=$(jq -r '.api.digest' "$manifest")
 image_reference=$(jq -r '.api.reference' "$manifest")
@@ -17,8 +21,7 @@ artifact_directory=$(CDPATH= cd -- "$(dirname -- "$manifest")" && pwd)
 web_artifact=$(jq -r '.web.artifact' "$manifest")
 signer="github.com/MuneebHoda/RAG-Debugger/.github/workflows/publish-artifacts.yml"
 
-CORPUSLAB_RELEASE_SHA="$release_sha" CORPUSLAB_VERSION="$version" \
-  node scripts/release-artifacts.mjs verify-manifest "$manifest" published
+node scripts/release-artifacts.mjs verify-manifest "$manifest" published
 
 gh attestation verify "oci://$image_reference" --repo "$GITHUB_REPOSITORY" \
   --signer-workflow "$signer" --source-digest "$release_sha" >/dev/null

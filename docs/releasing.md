@@ -99,12 +99,15 @@ ancestor of `origin/main`.
 Create a GitHub Release from that existing tag, mark it as a pre-release while
 CorpusLab is pre-launch, and use the reviewed release notes. Publishing the
 release triggers the trusted alias job: it requires the tag's commit already
-has a successful full-SHA artifact publication, reverifies its manifest and
-attestations, refuses to move an existing GHCR version tag, and attaches the
-verified web/checksum/SBOM bundle. It never rebuilds application code. Verify
-that the release page points to the intended commit and that the attached
-artifacts match the manifest. Do not publish local databases, customer data,
-environment files, or credentials.
+has a successful full-SHA artifact publication, binds that exact run and the
+downloaded manifest to the independently resolved source SHA and application
+version, and reverifies its attestations and artifact identities with read-only
+credentials. The separate write-capable job checks out no source, refuses to
+move an existing GHCR version tag, and attaches the verified
+web/checksum/SBOM bundle. It never rebuilds application code. Verify that the
+release page points to the intended commit and that the attached artifacts
+match the manifest. Do not publish local databases, customer data, environment
+files, or credentials.
 
 ## Post-Release Checks
 

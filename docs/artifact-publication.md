@@ -19,25 +19,36 @@ Pull requests, forks, comments, issue/label events, manual workflow dispatch,
 and automation branches cannot invoke a publishing job. The main path checks
 the exact source SHA and requires successful Rust, Web, database migration,
 documentation, production-artifact, release-dry-run, Cargo Deny, Rust/Web
-coverage-upload, and CodeQL analysis checks for that SHA. Dependency Review is
-the protected-branch pre-merge gate; it does not run on main. The active main
-ruleset has no bypass actor, so a commit cannot become trusted main state until
-that review and the other required checks pass.
+coverage-upload, and CodeQL analysis checks for that SHA. A successful CodeQL
+check-run is not sufficient: the gate independently resolves the merged pull
+request associated with the exact main SHA and queries its open code-scanning
+alerts. Any open finding, or an API/query failure, blocks publication.
+Dependency Review is the protected-branch pre-merge gate; it does not run on
+main. The active main ruleset has no bypass actor, so a commit cannot become
+trusted main state until that review and the other required checks pass.
 
-Every external Action reference is a reviewed full commit SHA. Checkout always
-uses the resolved source commit and `persist-credentials: false`. The workflow
-default is no token permissions:
+Every external Action reference is a reviewed full commit SHA. Trusted-main
+checkout uses `github.sha` directly. Read-only release verification starts from
+the constant `main` ref and detaches to the independently resolved commit before
+executing repository code. Every checkout sets `persist-credentials: false`.
+The workflow default is no token permissions:
 
-| Job              | Permissions                                                                                               | Purpose                                                                           |
-| ---------------- | --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| Main gate        | `checks: read`, `contents: read`                                                                          | Validate trusted source and completed gates                                       |
-| Main publication | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | Push GHCR, create GitHub attestations, retain the release bundle                  |
-| Release resolver | `contents: read`                                                                                          | Resolve and validate an existing approved tag without executing its source        |
-| Version alias    | `actions: read`, `contents: write`, `packages: write`                                                     | Reverify the prior bundle, add the approved GHCR alias, and attach release assets |
+| Job                      | Permissions                                                                                               | Purpose                                                                                      |
+| ------------------------ | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Main gate                | `checks: read`, `contents: read`, `pull-requests: read`, `security-events: read`                          | Validate trusted source, completed checks, and the exact commit's open CodeQL alerts         |
+| Main publication         | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | Push GHCR, create GitHub attestations, retain the release bundle                             |
+| Release resolver         | `contents: read`                                                                                          | Resolve and validate an existing annotated tag without executing its source                  |
+| Read-only release verify | `actions: read`, `attestations: read`, `contents: read`, `packages: read`                                 | Bind the resolved source/version to one successful main run and verify its bundle/digests    |
+| Version alias mutation   | `actions: read`, `contents: write`, `packages: write`                                                     | Download that exact verified bundle, add its same-digest alias, and attach its release files |
 
 The GHCR token is introduced only after the final artifacts have been built and
 scanned. Build steps receive no staging, production, database, Cloudflare,
 Render, or customer secret. No GitHub Environment is used by publication.
+The write-capable version-alias job never checks out or executes repository
+source. It receives the independently resolved tag identity plus the verified
+publication run ID and manifest checksum, downloads that exact immutable
+bundle again, and checks the manifest checksum/source/version before its first
+package or release mutation.
 
 ## Build And Artifact Identities
 
@@ -128,6 +139,12 @@ the ZIP without executing it, rejects unsafe paths and runtime config, compares
 migrations to the exact checkout, validates SPDX/Trivy schemas, pulls the API
 by digest, and verifies OCI labels/readiness.
 
+Published verification requires an expected source SHA and application version
+from outside the manifest. For a semantic release these values come from the
+annotated-tag resolver, and the selected successful publication run must report
+that exact SHA. A manifest cannot self-assert either identity; source or version
+mismatch stops before an image alias or GitHub Release asset can be changed.
+
 The manifest records this shape; placeholders below are descriptive, not
 published identities:
 
@@ -201,9 +218,11 @@ The `Release dry run` CI job has only `contents: read`. It checks out the exact
 PR SHA, verifies lockfiles, builds the same API/web inputs once, proves the web
 ZIP is deterministic, generates and validates both SPDX files, runs Trivy and
 the production npm advisory gate, and validates a manifest explicitly marked
-`dry-run`. Negative fixtures prove that unsafe triggers/permissions, Action
-tags, mutable selectors, missing locks/attestations, checksum mismatches,
-secret-shaped files, and High/Critical results fail.
+`dry-run`. Negative fixtures prove that unsafe triggers/permissions, checkout
+in the write-capable alias job, Action tags, mutable selectors, missing
+locks/attestations, source/version mismatches, checksum mismatches,
+secret-shaped files, High/Critical results, and CodeQL alert-query failures
+fail.
 
 The dry run does not authenticate to GHCR, push packages, mint OIDC tokens,
 create attestations, attach release assets, or deploy. GHCR digest resolution,

@@ -211,10 +211,13 @@ removes its synthetic database volume on exit.
 
 `node --test scripts/release-artifacts.test.mjs` covers deterministic web and
 migration checksum behavior, runtime-config exclusion, required lockfiles,
-attestation requirements, Trivy fail policy, and the complete named-check gate.
+attestation requirements, Trivy fail policy, the complete named-check gate,
+open CodeQL alert handling, alert-API failure behavior, and independent
+release source/version binding.
 `npm --prefix apps/web run governance:check` also validates trusted triggers,
 canonical-repository/fork guards, least-privilege job permissions, full-SHA
-Action pins, immutable selectors, and bounded retention.
+Action pins, immutable selectors, a checkout-free write-capable alias job, and
+bounded retention.
 
 Every pull request and main push runs the read-only `Release dry run` CI job. It
 builds the release inputs without registry authentication, verifies a repeated

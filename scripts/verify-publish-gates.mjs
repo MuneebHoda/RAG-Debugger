@@ -41,6 +41,24 @@ export function evaluateChecks(checkRuns) {
   });
 }
 
+export function evaluatePublicationGate(checkRuns, codeScanningAlerts) {
+  if (!Array.isArray(codeScanningAlerts)) {
+    throw new Error("CodeQL alert results are required");
+  }
+  const checks = evaluateChecks(checkRuns);
+  if (checks.some((check) => check.state === "failure")) {
+    return { state: "failure", checks, codeScanningAlerts: [] };
+  }
+  if (checks.some((check) => check.state === "pending")) {
+    return { state: "pending", checks, codeScanningAlerts: [] };
+  }
+  return {
+    state: codeScanningAlerts.length ? "failure" : "success",
+    checks,
+    codeScanningAlerts,
+  };
+}
+
 async function loadChecks(repository, sourceSha, token) {
   const response = await fetch(
     `https://api.github.com/repos/${repository}/commits/${sourceSha}/check-runs?per_page=100`,
@@ -56,6 +74,76 @@ async function loadChecks(repository, sourceSha, token) {
     throw new Error(`GitHub Checks API returned ${response.status}`);
   }
   return (await response.json()).check_runs;
+}
+
+async function loadGithubPages(url, token, label, fetchImpl) {
+  const values = [];
+  while (url) {
+    const response = await fetchImpl(url, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`${label} API returned ${response.status}`);
+    }
+    const page = await response.json();
+    if (!Array.isArray(page)) {
+      throw new Error(`${label} API returned an invalid response`);
+    }
+    values.push(...page);
+    const next = response.headers
+      .get("link")
+      ?.split(",")
+      .find((link) => link.includes('rel="next"'));
+    url = next?.match(/<([^>]+)>/)?.[1] ?? "";
+  }
+  return values;
+}
+
+export async function loadCodeScanningAlerts(
+  repository,
+  sourceSha,
+  token,
+  fetchImpl = fetch,
+) {
+  const pulls = await loadGithubPages(
+    `https://api.github.com/repos/${repository}/commits/${sourceSha}/pulls?per_page=100`,
+    token,
+    "Associated pull requests",
+    fetchImpl,
+  );
+  const trustedPulls = pulls.filter(
+    (pull) =>
+      pull.merged_at &&
+      pull.base?.ref === "main" &&
+      pull.base?.repo?.full_name === repository &&
+      (pull.merge_commit_sha === sourceSha || pull.head?.sha === sourceSha),
+  );
+  if (!trustedPulls.length) {
+    throw new Error(
+      `no merged main pull request is bound to release SHA ${sourceSha}`,
+    );
+  }
+
+  const alerts = [];
+  for (const pull of trustedPulls) {
+    const pullAlerts = await loadGithubPages(
+      `https://api.github.com/repos/${repository}/code-scanning/alerts?state=open&pr=${pull.number}&per_page=100`,
+      token,
+      `Code scanning alerts for pull request #${pull.number}`,
+      fetchImpl,
+    );
+    alerts.push(
+      ...pullAlerts.map((alert) => ({
+        ...alert,
+        pull_request_number: pull.number,
+      })),
+    );
+  }
+  return alerts;
 }
 
 async function main() {
@@ -77,9 +165,8 @@ async function main() {
   const attempts = Number(process.env.CORPUSLAB_GATE_ATTEMPTS ?? 40);
   const interval = Number(process.env.CORPUSLAB_GATE_INTERVAL_MS ?? 15_000);
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    const states = evaluateChecks(
-      await loadChecks(repository, sourceSha, token),
-    );
+    const checkRuns = await loadChecks(repository, sourceSha, token);
+    const states = evaluateChecks(checkRuns);
     const failures = states.filter((check) => check.state === "failure");
     if (failures.length) {
       throw new Error(
@@ -88,8 +175,22 @@ async function main() {
     }
     const pending = states.filter((check) => check.state === "pending");
     if (!pending.length) {
+      const gate = evaluatePublicationGate(
+        checkRuns,
+        await loadCodeScanningAlerts(repository, sourceSha, token),
+      );
+      if (gate.codeScanningAlerts.length) {
+        throw new Error(
+          `open CodeQL alerts block publication: ${gate.codeScanningAlerts
+            .map(
+              (alert) =>
+                `#${alert.number} ${alert.rule?.id ?? "unknown-rule"} (PR #${alert.pull_request_number})`,
+            )
+            .join(", ")}`,
+        );
+      }
       console.log(
-        `Verified ${states.length} required quality/security checks for ${sourceSha}.`,
+        `Verified ${states.length} required checks and zero open CodeQL alerts for ${sourceSha}.`,
       );
       return;
     }

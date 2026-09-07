@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -16,6 +16,8 @@ import {
 } from "./release-artifacts.mjs";
 import {
   evaluateChecks,
+  evaluatePublicationGate,
+  loadCodeScanningAlerts,
   REQUIRED_PUBLISH_CHECKS,
 } from "./verify-publish-gates.mjs";
 
@@ -185,13 +187,17 @@ test("release policy fails on missing locks, attestations, vulnerabilities, and 
   );
 });
 
-test("publication gates require every named GitHub Actions check", () => {
-  const passing = REQUIRED_PUBLISH_CHECKS.map((name) => ({
+function passingChecks() {
+  return REQUIRED_PUBLISH_CHECKS.map((name) => ({
     name,
     status: "completed",
     conclusion: "success",
     app: { slug: "github-actions" },
   }));
+}
+
+test("publication gates require every named GitHub Actions check", () => {
+  const passing = passingChecks();
   assert.ok(
     evaluateChecks(passing).every((check) => check.state === "success"),
   );
@@ -203,4 +209,105 @@ test("publication gates require every named GitHub Actions check", () => {
   );
   passing[0].conclusion = "failure";
   assert.equal(evaluateChecks(passing)[0].state, "failure");
+});
+
+test("successful CodeQL execution with no open alerts passes", () => {
+  assert.equal(evaluatePublicationGate(passingChecks(), []).state, "success");
+});
+
+test("successful CodeQL execution with an open alert fails", () => {
+  const result = evaluatePublicationGate(passingChecks(), [
+    { number: 49, rule: { id: "actions/untrusted-checkout/medium" } },
+  ]);
+  assert.equal(result.state, "failure");
+  assert.equal(result.codeScanningAlerts.length, 1);
+});
+
+test("failed CodeQL execution fails publication", () => {
+  const checks = passingChecks();
+  checks.find((check) => check.name === "Analyze (rust)").conclusion =
+    "failure";
+  assert.equal(evaluatePublicationGate(checks, []).state, "failure");
+});
+
+test("pending CodeQL execution remains pending", () => {
+  const checks = passingChecks();
+  const codeql = checks.find((check) => check.name === "Analyze (actions)");
+  codeql.status = "in_progress";
+  codeql.conclusion = null;
+  assert.equal(evaluatePublicationGate(checks, []).state, "pending");
+});
+
+test("CodeQL alert API failures cannot be ignored", async () => {
+  const responses = [
+    {
+      ok: true,
+      headers: { get: () => null },
+      json: async () => [
+        {
+          number: 120,
+          merged_at: "2026-09-07T00:00:00Z",
+          merge_commit_sha: "a".repeat(40),
+          head: { sha: "b".repeat(40) },
+          base: {
+            ref: "main",
+            repo: { full_name: "MuneebHoda/RAG-Debugger" },
+          },
+        },
+      ],
+    },
+    {
+      ok: false,
+      status: 403,
+      headers: { get: () => null },
+    },
+  ];
+  await assert.rejects(
+    loadCodeScanningAlerts(
+      "MuneebHoda/RAG-Debugger",
+      "a".repeat(40),
+      "token",
+      async () => responses.shift(),
+    ),
+    /Code scanning alerts for pull request #120 API returned 403/,
+  );
+});
+
+test("published verification rejects manifest identity self-assertion", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "corpuslab-release-"));
+  try {
+    const manifest = path.join(directory, "release-manifest.json");
+    await writeFile(
+      manifest,
+      JSON.stringify({
+        source: { commit: "a".repeat(40) },
+        release: { application_version: "0.1.0" },
+      }),
+    );
+    const verify = (releaseSha, version) =>
+      spawnSync("./scripts/verify-published-release.sh", [manifest], {
+        cwd: path.resolve(import.meta.dirname, ".."),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          GITHUB_REPOSITORY: "MuneebHoda/RAG-Debugger",
+          CORPUSLAB_RELEASE_SHA: releaseSha,
+          CORPUSLAB_VERSION: version,
+        },
+      });
+
+    const missingIdentity = verify("", "");
+    assert.notEqual(missingIdentity.status, 0);
+    assert.match(missingIdentity.stderr, /independently identify/);
+
+    const sourceMismatch = verify("b".repeat(40), "0.1.0");
+    assert.notEqual(sourceMismatch.status, 0);
+    assert.match(sourceMismatch.stderr, /independently resolved source/);
+
+    const versionMismatch = verify("a".repeat(40), "0.2.0");
+    assert.notEqual(versionMismatch.status, 0);
+    assert.match(versionMismatch.stderr, /independently resolved version/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
