@@ -1,0 +1,365 @@
+name: Publish deployment artifacts
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: publish-artifacts-${{ github.event.release.tag_name || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  gate-main:
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'MuneebHoda/RAG-Debugger' &&
+      github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      checks: read
+      contents: read
+      pull-requests: read
+      security-events: read
+    steps:
+      - name: Checkout exact trusted source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify source identity
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - name: Verify required quality and security checks
+        env:
+          CORPUSLAB_GATE_ATTEMPTS: 180
+          CORPUSLAB_RELEASE_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-publish-gates.mjs
+
+  publish-main:
+    if: >-
+      github.event_name == 'push' &&
+      github.repository == 'MuneebHoda/RAG-Debugger' &&
+      github.ref == 'refs/heads/main'
+    needs: gate-main
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      artifact-metadata: write
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    env:
+      CORPUSLAB_API_IMAGE: ghcr.io/muneebhoda/rag-debugger
+      CORPUSLAB_RELEASE_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout exact trusted source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Build API and web artifacts once
+        id: build
+        run: |
+          export CORPUSLAB_VERSION
+          CORPUSLAB_VERSION=$(node -p "require('./apps/web/package.json').version")
+          ./scripts/build-release-artifacts.sh
+          echo "version=$CORPUSLAB_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Generate API SPDX SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_FILE_METADATA_SELECTION: all
+        with:
+          image: ${{ steps.build.outputs.api_tag }}
+          format: spdx-json
+          output-file: target/release-artifacts/api.spdx.json
+          syft-version: v1.51.1
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Generate web SPDX SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_FILE_METADATA_SELECTION: all
+        with:
+          path: target/release-artifacts/web-application
+          format: spdx-json
+          output-file: target/release-artifacts/web.spdx.json
+          syft-version: v1.51.1
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+      - name: Scan final artifacts
+        run: |
+          trivy image --quiet --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed=false \
+            --format json --output target/release-artifacts/api-trivy.json "${{ steps.build.outputs.api_tag }}"
+          trivy fs --quiet --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed=false \
+            --format json --output target/release-artifacts/web-trivy.json target/release-artifacts/web-application
+          node scripts/release-artifacts.mjs verify-scan target/release-artifacts/api-trivy.json
+          node scripts/release-artifacts.mjs verify-scan target/release-artifacts/web-trivy.json
+      - name: Authenticate to GHCR after build and scanning
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish full-commit API tag and record registry digest
+        id: push
+        env:
+          API_TAG: ${{ steps.build.outputs.api_tag }}
+        run: |
+          push_output=$(docker push "$API_TAG" 2>&1)
+          printf '%s\n' "$push_output"
+          digest=$(printf '%s\n' "$push_output" | sed -n 's/^.*digest: \(sha256:[a-f0-9]\{64\}\).*$/\1/p' | tail -n 1)
+          [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker pull "$CORPUSLAB_API_IMAGE@$digest" >/dev/null
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest API provenance
+        id: api-provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.CORPUSLAB_API_IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest API SBOM
+        id: api-sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.CORPUSLAB_API_IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: target/release-artifacts/api.spdx.json
+          push-to-registry: true
+          create-storage-record: false
+      - name: Attest web provenance
+        id: web-provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/release-artifacts/${{ steps.build.outputs.web_artifact }}
+      - name: Attest web SBOM
+        id: web-sbom
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: target/release-artifacts/${{ steps.build.outputs.web_artifact }}
+          sbom-path: target/release-artifacts/web.spdx.json
+      - name: Create release manifest from verified artifacts
+        env:
+          CORPUSLAB_API_DIGEST: ${{ steps.push.outputs.digest }}
+          CORPUSLAB_API_PROVENANCE_ATTESTATION_ID: ${{ steps.api-provenance.outputs.attestation-id }}
+          CORPUSLAB_API_PROVENANCE_ATTESTATION_URL: ${{ steps.api-provenance.outputs.attestation-url }}
+          CORPUSLAB_API_SBOM_ATTESTATION_ID: ${{ steps.api-sbom.outputs.attestation-id }}
+          CORPUSLAB_API_SBOM_ATTESTATION_URL: ${{ steps.api-sbom.outputs.attestation-url }}
+          CORPUSLAB_RELEASE_MODE: published
+          CORPUSLAB_VERSION: ${{ steps.build.outputs.version }}
+          CORPUSLAB_WEB_PROVENANCE_ATTESTATION_ID: ${{ steps.web-provenance.outputs.attestation-id }}
+          CORPUSLAB_WEB_PROVENANCE_ATTESTATION_URL: ${{ steps.web-provenance.outputs.attestation-url }}
+          CORPUSLAB_WEB_SBOM_ATTESTATION_ID: ${{ steps.web-sbom.outputs.attestation-id }}
+          CORPUSLAB_WEB_SBOM_ATTESTATION_URL: ${{ steps.web-sbom.outputs.attestation-url }}
+        run: node scripts/release-artifacts.mjs create-manifest
+      - name: Verify attestations, release manifest, and published image
+        env:
+          CORPUSLAB_VERSION: ${{ steps.build.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/verify-published-release.sh target/release-artifacts/release-manifest.json
+      - name: Remove unpackaged working tree
+        run: rm -rf target/release-artifacts/web-application target/release-artifacts/build-identities.json
+      - name: Upload intentional release bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: corpuslab-release-${{ env.CORPUSLAB_RELEASE_SHA }}
+          path: |
+            target/release-artifacts/${{ steps.build.outputs.web_artifact }}
+            target/release-artifacts/web-application.files.sha256
+            target/release-artifacts/migrations.files.sha256
+            target/release-artifacts/api.spdx.json
+            target/release-artifacts/web.spdx.json
+            target/release-artifacts/api-trivy.json
+            target/release-artifacts/web-trivy.json
+            target/release-artifacts/release-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+      - name: Download and reverify release bundle
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: corpuslab-release-${{ env.CORPUSLAB_RELEASE_SHA }}
+          path: target/downloaded-release
+      - name: Verify downloaded web and manifest checksums
+        env:
+          CORPUSLAB_VERSION: ${{ steps.build.outputs.version }}
+        run: node scripts/release-artifacts.mjs verify-manifest target/downloaded-release/release-manifest.json published
+
+  resolve-release:
+    if: github.event_name == 'release' && github.repository == 'MuneebHoda/RAG-Debugger'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      source-sha: ${{ steps.release.outputs.source_sha }}
+      version: ${{ steps.release.outputs.version }}
+      version-tag: ${{ steps.release.outputs.version_tag }}
+    steps:
+      - name: Resolve approved semantic release tag
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v0\.[0-9]+\.[0-9]+(-rc\.[1-9][0-9]*)?$ ]]
+          object=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG")
+          object_type=$(jq -r '.object.type' <<<"$object")
+          source_sha=$(jq -r '.object.sha' <<<"$object")
+          [[ "$object_type" = tag ]]
+          for _ in $(seq 1 5); do
+            [[ "$object_type" = tag ]] || break
+            object=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$source_sha")
+            object_type=$(jq -r '.object.type' <<<"$object")
+            source_sha=$(jq -r '.object.sha' <<<"$object")
+          done
+          [[ "$object_type" = commit && "$source_sha" =~ ^[a-f0-9]{40}$ ]]
+          comparison=$(gh api "repos/$GITHUB_REPOSITORY/compare/$source_sha...main" --jq '.status')
+          [[ "$comparison" = ahead || "$comparison" = identical ]]
+          version=${RELEASE_TAG#v}
+          source_version=$(gh api "repos/$GITHUB_REPOSITORY/contents/apps/api/Cargo.toml?ref=$source_sha" --jq '.content' | base64 --decode | awk -F '"' '/^version = / { print $2; exit }')
+          [[ "$source_version" = "$version" ]]
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "version_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  verify-release:
+    if: github.event_name == 'release' && github.repository == 'MuneebHoda/RAG-Debugger'
+    needs: resolve-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      attestations: read
+      contents: read
+      packages: read
+    outputs:
+      manifest-sha256: ${{ steps.verify.outputs.manifest_sha256 }}
+      publication-run-id: ${{ steps.download.outputs.run_id }}
+    env:
+      CORPUSLAB_API_IMAGE: ghcr.io/muneebhoda/rag-debugger
+      CORPUSLAB_RELEASE_SHA: ${{ needs.resolve-release.outputs.source-sha }}
+      CORPUSLAB_VERSION: ${{ needs.resolve-release.outputs.version }}
+    steps:
+      - name: Checkout trusted main for read-only verification
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Select the independently resolved source
+        run: |
+          git fetch --no-tags --depth=1 origin "$CORPUSLAB_RELEASE_SHA"
+          git checkout --detach "$CORPUSLAB_RELEASE_SHA"
+          test "$(git rev-parse HEAD)" = "$CORPUSLAB_RELEASE_SHA"
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+      - name: Download the exact successful main publication
+        id: download
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow publish-artifacts.yml \
+            --commit "$CORPUSLAB_RELEASE_SHA" --event push --status success --limit 10 \
+            --json databaseId,conclusion,event,headSha,status)
+          run_id=$(jq -er --arg source_sha "$CORPUSLAB_RELEASE_SHA" \
+            'map(select(.headSha == $source_sha and .event == "push" and .status == "completed" and .conclusion == "success")) | if length == 1 then .[0].databaseId else error("expected exactly one successful publication run") end' <<<"$runs")
+          [[ "$run_id" =~ ^[0-9]+$ ]]
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id")
+          jq -e --arg source_sha "$CORPUSLAB_RELEASE_SHA" --argjson run_id "$run_id" \
+            '.id == $run_id and .head_sha == $source_sha and .head_branch == "main" and .event == "push" and .status == "completed" and .conclusion == "success" and .path == ".github/workflows/publish-artifacts.yml"' <<<"$run" >/dev/null
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+            --name "corpuslab-release-$CORPUSLAB_RELEASE_SHA" --dir target/version-release
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+      - name: Verify immutable release inputs with read-only credentials
+        id: verify
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_RUN_ID: ${{ steps.download.outputs.run_id }}
+        run: |
+          jq -e --arg run_id "$PUBLICATION_RUN_ID" '.workflow.run_id == $run_id' \
+            target/version-release/release-manifest.json >/dev/null
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          ./scripts/verify-published-release.sh target/version-release/release-manifest.json
+          manifest_sha256=$(sha256sum target/version-release/release-manifest.json | awk '{ print $1 }')
+          [[ "$manifest_sha256" =~ ^[a-f0-9]{64}$ ]]
+          echo "manifest_sha256=$manifest_sha256" >> "$GITHUB_OUTPUT"
+
+  version-alias:
+    if: github.event_name == 'release' && github.repository == 'MuneebHoda/RAG-Debugger'
+    needs: [resolve-release, verify-release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+      packages: write
+    env:
+      CORPUSLAB_API_IMAGE: ghcr.io/muneebhoda/rag-debugger
+      CORPUSLAB_RELEASE_SHA: ${{ needs.resolve-release.outputs.source-sha }}
+      CORPUSLAB_VERSION: ${{ needs.resolve-release.outputs.version }}
+    steps:
+      - name: Download and bind the independently verified release bundle
+        env:
+          EXPECTED_MANIFEST_SHA256: ${{ needs.verify-release.outputs.manifest-sha256 }}
+          GH_TOKEN: ${{ github.token }}
+          PUBLICATION_RUN_ID: ${{ needs.verify-release.outputs.publication-run-id }}
+        run: |
+          [[ "$PUBLICATION_RUN_ID" =~ ^[0-9]+$ && "$EXPECTED_MANIFEST_SHA256" =~ ^[a-f0-9]{64}$ ]]
+          gh run download "$PUBLICATION_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "corpuslab-release-$CORPUSLAB_RELEASE_SHA" --dir target/version-release
+          echo "$EXPECTED_MANIFEST_SHA256  target/version-release/release-manifest.json" | sha256sum --check --strict
+          jq -e --arg source_sha "$CORPUSLAB_RELEASE_SHA" --arg version "$CORPUSLAB_VERSION" \
+            '.source.commit == $source_sha and .release.application_version == $version' \
+            target/version-release/release-manifest.json >/dev/null
+      - name: Add the approved semantic version alias without rebuilding
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.resolve-release.outputs.version-tag }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          digest=$(jq -r '.api.digest' target/version-release/release-manifest.json)
+          image_reference="$CORPUSLAB_API_IMAGE@$digest"
+          docker pull "$image_reference" >/dev/null
+          if existing=$(docker buildx imagetools inspect "$CORPUSLAB_API_IMAGE:$RELEASE_TAG" 2>/dev/null); then
+            existing_digest=$(awk '$1 == "Digest:" { print $2; exit }' <<<"$existing")
+            [[ "$existing_digest" = "$digest" ]]
+          else
+            docker tag "$image_reference" "$CORPUSLAB_API_IMAGE:$RELEASE_TAG"
+            push_output=$(docker push "$CORPUSLAB_API_IMAGE:$RELEASE_TAG" 2>&1)
+            printf '%s\n' "$push_output"
+            pushed_digest=$(printf '%s\n' "$push_output" | sed -n 's/^.*digest: \(sha256:[a-f0-9]\{64\}\).*$/\1/p' | tail -n 1)
+            [[ "$pushed_digest" = "$digest" ]]
+          fi
+          web_artifact=$(jq -r '.web.artifact' target/version-release/release-manifest.json)
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            "target/version-release/$web_artifact" \
+            target/version-release/web-application.files.sha256 \
+            target/version-release/migrations.files.sha256 \
+            target/version-release/api.spdx.json \
+            target/version-release/web.spdx.json \
+            target/version-release/api-trivy.json \
+            target/version-release/web-trivy.json \
+            target/version-release/release-manifest.json

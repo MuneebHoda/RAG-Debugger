@@ -5,7 +5,7 @@ checkpoints rather than claims that hosted deployment infrastructure exists.
 This guide complements [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 [engineering quality policy](engineering-quality.md).
 
-The [Private-Alpha Deployment Architecture](deployment-architecture.md) defines hosted artifact promotion. [Production Artifacts](production-artifacts.md) implements local packaging and qualification; publication and deployment remain disabled until #104–#106 implement them.
+The [Private-Alpha Deployment Architecture](deployment-architecture.md) defines hosted artifact promotion. [Production Artifacts](production-artifacts.md) implements local packaging and qualification, and [Artifact Publication](artifact-publication.md) defines trusted GHCR/web publication. Deployment remains disabled until the later deployment issues implement it.
 
 ## Version Policy
 
@@ -97,10 +97,17 @@ checkout. Do not tag if the recorded commit is unavailable or is not an
 ancestor of `origin/main`.
 
 Create a GitHub Release from that existing tag, mark it as a pre-release while
-CorpusLab is pre-launch, and use the reviewed release notes. Verify that the
-release page points to the intended commit and that any checksums or attached
-artifacts match their documented source. Do not publish local databases,
-customer data, environment files, or credentials.
+CorpusLab is pre-launch, and use the reviewed release notes. Publishing the
+release triggers the trusted alias job: it requires the tag's commit already
+has a successful full-SHA artifact publication, binds that exact run and the
+downloaded manifest to the independently resolved source SHA and application
+version, and reverifies its attestations and artifact identities with read-only
+credentials. The separate write-capable job checks out no source, refuses to
+move an existing GHCR version tag, and attaches the verified
+web/checksum/SBOM bundle. It never rebuilds application code. Verify that the
+release page points to the intended commit and that the attached artifacts
+match the manifest. Do not publish local databases, customer data, environment
+files, or credentials.
 
 ## Post-Release Checks
 
@@ -112,7 +119,9 @@ After publishing:
 4. Run migrations, start the API and web app, verify readiness, authenticate,
    and exercise the guided demo's ingest-to-report path.
 5. Recheck the security advisory and dependency status for the released commit.
-6. Record results and any follow-up issue links on the release or milestone.
+6. Confirm the API version tag resolves to the manifest's existing digest and
+   use the digest—not that tag—in every deployment record.
+7. Record results and any follow-up issue links on the release or milestone.
 
 These are local product smoke checks; they do not imply a hosted deployment.
 

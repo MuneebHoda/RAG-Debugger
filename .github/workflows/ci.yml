@@ -19,7 +19,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Format
@@ -37,8 +39,10 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -83,7 +87,9 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/rag_debugger
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
       - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       - name: Install SQLx CLI
@@ -130,8 +136,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -157,6 +165,105 @@ jobs:
           CORPUSLAB_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: docker compose -f docker-compose.production.yml --profile production down -v
 
+  release-dry-run:
+    name: Release dry run
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CORPUSLAB_API_IMAGE: corpuslab-api
+      CORPUSLAB_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Test release policy
+        run: node --test scripts/release-artifacts.test.mjs
+      - name: Build API and web artifacts once without publishing
+        id: build
+        run: |
+          export CORPUSLAB_VERSION
+          CORPUSLAB_VERSION=$(node -p "require('./apps/web/package.json').version")
+          ./scripts/build-release-artifacts.sh
+          echo "version=$CORPUSLAB_VERSION" >> "$GITHUB_OUTPUT"
+      - name: Verify deterministic web package
+        env:
+          WEB_ARTIFACT: ${{ steps.build.outputs.web_artifact }}
+        run: |
+          cp "target/release-artifacts/$WEB_ARTIFACT" "$RUNNER_TEMP/$WEB_ARTIFACT"
+          rm "target/release-artifacts/$WEB_ARTIFACT"
+          (cd target/release-artifacts/web-application && find . -type f -print | LC_ALL=C sort | TZ=UTC zip -X -q "../$WEB_ARTIFACT" -@)
+          cmp "$RUNNER_TEMP/$WEB_ARTIFACT" "target/release-artifacts/$WEB_ARTIFACT"
+      - name: Generate API SPDX SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_FILE_METADATA_SELECTION: all
+        with:
+          image: ${{ steps.build.outputs.api_tag }}
+          format: spdx-json
+          output-file: target/release-artifacts/api.spdx.json
+          syft-version: v1.51.1
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Generate web SPDX SBOM
+        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        env:
+          SYFT_CHECK_FOR_APP_UPDATE: "false"
+          SYFT_FILE_METADATA_SELECTION: all
+        with:
+          path: target/release-artifacts/web-application
+          format: spdx-json
+          output-file: target/release-artifacts/web.spdx.json
+          syft-version: v1.51.1
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@81e514348e19b6112ce2a7e3ecbafe19c1e1f567 # v0.3.1
+        with:
+          version: v0.74.0
+          cache: true
+      - name: Scan final artifacts and enforce policy
+        run: |
+          trivy image --quiet --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed=false \
+            --format json --output target/release-artifacts/api-trivy.json "${{ steps.build.outputs.api_tag }}"
+          trivy fs --quiet --scanners vuln,secret --severity HIGH,CRITICAL --ignore-unfixed=false \
+            --format json --output target/release-artifacts/web-trivy.json target/release-artifacts/web-application
+          node scripts/release-artifacts.mjs verify-scan target/release-artifacts/api-trivy.json
+          node scripts/release-artifacts.mjs verify-scan target/release-artifacts/web-trivy.json
+      - name: Prove secret and vulnerability findings fail policy
+        run: |
+          mkdir "$RUNNER_TEMP/release-secret-fixture"
+          node -e "require('node:fs').writeFileSync(process.argv[1], 'gh' + 'p_' + require('node:crypto').randomBytes(20).toString('hex'))" "$RUNNER_TEMP/release-secret-fixture/token.txt"
+          trivy fs --quiet --scanners secret --format json --output "$RUNNER_TEMP/secret-report.json" "$RUNNER_TEMP/release-secret-fixture"
+          if node scripts/release-artifacts.mjs verify-scan "$RUNNER_TEMP/secret-report.json"; then
+            echo "secret-shaped fixture unexpectedly passed release policy" >&2
+            exit 1
+          fi
+          node -e "require('node:fs').writeFileSync(process.argv[1], JSON.stringify({SchemaVersion:2,Results:[{Target:'fixture',Vulnerabilities:[{VulnerabilityID:'CVE-TEST',PkgName:'fixture',Severity:'CRITICAL'}]}]}))" "$RUNNER_TEMP/vulnerability-report.json"
+          if node scripts/release-artifacts.mjs verify-scan "$RUNNER_TEMP/vulnerability-report.json"; then
+            echo "vulnerability fixture unexpectedly passed release policy" >&2
+            exit 1
+          fi
+      - name: Create and verify dry-run release manifest
+        env:
+          CORPUSLAB_RELEASE_MODE: dry-run
+          CORPUSLAB_VERSION: ${{ steps.build.outputs.version }}
+        run: |
+          export CORPUSLAB_API_DIGEST
+          CORPUSLAB_API_DIGEST=$(docker image inspect --format '{{.Id}}' "${{ steps.build.outputs.api_tag }}")
+          node scripts/release-artifacts.mjs create-manifest
+          node scripts/release-artifacts.mjs verify-manifest target/release-artifacts/release-manifest.dry-run.json dry-run
+
   docs:
     name: Documentation
     runs-on: ubuntu-latest
@@ -165,8 +272,10 @@ jobs:
       run:
         working-directory: apps/web
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm

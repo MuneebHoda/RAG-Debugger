@@ -114,8 +114,30 @@ This public repository explicitly accepts CodeRabbit's default cache and knowled
 
 ## Private-Alpha Deployment Architecture Review Note
 
-Issue #102 documents a future provider boundary; it does not provision or transmit customer data. The approved topology names GitHub/GHCR, Cloudflare Pages/Access/Tunnel, Render private services, and Render Postgres and explicitly records what each can technically observe. Raw content remains local by default; hosted upload is deliberate and disclosed, `full_local_only` transfer stays forbidden, and production data cannot become preview/staging fixtures. Environment secrets are distinct, provider-managed, unavailable to pull requests/build jobs, and prohibited from source/logs/artifacts.
+Issue #102 documents the provider boundary; it does not provision or transmit customer data. The approved topology names GitHub/GHCR, Cloudflare Pages/Access/Tunnel, Render private services, and Render Postgres and explicitly records what each can technically observe. Raw content remains local by default; hosted upload is deliberate and disclosed, `full_local_only` transfer stays forbidden, and production data cannot become preview/staging fixtures. Environment secrets are distinct, provider-managed, unavailable to pull requests/build jobs, and prohibited from source/logs/artifacts.
 
 Each environment's app and API hostnames share one default-deny multi-domain Access application with eager redirect cookies, avoiding a second API-host login without adding browser-visible service credentials. The Access cookie remains distinct from CorpusLab authentication. The only Access bypass is unauthenticated `OPTIONS`; API-host preflights still traverse the private tunnel, exact-origin API CORS remains authoritative, all non-`OPTIONS` requests remain Access-gated, and #107 must prove allowed/disallowed preflights, Access denial, provider-origin non-bypass, and continued CorpusLab authentication.
 
-Hosted config validation fails before database connection or listener startup for insecure origins/cookies, local/default database settings, memory storage, external auth/embedding claims, verbose logs, mutable release identity, and oversized uploads. Errors name only the unsafe variable and requirement. No secret value, database URL, account content, Access identity, or provider payload is logged. Production remains inactive until #103–#108 implement the immutable artifacts, isolated infrastructure, qualification, redacted telemetry, retention, backup, restore, and incident evidence required by the contract.
+Hosted config validation fails before database connection or listener startup for insecure origins/cookies, local/default database settings, memory storage, external auth/embedding claims, verbose logs, mutable release identity, and oversized uploads. Errors name only the unsafe variable and requirement. No secret value, database URL, account content, Access identity, or provider payload is logged. Production remains inactive until the later issues implement isolated infrastructure, qualification, redacted telemetry, retention, backup, restore, and incident evidence required by the contract.
+
+## Trusted Artifact Publication Review Note
+
+Issue #104 sends only public repository source, the final API filesystem, static
+web files, dependency identities, checksums, and workflow metadata to GitHub
+Actions/GHCR/attestation storage. SPDX and successful scan reports are public
+engineering artifacts; they contain deployment file/package identities but no
+runtime configuration, database URL, provider credential, customer identity,
+corpus, query, answer, trace, report, cookie, or secret hash. Trivy downloads a
+public advisory/secret-rule database and scans on the GitHub runner; it does not
+receive production data. Matched secret contents are never printed or retained.
+
+Pull-request jobs have read-only contents access and cannot authenticate to
+GHCR or mint attestations. Only protected canonical `main` state receives the
+narrow package/OIDC/attestation permissions after all required gates succeed;
+approved release jobs receive only the content/package writes needed to attach
+already-verified artifacts and add a same-digest version alias. No staging or
+production GitHub Environment, provider secret, database, or customer fixture
+is available. Actions artifacts expire after 30 days; reviewed release assets
+and GHCR digests remain only while supported, deployed, or last-known-good.
+Rollback removes the workflow and package/release outputs through GitHub; no
+CorpusLab database or user-data migration is involved.

@@ -12,12 +12,14 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Security
 
+- Added fail-closed Trivy High/Critical and secret scanning for final deployment artifacts, explicit open-CodeQL-alert publication gating, GitHub OIDC provenance/SPDX attestations, independently bound release source/version verification, checkout-free version-alias mutation, immutable Action pins, narrowly scoped publication permissions, and upgraded React Router plus transitive build dependencies past current High-severity advisories.
 - Upgraded PDF extraction to remove a known `lopdf` vulnerability, marked internal Rust packages as non-publishable, and refined Cargo Deny to block direct unmaintained dependencies while keeping transitive unmaintained, duplicate-version, and yanked-crate findings visible as nonblocking warnings.
 - Added a strict Cargo Deny gate for RustSec advisories, dependency bans, approved licenses, and trusted dependency sources.
 - Removed compiled bootstrap and Postgres passwords from API runtime defaults, require explicit non-empty bootstrap credentials and Postgres configuration, and stopped displaying or prefilling login credentials in the web app.
 
 ### Added
 
+- Trusted protected-main publication of full-SHA GHCR API images and deterministic web/migration bundles, with registry digests, SPDX 2.3 SBOMs, GitHub attestations, a verified schema-v1 release manifest, approved same-digest version aliases, bounded retention, and a read-only pull-request dry run.
 - Hardened non-root API and static web images, fail-closed embedded forward-only SQLx migration command, separately checksummed public runtime web configuration, graceful API shutdown, production-parity Postgres 17 Compose stack, and packaged browser/artifact qualification.
 - Private-alpha deployment ADR and environment contract covering the Cloudflare/Render trust boundary, isolated staging/production configuration, fail-closed hosted startup with non-local origins, immutable promotion, migrations, recovery, cost limits, and scoped implementation ownership for issues #103–#108.
 - Versioned golden dataset schema v1 with stable persisted case keys, deterministic privacy-aware JSON export, mandatory dry-run import modes, atomic workspace-scoped MemoryStore/Postgres application, CI-key validation/import, and practical Eval Lab transfer controls.
