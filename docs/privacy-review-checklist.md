@@ -141,3 +141,24 @@ is available. Actions artifacts expire after 30 days; reviewed release assets
 and GHCR digests remain only while supported, deployed, or last-known-good.
 Rollback removes the workflow and package/release outputs through GitHub; no
 CorpusLab database or user-data migration is involved.
+
+## Private-Alpha Infrastructure Foundation Review Note
+
+Issue #105 defines desired provider resources but does not provision them or
+transmit customer data. Staging is restricted to synthetic or explicitly
+sanitized data and can never receive an automatic production clone. Render
+project environments, private networks, services, Postgres instances, roles,
+credentials, origins, cookies, Cloudflare Pages/Access/Tunnel identities, and
+GitHub deployment identities are distinct. Production provider and database
+secrets exist only in the protected production Environment or matching provider
+secret store; pull-request, build, and staging jobs cannot reference them.
+
+Cloudflare can technically observe hosted request content after edge TLS
+termination, and Render can observe API memory, persisted rows, and backups as
+already approved by ADR 0010. Exact Access admission, the private tunnel, Axum
+authentication/workspace authorization, TLS database connections, redacted
+logs, and environment data rules remain cumulative controls. The checked spec
+contains names and secret locations only—never an operator domain, allowlist,
+credential value, database URL, bootstrap identity, provider ID, or customer
+record. Approved production data remains prohibited until external provisioning
+is evidenced and #107/#108 qualify access, logging, backup, and isolated restore.

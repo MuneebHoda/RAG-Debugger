@@ -19,6 +19,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Added a machine-checked private-alpha infrastructure desired-state contract for isolated Cloudflare Pages/Access/Tunnel and Render API/connector/Postgres resources, protected staging/production GitHub Environments, least-privilege secret inventories, resource/cost ceilings, and an explicit external provisioning checklist without committing credentials or enabling deployment.
 - Trusted protected-main publication of full-SHA GHCR API images and deterministic web/migration bundles, with registry digests, SPDX 2.3 SBOMs, GitHub attestations, a verified schema-v1 release manifest, approved same-digest version aliases, bounded retention, and a read-only pull-request dry run.
 - Hardened non-root API and static web images, fail-closed embedded forward-only SQLx migration command, separately checksummed public runtime web configuration, graceful API shutdown, production-parity Postgres 17 Compose stack, and packaged browser/artifact qualification.
 - Private-alpha deployment ADR and environment contract covering the Cloudflare/Render trust boundary, isolated staging/production configuration, fail-closed hosted startup with non-local origins, immutable promotion, migrations, recovery, cost limits, and scoped implementation ownership for issues #103–#108.

@@ -1,0 +1,416 @@
+{
+  "schemaVersion": 1,
+  "status": "desired_state_only",
+  "operatorInputs": {
+    "operatorDomain": {
+      "githubVariable": "OPERATOR_DOMAIN",
+      "requiredBeforeProvisioning": true
+    },
+    "renderRegion": {
+      "githubVariable": "RENDER_REGION",
+      "allowed": ["oregon", "ohio", "virginia"],
+      "requiredBeforeProvisioning": true
+    },
+    "productionReviewer": {
+      "requiredBeforeProvisioning": true
+    },
+    "accessHumanAllowlist": {
+      "providerManaged": true,
+      "requiredBeforeProvisioning": true
+    }
+  },
+  "shared": {
+    "repository": "MuneebHoda/RAG-Debugger",
+    "renderProject": "corpuslab-private-alpha",
+    "renderWorkspacePlan": "pro",
+    "renderRegionSource": "RENDER_REGION",
+    "renderEnvironmentNetworkIsolation": "enabled",
+    "renderEnvironmentProtection": "enabled",
+    "previewInfrastructure": "disabled",
+    "apiImage": {
+      "repository": "ghcr.io/muneebhoda/rag-debugger",
+      "reference": "ghcr.io/muneebhoda/rag-debugger@sha256:{release_manifest_api_digest}",
+      "selector": "digest",
+      "sourceBuild": false,
+      "platform": "linux/amd64"
+    },
+    "connectorImage": {
+      "reference": "cloudflare/cloudflared@sha256:{approved_cloudflared_digest}",
+      "selector": "digest",
+      "sourceBuild": false,
+      "platform": "linux/amd64"
+    },
+    "tls": {
+      "browser": "Cloudflare-managed HTTPS with HTTP redirect",
+      "tunnel": "Cloudflare Tunnel encrypted transport",
+      "database": "PostgreSQL sslmode=require or stronger"
+    },
+    "costControls": {
+      "monthlyBudgetUsd": 100,
+      "operatorReviewThresholdUsd": 75,
+      "renderBaseEstimateUsd": 59,
+      "aggregateProviderHardLimitAvailable": false,
+      "reviewCadence": "monthly and before every plan or scale change"
+    },
+    "cloudflareFreeLimits": {
+      "accessUsers": 50,
+      "pagesProjectsConsumed": 2,
+      "pagesFilesPerProject": 20000,
+      "pagesSingleFileMiB": 25,
+      "pagesBuildsPerMonth": 500
+    }
+  },
+  "environments": {
+    "staging": {
+      "github": {
+        "environment": "staging",
+        "deploymentIdentity": "corpuslab-staging-deployer",
+        "selectedBranches": ["main"],
+        "requiredReviewers": [],
+        "preventSelfReview": false,
+        "allowAdminBypass": false,
+        "secrets": [
+          "CLOUDFLARE_STAGING_API_TOKEN",
+          "RENDER_STAGING_API_TOKEN",
+          "DATABASE_STAGING_MIGRATION_URL",
+          "CLOUDFLARE_STAGING_ACCESS_CLIENT_ID",
+          "CLOUDFLARE_STAGING_ACCESS_CLIENT_SECRET"
+        ],
+        "variables": [
+          "OPERATOR_DOMAIN",
+          "RENDER_REGION",
+          "CLOUDFLARE_ACCOUNT_ID",
+          "CLOUDFLARE_ZONE_ID",
+          "CLOUDFLARE_PAGES_PROJECT_ID",
+          "CLOUDFLARE_ACCESS_APPLICATION_ID",
+          "CLOUDFLARE_TUNNEL_ID",
+          "RENDER_PROJECT_ID",
+          "RENDER_ENVIRONMENT_ID",
+          "RENDER_API_SERVICE_ID",
+          "RENDER_CONNECTOR_SERVICE_ID",
+          "RENDER_DATABASE_ID"
+        ]
+      },
+      "cloudflare": {
+        "pages": {
+          "project": "corpuslab-staging-web",
+          "uploadMode": "direct",
+          "gitIntegration": false,
+          "hostname": "app.staging.{operator_domain}",
+          "previewDeployments": "disabled",
+          "pagesDevAction": "redirect to https://app.staging.{operator_domain}"
+        },
+        "access": {
+          "applicationCount": 1,
+          "application": "corpuslab-staging-access",
+          "type": "self_hosted",
+          "domains": [
+            "app.staging.{operator_domain}",
+            "api.staging.{operator_domain}"
+          ],
+          "eagerRedirectCookie": true,
+          "humanPolicy": "default_deny_operator_allowlist",
+          "automationPolicy": "environment_specific_service_token",
+          "bypassMethods": ["OPTIONS"],
+          "replacesCorpusLabAuthentication": false
+        },
+        "tunnel": {
+          "tunnel": "corpuslab-staging-tunnel",
+          "connectorIdentity": "corpuslab-staging-cloudflared",
+          "hostname": "api.staging.{operator_domain}",
+          "ingress": [
+            {
+              "hostname": "api.staging.{operator_domain}",
+              "service": "http://corpuslab-staging-api:8080"
+            },
+            {
+              "service": "http_status:404"
+            }
+          ],
+          "httpRedirectToHttps": true
+        }
+      },
+      "render": {
+        "environment": {
+          "name": "corpuslab-staging",
+          "networkIsolation": "enabled",
+          "protection": "enabled"
+        },
+        "api": {
+          "service": "corpuslab-staging-api",
+          "type": "pserv",
+          "runtime": "image",
+          "imageReference": "ghcr.io/muneebhoda/rag-debugger@sha256:{release_manifest_api_digest}",
+          "sourceBuild": false,
+          "publicProviderOrigin": false,
+          "regionSource": "RENDER_REGION",
+          "plan": "0.5c-512mb",
+          "instances": 1,
+          "maxInstances": 1,
+          "autoscaling": false,
+          "persistentDisk": false,
+          "internalPort": 8080,
+          "providerHealth": "tcp:8080",
+          "externalReadinessPath": "/readyz",
+          "maxShutdownDelaySeconds": 30,
+          "runtimeVariables": {
+            "RAG_DEBUGGER_ENV": "staging",
+            "RAG_DEBUGGER_API_HOST": "0.0.0.0",
+            "RAG_DEBUGGER_API_PORT": "8080",
+            "RAG_DEBUGGER_STORAGE_BACKEND": "postgres",
+            "RAG_DEBUGGER_WEB_ORIGIN": "https://app.staging.{operator_domain}",
+            "RAG_DEBUGGER_PUBLIC_API_BASE_URL": "https://api.staging.{operator_domain}",
+            "RAG_DEBUGGER_DEPLOYMENT_MODE": "hosted",
+            "RAG_DEBUGGER_RELEASE_SHA": "{release_manifest_source_sha}",
+            "RAG_DEBUGGER_LOG": "info",
+            "RAG_DEBUGGER_AUTH_PROVIDER": "local",
+            "RAG_DEBUGGER_SESSION_COOKIE_NAME": "__Host-corpuslab_staging_session",
+            "RAG_DEBUGGER_SESSION_TTL_HOURS": "168",
+            "RAG_DEBUGGER_SESSION_COOKIE_SECURE": "true",
+            "RAG_DEBUGGER_EMBEDDING_PROVIDER": "local",
+            "RAG_DEBUGGER_MAX_FILES_PER_REQUEST": "10",
+            "RAG_DEBUGGER_MAX_FILE_BYTES": "20971520",
+            "RAG_DEBUGGER_MAX_REQUEST_BYTES": "52428800"
+          }
+        },
+        "connector": {
+          "service": "corpuslab-staging-cloudflared",
+          "type": "worker",
+          "runtime": "image",
+          "imageReference": "cloudflare/cloudflared@sha256:{approved_cloudflared_digest}",
+          "sourceBuild": false,
+          "regionSource": "RENDER_REGION",
+          "plan": "0.5c-512mb",
+          "instances": 1,
+          "maxInstances": 1,
+          "autoscaling": false,
+          "maxShutdownDelaySeconds": 30
+        },
+        "database": {
+          "database": "corpuslab-staging-postgres",
+          "databaseName": "corpuslab_staging",
+          "endpointRef": "render://corpuslab-staging-postgres/internal",
+          "version": "17",
+          "regionSource": "RENDER_REGION",
+          "plan": "free",
+          "storageGiB": 1,
+          "storageAutoscaling": false,
+          "publicIpAllowList": [],
+          "tlsMode": "require",
+          "backupIdentity": "none_free_synthetic_only",
+          "pitrDays": 0
+        },
+        "databaseRoles": {
+          "providerOwner": "corpuslab_staging_provider_owner",
+          "runtime": "corpuslab_staging_runtime",
+          "migration": "corpuslab_staging_migration",
+          "backup": "none_free_synthetic_only"
+        },
+        "secrets": [
+          {
+            "name": "DATABASE_URL",
+            "store": "Render staging API secret environment",
+            "identity": "corpuslab_staging_runtime"
+          },
+          {
+            "name": "RAG_DEBUGGER_BOOTSTRAP_PASSWORD",
+            "store": "Render staging API secret environment",
+            "identity": "staging bootstrap operator"
+          },
+          {
+            "name": "TUNNEL_TOKEN",
+            "store": "Render staging connector secret environment",
+            "identity": "corpuslab-staging-tunnel"
+          },
+          {
+            "name": "GHCR_PULL_TOKEN",
+            "store": "Render staging registry credential store",
+            "identity": "corpuslab-staging-ghcr-reader"
+          }
+        ]
+      },
+      "data": {
+        "permitted": "synthetic_or_explicitly_sanitized",
+        "applicationRetentionDays": 30,
+        "automaticProductionClone": false,
+        "logTargetDays": 7,
+        "providerLogDays": 14,
+        "logRetentionGap": "Render Pro retention cannot be shortened per environment; staging logs remain privacy-safe and #108 owns export/deletion evidence"
+      }
+    },
+    "production": {
+      "github": {
+        "environment": "production",
+        "deploymentIdentity": "corpuslab-production-deployer",
+        "selectedBranches": ["main"],
+        "requiredReviewers": ["{production_reviewer}"],
+        "preventSelfReview": true,
+        "allowAdminBypass": false,
+        "secrets": [
+          "CLOUDFLARE_PRODUCTION_API_TOKEN",
+          "RENDER_PRODUCTION_API_TOKEN",
+          "DATABASE_PRODUCTION_MIGRATION_URL",
+          "CLOUDFLARE_PRODUCTION_ACCESS_CLIENT_ID",
+          "CLOUDFLARE_PRODUCTION_ACCESS_CLIENT_SECRET"
+        ],
+        "variables": [
+          "OPERATOR_DOMAIN",
+          "RENDER_REGION",
+          "CLOUDFLARE_ACCOUNT_ID",
+          "CLOUDFLARE_ZONE_ID",
+          "CLOUDFLARE_PAGES_PROJECT_ID",
+          "CLOUDFLARE_ACCESS_APPLICATION_ID",
+          "CLOUDFLARE_TUNNEL_ID",
+          "RENDER_PROJECT_ID",
+          "RENDER_ENVIRONMENT_ID",
+          "RENDER_API_SERVICE_ID",
+          "RENDER_CONNECTOR_SERVICE_ID",
+          "RENDER_DATABASE_ID"
+        ]
+      },
+      "cloudflare": {
+        "pages": {
+          "project": "corpuslab-production-web",
+          "uploadMode": "direct",
+          "gitIntegration": false,
+          "hostname": "app.{operator_domain}",
+          "previewDeployments": "disabled",
+          "pagesDevAction": "redirect to https://app.{operator_domain}"
+        },
+        "access": {
+          "applicationCount": 1,
+          "application": "corpuslab-production-access",
+          "type": "self_hosted",
+          "domains": ["app.{operator_domain}", "api.{operator_domain}"],
+          "eagerRedirectCookie": true,
+          "humanPolicy": "default_deny_operator_allowlist",
+          "automationPolicy": "environment_specific_service_token",
+          "bypassMethods": ["OPTIONS"],
+          "replacesCorpusLabAuthentication": false
+        },
+        "tunnel": {
+          "tunnel": "corpuslab-production-tunnel",
+          "connectorIdentity": "corpuslab-production-cloudflared",
+          "hostname": "api.{operator_domain}",
+          "ingress": [
+            {
+              "hostname": "api.{operator_domain}",
+              "service": "http://corpuslab-production-api:8080"
+            },
+            {
+              "service": "http_status:404"
+            }
+          ],
+          "httpRedirectToHttps": true
+        }
+      },
+      "render": {
+        "environment": {
+          "name": "corpuslab-production",
+          "networkIsolation": "enabled",
+          "protection": "enabled"
+        },
+        "api": {
+          "service": "corpuslab-production-api",
+          "type": "pserv",
+          "runtime": "image",
+          "imageReference": "ghcr.io/muneebhoda/rag-debugger@sha256:{release_manifest_api_digest}",
+          "sourceBuild": false,
+          "publicProviderOrigin": false,
+          "regionSource": "RENDER_REGION",
+          "plan": "0.5c-512mb",
+          "instances": 1,
+          "maxInstances": 1,
+          "autoscaling": false,
+          "persistentDisk": false,
+          "internalPort": 8080,
+          "providerHealth": "tcp:8080",
+          "externalReadinessPath": "/readyz",
+          "maxShutdownDelaySeconds": 30,
+          "runtimeVariables": {
+            "RAG_DEBUGGER_ENV": "production",
+            "RAG_DEBUGGER_API_HOST": "0.0.0.0",
+            "RAG_DEBUGGER_API_PORT": "8080",
+            "RAG_DEBUGGER_STORAGE_BACKEND": "postgres",
+            "RAG_DEBUGGER_WEB_ORIGIN": "https://app.{operator_domain}",
+            "RAG_DEBUGGER_PUBLIC_API_BASE_URL": "https://api.{operator_domain}",
+            "RAG_DEBUGGER_DEPLOYMENT_MODE": "hosted",
+            "RAG_DEBUGGER_RELEASE_SHA": "{release_manifest_source_sha}",
+            "RAG_DEBUGGER_LOG": "info",
+            "RAG_DEBUGGER_AUTH_PROVIDER": "local",
+            "RAG_DEBUGGER_SESSION_COOKIE_NAME": "__Host-corpuslab_alpha_session",
+            "RAG_DEBUGGER_SESSION_TTL_HOURS": "168",
+            "RAG_DEBUGGER_SESSION_COOKIE_SECURE": "true",
+            "RAG_DEBUGGER_EMBEDDING_PROVIDER": "local",
+            "RAG_DEBUGGER_MAX_FILES_PER_REQUEST": "10",
+            "RAG_DEBUGGER_MAX_FILE_BYTES": "20971520",
+            "RAG_DEBUGGER_MAX_REQUEST_BYTES": "52428800"
+          }
+        },
+        "connector": {
+          "service": "corpuslab-production-cloudflared",
+          "type": "worker",
+          "runtime": "image",
+          "imageReference": "cloudflare/cloudflared@sha256:{approved_cloudflared_digest}",
+          "sourceBuild": false,
+          "regionSource": "RENDER_REGION",
+          "plan": "0.5c-512mb",
+          "instances": 1,
+          "maxInstances": 1,
+          "autoscaling": false,
+          "maxShutdownDelaySeconds": 30
+        },
+        "database": {
+          "database": "corpuslab-production-postgres",
+          "databaseName": "corpuslab_production",
+          "endpointRef": "render://corpuslab-production-postgres/internal",
+          "version": "17",
+          "regionSource": "RENDER_REGION",
+          "plan": "0.1c-256mb",
+          "storageGiB": 1,
+          "storageAutoscaling": false,
+          "publicIpAllowList": [],
+          "tlsMode": "require",
+          "backupIdentity": "render_managed_corpuslab_production_postgres",
+          "pitrDays": 7
+        },
+        "databaseRoles": {
+          "providerOwner": "corpuslab_production_provider_owner",
+          "runtime": "corpuslab_production_runtime",
+          "migration": "corpuslab_production_migration",
+          "backup": "render_managed_corpuslab_production_postgres"
+        },
+        "secrets": [
+          {
+            "name": "DATABASE_URL",
+            "store": "Render production API secret environment",
+            "identity": "corpuslab_production_runtime"
+          },
+          {
+            "name": "RAG_DEBUGGER_BOOTSTRAP_PASSWORD",
+            "store": "Render production API secret environment",
+            "identity": "production bootstrap operator"
+          },
+          {
+            "name": "TUNNEL_TOKEN",
+            "store": "Render production connector secret environment",
+            "identity": "corpuslab-production-tunnel"
+          },
+          {
+            "name": "GHCR_PULL_TOKEN",
+            "store": "Render production registry credential store",
+            "identity": "corpuslab-production-ghcr-reader"
+          }
+        ]
+      },
+      "data": {
+        "permitted": "approved_private_alpha",
+        "applicationRetentionDays": null,
+        "automaticProductionClone": false,
+        "logTargetDays": 14,
+        "providerLogDays": 14,
+        "logRetentionGap": "none"
+      }
+    }
+  }
+}
