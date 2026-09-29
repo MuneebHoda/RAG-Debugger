@@ -5,7 +5,7 @@ checkpoints rather than claims that hosted deployment infrastructure exists.
 This guide complements [CONTRIBUTING.md](../CONTRIBUTING.md) and the
 [engineering quality policy](engineering-quality.md).
 
-The [Private-Alpha Deployment Architecture](deployment-architecture.md) defines hosted artifact promotion. [Production Artifacts](production-artifacts.md) implements local packaging and qualification, and [Artifact Publication](artifact-publication.md) defines trusted GHCR/web publication. Deployment remains disabled until the later deployment issues implement it.
+The [Private-Alpha Deployment Architecture](deployment-architecture.md) defines hosted artifact promotion. [Production Artifacts](production-artifacts.md) implements local packaging and qualification, [Artifact Publication](artifact-publication.md) defines trusted GHCR/web publication, and [Private-Alpha Infrastructure Foundations](infrastructure-foundations.md) define the checked provider desired state and external provisioning checklist. Deployment remains disabled until the later deployment issues implement it.
 
 ## Version Policy
 

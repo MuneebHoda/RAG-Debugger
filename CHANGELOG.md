@@ -12,6 +12,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Security
 
+- Updated the locked SQLx TLS dependency to `rustls` 0.23.45 to fix RUSTSEC-2026-0285 without changing the dependency policy or provider configuration.
 - Added fail-closed Trivy High/Critical and secret scanning for final deployment artifacts, explicit open-CodeQL-alert publication gating, GitHub OIDC provenance/SPDX attestations, independently bound release source/version verification, checkout-free version-alias mutation, immutable Action pins, narrowly scoped publication permissions, and upgraded React Router plus transitive build dependencies past current High-severity advisories.
 - Upgraded PDF extraction to remove a known `lopdf` vulnerability, marked internal Rust packages as non-publishable, and refined Cargo Deny to block direct unmaintained dependencies while keeping transitive unmaintained, duplicate-version, and yanked-crate findings visible as nonblocking warnings.
 - Added a strict Cargo Deny gate for RustSec advisories, dependency bans, approved licenses, and trusted dependency sources.
@@ -19,6 +20,7 @@ This project uses semantic pre-release versioning while the product is pre-launc
 
 ### Added
 
+- Added a machine-checked private-alpha infrastructure desired-state contract for isolated Cloudflare Pages/Access/Tunnel and Render API/connector/Postgres resources, protected staging/production GitHub Environments, least-privilege secret inventories, resource/cost ceilings, and an explicit external provisioning checklist without committing credentials or enabling deployment.
 - Trusted protected-main publication of full-SHA GHCR API images and deterministic web/migration bundles, with registry digests, SPDX 2.3 SBOMs, GitHub attestations, a verified schema-v1 release manifest, approved same-digest version aliases, bounded retention, and a read-only pull-request dry run.
 - Hardened non-root API and static web images, fail-closed embedded forward-only SQLx migration command, separately checksummed public runtime web configuration, graceful API shutdown, production-parity Postgres 17 Compose stack, and packaged browser/artifact qualification.
 - Private-alpha deployment ADR and environment contract covering the Cloudflare/Render trust boundary, isolated staging/production configuration, fail-closed hosted startup with non-local origins, immutable promotion, migrations, recovery, cost limits, and scoped implementation ownership for issues #103–#108.

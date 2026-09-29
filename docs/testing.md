@@ -166,7 +166,7 @@ When changing commands, paths, or architecture, update:
 - `docs/frontend-architecture.md`
 - Relevant ADRs in `docs/adr`
 
-`npm run governance:check` verifies the private-alpha deployment document, its required decision sections, ADR 0010, and cross-document links. API config unit tests exercise the staging/production URL, database TLS, cookie, release, logging, storage, auth, embedding, and upload contract without mutating process-global environment state.
+`npm run governance:check` verifies the private-alpha deployment document, its required decision sections, ADR 0010, and cross-document links. It also validates `infra/private-alpha.json` and every workflow for distinct environment identities, exact Access/TLS/private-ingress controls, resource ceilings, secret-value absence, and the rule that pull-request/build/staging jobs cannot obtain production authority. API config unit tests exercise the staging/production URL, database TLS, cookie, release, logging, storage, auth, embedding, and upload contract without mutating process-global environment state.
 
 Generate and visually check the handbook PDF when architecture or API documentation changes:
 
